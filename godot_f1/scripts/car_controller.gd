@@ -1,22 +1,30 @@
 extends VehicleBody3D
 
 @export var livery: String = "crimson"
-@export var auto_drive: bool = true
+@export var auto_drive: bool = false
 @export var is_ai: bool = false
-@export var engine_power: float = 1600.0
-@export var brake_power: float = 52.0
-@export var max_steer: float = 0.38
-@export var max_speed: float = 62.0
+@export var max_steer: float = 0.48
 
 var racing_line
 var g29
 var spawn_transform: Transform3D
 var speed_kmh: float = 0.0
 var last_steer: float = 0.0
+var gear: int = 1
+var rpm: float = 4200.0
+var clutch_assist: bool = true
+var _shift_cd: float = 0.0
 
 const LIVERY_PATH := "res://assets/cars/car_%s.glb"
 const RIG_PATH := "res://assets/cars/car_rig.json"
 const REST := 0.18
+const IDLE_RPM := 4200.0
+const REDLINE := 12500.0
+const MAX_GEAR := 8
+## Approximate sequential ratios. Index 0 unused (gear is 1..8).
+const RATIOS := [0.0, 3.4, 2.7, 2.2, 1.85, 1.58, 1.38, 1.22, 1.08]
+const POWER := 3200.0
+const BRAKE_MAX := 110.0
 
 
 func setup(line, wheel_input, start: Transform3D) -> void:
@@ -25,13 +33,16 @@ func setup(line, wheel_input, start: Transform3D) -> void:
 	spawn_transform = start
 	mass = 740.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	# +Z is vehicle forward (Godot VehicleBody3D). Bias COM slightly rearward.
 	center_of_mass = Vector3(0, -0.12, -0.18)
 	continuous_cd = true
 	can_sleep = false
 	_build_wheels_and_mesh()
 	_build_chassis_collider()
 	global_transform = start
+	if g29 and not is_ai:
+		if not g29.shift_up.is_connected(_on_shift_up):
+			g29.shift_up.connect(_on_shift_up)
+			g29.shift_down.connect(_on_shift_down)
 
 
 func _build_chassis_collider() -> void:
@@ -48,14 +59,10 @@ func _build_wheels_and_mesh() -> void:
 	var rig: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(RIG_PATH))
 	var radius: float = float(rig.get("wheel_radius", 0.365))
 	var wheels: Dictionary = rig["wheels"]
-
 	var packed: PackedScene = load(LIVERY_PATH % livery)
 	var visual: Node3D = packed.instantiate()
 	visual.name = "Visual"
 	add_child(visual)
-
-	# Godot VehicleBody3D thrust is +Z. The GLB nose is -Z (Blender +Y).
-	# Map blender (x, y, z) with +Y forward to Godot (x, z, y) = (right, up, forward).
 	var specs := [
 		["Wheel_FL", false, true],
 		["Wheel_FR", false, true],
@@ -75,20 +82,18 @@ func _build_wheels_and_mesh() -> void:
 		wheel.wheel_radius = radius
 		wheel.wheel_rest_length = REST
 		wheel.suspension_travel = 0.18
-		wheel.suspension_stiffness = 48.0
-		wheel.suspension_max_force = 12000.0
-		wheel.damping_compression = 0.8
-		wheel.damping_relaxation = 0.9
-		wheel.wheel_friction_slip = 8.5
-		wheel.wheel_roll_influence = 0.1
+		wheel.suspension_stiffness = 52.0
+		wheel.suspension_max_force = 14000.0
+		wheel.damping_compression = 0.82
+		wheel.damping_relaxation = 0.92
+		wheel.wheel_friction_slip = 7.8
+		wheel.wheel_roll_influence = 0.08
 		add_child(wheel)
 		var mesh := _find_token(visual, key)
 		if mesh:
 			mesh.reparent(wheel)
 			mesh.position = Vector3.ZERO
 			mesh.rotation = Vector3.ZERO
-
-	# Rotate remaining body so the nose matches +Z forward.
 	visual.rotate_y(PI)
 	visual.position.y = 0.03
 
@@ -103,11 +108,37 @@ func _find_token(node: Node, token: String) -> Node3D:
 	return null
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if is_ai:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_E or event.physical_keycode == KEY_PERIOD:
+			_on_shift_up()
+		elif event.physical_keycode == KEY_Q or event.physical_keycode == KEY_COMMA:
+			_on_shift_down()
+
+
+func _on_shift_up() -> void:
+	if gear < MAX_GEAR and _shift_cd <= 0.0:
+		gear += 1
+		_shift_cd = 0.12
+
+
+func _on_shift_down() -> void:
+	if gear > 1 and _shift_cd <= 0.0:
+		var next_rpm := _rpm_for_gear(gear - 1)
+		if next_rpm < REDLINE + 400.0:
+			gear -= 1
+			_shift_cd = 0.12
+
+
 func _physics_process(delta: float) -> void:
+	var forward_vel: float = global_transform.basis.z.dot(linear_velocity)
 	speed_kmh = linear_velocity.length() * 3.6
 	var steer_in := 0.0
 	var throttle_in := 0.0
 	var brake_in := 0.0
+	var clutch_in := 0.0
 
 	if not is_ai and g29 and g29.has_driver_input():
 		auto_drive = false
@@ -117,9 +148,11 @@ func _physics_process(delta: float) -> void:
 		or abs(Input.get_axis("steer_left", "steer_right")) > 0.25
 	):
 		auto_drive = false
-
 	if not is_ai and Input.is_action_just_pressed("toggle_auto"):
-		auto_drive = not auto_drive
+		if g29 and g29.cal_phase > 0 and g29.cal_phase < 5:
+			pass
+		else:
+			auto_drive = not auto_drive
 	if not is_ai and Input.is_action_just_pressed("reset_car"):
 		_reset()
 
@@ -128,30 +161,100 @@ func _physics_process(delta: float) -> void:
 		steer_in = ai.steer
 		throttle_in = ai.throttle
 		brake_in = ai.brake
+		clutch_in = 0.0
+		_ai_shift()
 	else:
 		steer_in = Input.get_axis("steer_left", "steer_right")
 		throttle_in = Input.get_action_strength("throttle")
 		brake_in = Input.get_action_strength("brake")
-		if g29 and g29.connected:
-			if abs(g29.steer) > 0.06:
+		if g29 and g29.connected and (g29.cal_phase == 0 or g29.cal_phase >= 5):
+			if abs(g29.steer) > 0.04:
 				steer_in = g29.steer
-			if g29.throttle > 0.04:
-				throttle_in = g29.throttle
-			if g29.brake > 0.04:
-				brake_in = g29.brake
+			throttle_in = max(throttle_in, g29.throttle)
+			brake_in = max(brake_in, g29.brake)
+			clutch_in = g29.clutch
+			if g29.clutch > 0.4:
+				clutch_assist = false
+		if has_meta("headless_gas"):
+			throttle_in = 0.85
+			clutch_in = 0.0
+			clutch_assist = true
 
-	var speed_factor: float = clampf(1.0 - linear_velocity.length() / max_speed, 0.22, 1.0)
-	var steer_limit: float = max_steer * lerp(0.32, 1.0, speed_factor)
-	steering = lerp(steering, clampf(steer_in, -1.0, 1.0) * steer_limit, clampf(delta * 8.0, 0.0, 1.0))
+	# Speed-sensitive steering: F1 lock-to-lock tightens at speed.
+	var spd: float = abs(forward_vel)
+	var steer_limit: float = max_steer * lerp(1.0, 0.22, clampf(spd / 70.0, 0.0, 1.0))
+	steering = lerp(steering, clampf(steer_in, -1.0, 1.0) * steer_limit, clampf(delta * 10.0, 0.0, 1.0))
 	last_steer = steering
 
-	if linear_velocity.length() > max_speed and throttle_in > 0.0:
-		throttle_in = 0.0
-	engine_force = throttle_in * engine_power
-	brake = brake_in * brake_power
+	var engage := 1.0 - clampf(clutch_in, 0.0, 1.0)
+	if clutch_assist and clutch_in < 0.1:
+		engage = 1.0
+	if spd < 0.8 and throttle_in < 0.04 and clutch_in < 0.1:
+		engage = 0.0
+
+	var speed_rpm := _rpm_for_gear(gear)
+	var rev_rpm: float = IDLE_RPM + throttle_in * (REDLINE - IDLE_RPM)
+	if engage < 0.35:
+		rpm = lerp(rpm, rev_rpm, clampf(delta * 7.0, 0.0, 1.0))
+	else:
+		rpm = lerp(rpm, speed_rpm, clampf(delta * 8.0, 0.0, 1.0))
+	rpm = clampf(rpm, IDLE_RPM, REDLINE + 200.0)
+
+	var torque := _torque_at(rpm) * throttle_in * engage
+	_shift_cd = maxf(_shift_cd - delta, 0.0)
+	if rpm >= 10800.0:
+		torque *= 0.2 if rpm < REDLINE - 80.0 else 0.08
+		if gear < MAX_GEAR and _shift_cd <= 0.0:
+			gear += 1
+			_shift_cd = 0.18
+	engine_force = torque * RATIOS[gear]
+	# Engine braking when off-throttle in gear.
+	if throttle_in < 0.05 and engage > 0.6 and spd > 8.0:
+		engine_force = -min(spd * 18.0 * RATIOS[gear] * 0.15, 420.0)
+
+	var brake_force: float = brake_in * BRAKE_MAX
+	if brake_in > 0.08:
+		engine_force = min(engine_force, 0.0)
+	brake = brake_force
+
+	_apply_aero(spd, brake_in, abs(steer_in))
 
 	if global_transform.basis.y.dot(Vector3.UP) < 0.25:
 		_reset()
+
+
+func _rpm_for_gear(g: int) -> float:
+	var fwd: float = max(global_transform.basis.z.dot(linear_velocity), 0.0)
+	return clampf(IDLE_RPM + fwd * RATIOS[g] * 95.0, IDLE_RPM, REDLINE)
+
+
+func _torque_at(r: float) -> float:
+	# Peak around 11k, drop to limiter.
+	var n: float = clampf((r - IDLE_RPM) / (REDLINE - IDLE_RPM), 0.0, 1.0)
+	var curve: float = sin(n * PI)
+	if n > 0.92:
+		curve *= 0.35
+	return POWER * max(curve, 0.12)
+
+
+func _apply_aero(spd: float, brake_in: float, steer_amt: float) -> void:
+	var down: float = 1.0 + 1.15 * pow(clampf(spd / 75.0, 0.0, 1.0), 2.0)
+	if brake_in > 0.2:
+		down *= 0.92
+	if steer_amt > 0.35 and spd > 25.0:
+		down *= lerp(1.0, 0.78, clampf((steer_amt - 0.35) * 2.0, 0.0, 1.0))
+	for name in ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]:
+		var w: VehicleWheel3D = get_node_or_null(name)
+		if w:
+			var base := 8.4 if name.begins_with("Wheel_R") else 7.4
+			w.wheel_friction_slip = base * down
+
+
+func _ai_shift() -> void:
+	if rpm > 11200.0 and gear < MAX_GEAR:
+		gear += 1
+	elif rpm < 7000.0 and gear > 1:
+		gear -= 1
 
 
 func _auto_inputs() -> Dictionary:
@@ -159,22 +262,22 @@ func _auto_inputs() -> Dictionary:
 	if racing_line == null or racing_line.points.size() == 0:
 		return result
 	var speed: float = linear_velocity.length()
-	var look: float = lerp(9.0, 26.0, clampf(speed / 50.0, 0.0, 1.0))
+	var look: float = lerp(8.0, 30.0, clampf(speed / 55.0, 0.0, 1.0))
 	var target: Vector3 = racing_line.point_ahead(global_position, look)
 	var local: Vector3 = to_local(target)
-	# +Z forward: target ahead has +z; right has +x.
 	var angle: float = atan2(local.x, local.z)
 	result.steer = clampf(angle / max_steer, -1.0, 1.0)
 	var curve: float = racing_line.curvature_ahead(global_position, look)
-	var throttle: float = 0.88
-	throttle -= clampf(abs(angle) * 1.2, 0.0, 0.75)
-	throttle -= clampf(curve * 0.6, 0.0, 0.55)
-	if speed > 52.0:
-		throttle *= 0.6
-	result.throttle = clampf(throttle, 0.08, 1.0)
-	if abs(angle) > 0.5 and speed > 18.0:
-		result.brake = clampf((abs(angle) - 0.5) * 1.5, 0.0, 0.75)
+	var throttle: float = 0.95
+	throttle -= clampf(abs(angle) * 1.35, 0.0, 0.8)
+	throttle -= clampf(curve * 0.85, 0.0, 0.7)
+	result.throttle = clampf(throttle, 0.0, 1.0)
+	if abs(angle) > 0.28 and speed > 16.0:
+		result.brake = clampf((abs(angle) - 0.28) * 1.8 + curve * 0.5, 0.0, 0.95)
 		result.throttle = 0.0
+	elif curve > 0.35 and speed > 28.0:
+		result.brake = clampf(curve * 0.55, 0.0, 0.7)
+		result.throttle = min(result.throttle, 0.25)
 	return result
 
 
@@ -183,4 +286,7 @@ func _reset() -> void:
 	angular_velocity = Vector3.ZERO
 	global_transform = spawn_transform
 	engine_force = 0.0
-	brake = 8.0
+	brake = 10.0
+	gear = 1
+	rpm = IDLE_RPM
+	clutch_assist = true

@@ -11,7 +11,9 @@ Formel-1-Spiel für **Godot 4.7** mit **Logitech G29** (Lenkrad + Pedale). Tasta
 | `W` / Pfeil hoch | Gas |
 | `S` / Pfeil runter | Bremse |
 | `A`/`D` oder Pfeile | Lenken |
-| `Enter` | Auto-Pilot an/aus |
+| G29-Paddles | Gang hoch / runter |
+| `Q` / `E` | Gang runter / hoch |
+| `Enter` | Kalibrierung überspringen / Auto-Pilot |
 | `R` | Reset auf die Startaufstellung |
 | `C` | Kamera (Chase / Onboard / Helikopter) |
 | `Esc` | Beenden |

@@ -3,7 +3,7 @@ extends Node3D
 const RacingLine = preload("res://scripts/racing_line.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
 const F1Car = preload("res://scripts/car_controller.gd")
-const ChaseCamera = preload("res://scripts/chase_camera.gd")
+const CockpitCamera = preload("res://scripts/cockpit_camera.gd")
 const TrackLoader = preload("res://scripts/track_loader.gd")
 const RaceHUD = preload("res://scripts/hud.gd")
 
@@ -29,7 +29,7 @@ func _ready() -> void:
 	_build_road_boxes()
 
 	var start := _start_transform(0)
-	player = _spawn_car("crimson", false, true, start)
+	player = _spawn_car("crimson", false, false, start)
 	var ai_start := _start_transform(1)
 	ai_car = _spawn_car("papaya", true, true, ai_start)
 	ai_car.collision_layer = 2
@@ -37,13 +37,12 @@ func _ready() -> void:
 	player.collision_layer = 2
 	player.collision_mask = 1
 
-	cam = ChaseCamera.new()
-	cam.name = "ChaseCam"
-	cam.current = true
-	cam.far = 2000.0
-	cam.near = 0.12
-	add_child(cam)
-	cam.target = player
+	cam = CockpitCamera.new()
+	cam.name = "CockpitCam"
+	player.add_child(cam)
+	cam.setup(player, g29)
+	if DisplayServer.get_name() == "headless":
+		player.set_meta("headless_gas", true)
 
 	var hud := RaceHUD.new()
 	hud.name = "HUD"
@@ -53,13 +52,13 @@ func _ready() -> void:
 
 
 func _start_transform(grid_index: int) -> Transform3D:
-	# Place both cars ON the main straight, not behind the S/F where the
-	# circuit already turns. VehicleBody3D +Z is forward.
-	var forward: Vector3 = line.tangents[0].normalized()
-	var right: Vector3 = Vector3.UP.cross(forward).normalized()
+	# Main straight is Godot -Z. Aim vehicle +Z that way so the cockpit
+	# looks down the road, not into T9's 10° join tangent.
+	var forward := Vector3(0, 0, -1)
+	var right := Vector3.UP.cross(forward).normalized()
 	var side := -2.6 if grid_index % 2 == 0 else 2.6
-	var along := 3.5 + float(grid_index) * 7.0
-	var origin: Vector3 = line.points[0] + forward * along + right * side + Vector3(0, 0.14, 0)
+	var along := 14.0 + float(grid_index) * 8.0
+	var origin := Vector3(0, 0.14, 0) + forward * along + right * side
 	var basis := Basis.looking_at(-forward, Vector3.UP)
 	return Transform3D(basis, origin)
 
@@ -141,12 +140,12 @@ func _build_world() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if player and Engine.get_physics_frames() in [80, 320, 640, 1200]:
+	if player and Engine.get_physics_frames() in [80, 160, 320, 640]:
 		var fl = player.get_node_or_null("Wheel_FL")
 		var contact: bool = false
 		if fl:
 			contact = fl.is_in_contact()
-		print("PLAYER pos=", player.global_position, " kmh=", snapped(player.speed_kmh, 0.1), " contact=", contact)
+		print("PLAYER pos=", player.global_position, " kmh=", snapped(player.speed_kmh, 0.1), " gear=", player.gear, " fwd=", snapped(player.global_transform.basis.z.dot(player.linear_velocity), 0.01), " contact=", contact)
 
 
 func _unhandled_input(event: InputEvent) -> void:
