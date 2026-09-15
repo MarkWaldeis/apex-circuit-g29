@@ -12,6 +12,7 @@ var player
 var ai_car
 var cam
 var g29
+var _start_z: float = 0.0
 
 
 func _ready() -> void:
@@ -41,8 +42,10 @@ func _ready() -> void:
 	cam.name = "CockpitCam"
 	player.add_child(cam)
 	cam.setup(player, g29)
+	_start_z = player.global_position.z
 	if DisplayServer.get_name() == "headless":
 		player.set_meta("headless_gas", true)
+		print("LAP_DRIVE start_z=", _start_z)
 
 	var hud := RaceHUD.new()
 	hud.name = "HUD"
@@ -72,9 +75,9 @@ func _build_road_boxes() -> void:
 	# Backup slab on the main straight (Godot -Z from the S/F).
 	var slab := CollisionShape3D.new()
 	var slab_box := BoxShape3D.new()
-	slab_box.size = Vector3(16.0, 0.4, 80.0)
+	slab_box.size = Vector3(18.0, 0.5, 420.0)
 	slab.shape = slab_box
-	slab.position = Vector3(0.0, -0.12, -36.0)
+	slab.position = Vector3(0.0, -0.12, -210.0)
 	body.add_child(slab)
 	var step := 2
 	var n: int = line.points.size()
@@ -140,12 +143,18 @@ func _build_world() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if player and Engine.get_physics_frames() in [80, 160, 320, 640]:
+	if player == null:
+		return
+	var frames: int = Engine.get_physics_frames()
+	if frames in [80, 160, 320, 640, 1200, 1800, 2400]:
 		var fl = player.get_node_or_null("Wheel_FL")
 		var contact: bool = false
 		if fl:
 			contact = fl.is_in_contact()
-		print("PLAYER pos=", player.global_position, " kmh=", snapped(player.speed_kmh, 0.1), " gear=", player.gear, " fwd=", snapped(player.global_transform.basis.z.dot(player.linear_velocity), 0.01), " contact=", contact)
+		var fwd: float = player.global_transform.basis.z.dot(player.linear_velocity)
+		var disp: float = _start_z - player.global_position.z
+		print("LAP_DRIVE pos=", player.global_position, " kmh=", snapped(player.speed_kmh, 0.1), " gear=", player.gear, " fwd=", snapped(fwd, 0.01), " contact=", contact, " disp=", snapped(disp, 0.1))
+		print("PLAYER pos=", player.global_position, " kmh=", snapped(player.speed_kmh, 0.1), " gear=", player.gear, " fwd=", snapped(fwd, 0.01), " contact=", contact)
 
 
 func _unhandled_input(event: InputEvent) -> void:

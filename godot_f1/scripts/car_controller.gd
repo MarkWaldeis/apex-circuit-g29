@@ -91,7 +91,11 @@ func _build_wheels_and_mesh() -> void:
 		add_child(wheel)
 		var mesh := _find_token(visual, key)
 		if mesh:
-			mesh.reparent(wheel)
+			var old_parent := mesh.get_parent()
+			if old_parent:
+				old_parent.remove_child(mesh)
+			wheel.add_child(mesh)
+			mesh.owner = wheel
 			mesh.position = Vector3.ZERO
 			mesh.rotation = Vector3.ZERO
 	visual.rotate_y(PI)
@@ -116,6 +120,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_shift_up()
 		elif event.physical_keycode == KEY_Q or event.physical_keycode == KEY_COMMA:
 			_on_shift_down()
+
+
+func apply_throttle(amount: float) -> void:
+	set_meta("script_throttle", clampf(amount, 0.0, 1.0))
 
 
 func _on_shift_up() -> void:
@@ -167,7 +175,7 @@ func _physics_process(delta: float) -> void:
 		steer_in = Input.get_axis("steer_left", "steer_right")
 		throttle_in = Input.get_action_strength("throttle")
 		brake_in = Input.get_action_strength("brake")
-		if g29 and g29.connected and (g29.cal_phase == 0 or g29.cal_phase >= 5):
+		if g29 and g29.connected:
 			if abs(g29.steer) > 0.04:
 				steer_in = g29.steer
 			throttle_in = max(throttle_in, g29.throttle)
@@ -175,6 +183,10 @@ func _physics_process(delta: float) -> void:
 			clutch_in = g29.clutch
 			if g29.clutch > 0.4:
 				clutch_assist = false
+		if has_meta("script_throttle"):
+			throttle_in = float(get_meta("script_throttle"))
+			clutch_in = 0.0
+			clutch_assist = true
 		if has_meta("headless_gas"):
 			throttle_in = 0.85
 			clutch_in = 0.0
@@ -202,11 +214,11 @@ func _physics_process(delta: float) -> void:
 
 	var torque := _torque_at(rpm) * throttle_in * engage
 	_shift_cd = maxf(_shift_cd - delta, 0.0)
-	if rpm >= 10800.0:
-		torque *= 0.2 if rpm < REDLINE - 80.0 else 0.08
-		if gear < MAX_GEAR and _shift_cd <= 0.0:
-			gear += 1
-			_shift_cd = 0.18
+	if rpm >= 9000.0 and gear < MAX_GEAR and _shift_cd <= 0.0:
+		gear += 1
+		_shift_cd = 0.16
+	if rpm >= REDLINE - 80.0:
+		torque *= 0.12
 	engine_force = torque * RATIOS[gear]
 	# Engine braking when off-throttle in gear.
 	if throttle_in < 0.05 and engage > 0.6 and spd > 8.0:

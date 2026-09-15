@@ -41,14 +41,10 @@ func _ready() -> void:
 	_prev_buttons.resize(16)
 	Input.joy_connection_changed.connect(_on_joy_changed)
 	_rescan()
-	if connected:
-		if _load_cal():
-			cal_phase = 5
-			cal_hint = ""
-		else:
-			cal_phase = 1
-			_cal_timer = 0.0
-			cal_hint = "Pedale loslassen — Kalibrierung startet…"
+	# Drive immediately with G29 defaults. Optional saved cal overlays axes.
+	_load_cal()
+	cal_phase = 5
+	cal_hint = ""
 
 
 func _process(delta: float) -> void:
@@ -61,12 +57,10 @@ func _process(delta: float) -> void:
 		return
 	_read_axes()
 	_read_paddles()
-	if cal_phase > 0 and cal_phase < 5:
-		_run_cal(delta)
 
 
 func has_driver_input() -> bool:
-	return connected and cal_phase >= 5 and (abs(steer) > 0.12 or throttle > 0.08 or brake > 0.08)
+	return connected and (abs(steer) > 0.12 or throttle > 0.08 or brake > 0.08)
 
 
 func skip_calibration() -> void:
@@ -108,10 +102,9 @@ func _guess_pedal_axes() -> void:
 func _read_axes() -> void:
 	var raw_steer := Input.get_joy_axis(device, steer_axis)
 	steer = 0.0 if abs(raw_steer) < steer_deadzone else clampf(raw_steer, -1.0, 1.0)
-	if cal_phase >= 5 or cal_phase == 0:
-		throttle = _pedal(Input.get_joy_axis(device, throttle_axis), invert_throttle)
-		brake = _pedal(Input.get_joy_axis(device, brake_axis), invert_brake)
-		clutch = _pedal(Input.get_joy_axis(device, clutch_axis), invert_clutch)
+	throttle = _pedal(Input.get_joy_axis(device, throttle_axis), invert_throttle)
+	brake = _pedal(Input.get_joy_axis(device, brake_axis), invert_brake)
+	clutch = _pedal(Input.get_joy_axis(device, clutch_axis), invert_clutch)
 	var parts: PackedStringArray = PackedStringArray()
 	for i in 8:
 		parts.append("a%d=%.2f" % [i, Input.get_joy_axis(device, i)])
@@ -241,6 +234,5 @@ func _rescan() -> void:
 	if device != prev:
 		connection_changed.emit(connected, device_name)
 		print("G29Input device=", device, " name=", device_name)
-		if connected and cal_phase == 0 and not _load_cal():
-			cal_phase = 1
-			_cal_timer = 0.0
+		if connected:
+			cal_phase = 5
