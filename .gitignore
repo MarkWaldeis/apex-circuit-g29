@@ -1,0 +1,15 @@
+.godot/
+*.translation
+export/
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+__pycache__/
+*.blend1
+*.blend2
+godot_f1/run.log
+godot_f1/captures/
+blender/frame_config.json
+blender/import_report.json
+blender/car_parts.json
