@@ -13,3 +13,11 @@ godot_f1/captures/
 blender/frame_config.json
 blender/import_report.json
 blender/car_parts.json
+ApexCircuit/
+ApexCircuit.exe
+ApexCircuit.pck
+*.exe
+*.pck
+*.lnk
+export_log.txt
+!godot_f1/icon.svg

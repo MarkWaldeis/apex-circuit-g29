@@ -20,6 +20,8 @@ Sobald das G29 über den Totbereich hinaus bewegt wird, schaltet der Auto-Pilot 
 
 ## Starten
 
+Am einfachsten: **Apex Circuit** auf dem Desktop doppelklicken.
+
 Godot 4.7+:
 
 ```

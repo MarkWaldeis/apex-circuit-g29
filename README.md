@@ -6,6 +6,15 @@ GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
 
 ## Schnellstart
 
+Doppelklick auf **Apex Circuit** auf dem Desktop, oder auf `Apex Circuit starten.lnk` im Projektordner.
+
+Die eigentlichen Dateien liegen in:
+
+- Desktop: `Apex Circuit\Apex Circuit.exe` (+ `.pck`, muss daneben liegen)
+- Projekt: `ApexCircuit\ApexCircuit.exe` (+ `.pck`)
+
+Falls die Datei noch nicht da ist, in Godot 4.7 den Ordner `godot_f1` öffnen und **Projekt → Exportieren → Windows Desktop**.
+
 1. Godot 4.7 öffnen und den Ordner `godot_f1` importieren, oder:
 
 ```
