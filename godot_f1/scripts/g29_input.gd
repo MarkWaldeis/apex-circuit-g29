@@ -85,7 +85,6 @@ var _prev_buttons: PackedByteArray = PackedByteArray()
 var _rest: PackedFloat32Array = PackedFloat32Array()
 var _pedal_rest: Dictionary = {}     ## "throttle"/"brake"/"clutch" -> float
 var _pedal_press: Dictionary = {}    ## value when fully pressed
-var _pedal_span: Dictionary = {}     ## learned signed span (auto mapping)
 var _steer_rest: float = 0.0
 var _steer_span: float = 0.0         ## signed: rest + span == full right
 var _steer_right: float = 0.0
@@ -98,6 +97,13 @@ var _cal_peak_value: float = 0.0
 var _live_timer: float = 0.0
 var _live_checked: bool = false
 var _profile_loaded: bool = false
+## True once the device has delivered at least one believable axis value. A G29
+## that was just plugged in (or that has not sent its first HID report yet)
+## reports a flat 0.0 on every axis, and those zeros must never be mistaken for
+## real pedal positions - that is what made all three pedals read 100 %.
+var _have_data: bool = false
+var _auto_rest: Dictionary = {}    ## pedal -> sampled rest position
+var _auto_press: Dictionary = {}   ## pedal -> extreme reached while pressing
 
 
 func _ready() -> void:
@@ -180,26 +186,46 @@ func _sample() -> void:
 		_raw[i] = _raw_axis(i)
 		if absf(_raw[i] - _prev_raw[i]) > 0.005:
 			_axis_seen_motion[i] = 1
+	if not _have_data:
+		for i in AXES:
+			if absf(_raw[i]) > 0.02:
+				_have_data = true
+				_anchor_auto_rest()
+				break
+
+
+func _anchor_auto_rest() -> void:
+	## First believable sample: the pedals are released, so this is their rest
+	## position. Only used when the driver has not calibrated yet.
+	for name in ["throttle", "brake", "clutch"]:
+		_auto_rest[name] = _raw[_axis_of(name)]
+	if not steer_locked:
+		_steer_rest = _raw[steer_axis]
+	print("G29 data arrived: rest gas=%.2f brake=%.2f clutch=%.2f steer=%.2f" % [
+		_auto_rest.get("throttle", 0.0), _auto_rest.get("brake", 0.0),
+		_auto_rest.get("clutch", 0.0), _steer_rest])
 
 
 func _scan_axes(delta: float) -> void:
 	## Detect a device that enumerates but delivers no data at all.
 	if not connected:
 		return
-	if _any_axis_moved():
+	if _have_data or _any_axis_moved():
 		if not axes_live:
 			axes_live = true
 			hardware_hint = ""
 	if _live_checked:
 		return
 	_live_timer += delta
-	if _live_timer < 3.0:
+	# A G29 stays completely quiet until something moves, so give it a few
+	# seconds before calling it silent.
+	if _live_timer < 6.0:
 		return
 	_live_checked = true
 	if not _any_axis_moved():
 		axes_live = false
-		hardware_hint = ("G29 erkannt, aber es kommen keine Achsendaten an — "
-			+ "Lenkrad einschalten, Netzteil und Pedalkabel prüfen.")
+		hardware_hint = ("G29 erkannt, aber noch keine Achsendaten — "
+			+ "Lenkrad/Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen.")
 
 
 func _any_axis_moved() -> bool:
@@ -232,25 +258,34 @@ func _pedal_value(name: String, axis: int) -> float:
 	if axis < 0 or axis >= AXES:
 		return 0.0
 	var v: float = _raw[axis]
-	var rest: float = float(_pedal_rest.get(name, _rest[axis]))
-	var press: float = float(_pedal_press.get(name, 0.0))
+	# A calibrated pedal always wins.
+	if _pedal_press.has(name) and _pedal_rest.has(name):
+		var c_rest: float = float(_pedal_rest[name])
+		var c_press: float = float(_pedal_press[name])
+		var c_span: float = c_press - c_rest
+		if absf(c_span) < 0.05:
+			return 0.0
+		return clampf((v - c_rest) / c_span, 0.0, 1.0)
+	# Before calibration: anchor on the first believable sample (pedals
+	# released) and extend towards the far end while the driver presses.
+	if not _auto_rest.has(name):
+		return 0.0
+	var rest: float = float(_auto_rest[name])
+	var dev: float = v - rest
+	if not _auto_press.has(name):
+		if absf(dev) > 0.05:
+			_auto_press[name] = v
+		else:
+			return 0.0
+	elif absf(dev) > absf(float(_auto_press[name]) - rest):
+		# driver pushes further than anything seen so far
+		_auto_press[name] = v
+	var press: float = float(_auto_press[name])
 	var span: float = press - rest
 	if absf(span) < 0.05:
-		# Not calibrated (yet): use the biggest movement we have seen so far.
-		span = _learn_span(name, v - rest)
-	if absf(span) < 0.05:
 		return 0.0
-	return clampf((v - rest) / span, 0.0, 1.0)
-
-
-func _learn_span(name: String, dev: float) -> float:
-	var current: float = float(_pedal_span.get(name, 0.0))
-	if absf(dev) > absf(current):
-		current = dev
-		_pedal_span[name] = current
-	if absf(current) < 0.05:
-		return 0.0
-	return current
+	var value: float = dev / span
+	return clampf(value, 0.0, 1.0)
 
 
 func _apply_steer() -> void:
@@ -317,6 +352,14 @@ func _run_cal(delta: float) -> void:
 	_cal_timer += delta
 	match cal_phase:
 		1:
+			if not _have_data:
+				# Nothing believable has arrived yet: sampling a flat line of
+				# zeros as "rest" would invert the whole pedal afterwards.
+				_cal_timer = 0.0
+				var wait_hint := "Bitte einmal Pedal oder Lenkrad bewegen — es kommen noch keine Daten vom Lenkrad an…"
+				if cal_hint != wait_hint:
+					_set_step(1, wait_hint)
+				return
 			for i in AXES:
 				_rest[i] += _raw[i]
 			_cal_rest_frames += 1
@@ -381,7 +424,6 @@ func _detect_axis() -> int:
 func _finish_pedal(name: String, axis: int) -> void:
 	_pedal_rest[name] = _rest[axis]
 	_pedal_press[name] = _cal_peak_value
-	_pedal_span[name] = _cal_peak_value - float(_rest[axis])
 	_set_axis_of(name, axis)
 	_cal_assigned.append(axis)
 	_cal_queue.erase(name)
@@ -433,8 +475,9 @@ func reset_to_defaults() -> void:
 	steer_invert = false
 	steer_deadzone = DEADZONE_DEFAULT
 	_steer_span = 0.0
-	_pedal_span.clear()
 	_pedal_press.clear()
+	_auto_rest.clear()
+	_auto_press.clear()
 	for i in AXES:
 		_rest[i] = _raw_axis(i)
 	_pedal_rest["throttle"] = _rest[throttle_axis]
@@ -459,11 +502,13 @@ func apply_manual(which: String, axis: int, invert: bool) -> void:
 
 
 func _raw_pedal_reset(which: String, invert: bool) -> void:
-	## Manual assignment: take the current axis value as rest and let the span
-	## grow adaptively - in the direction the driver picked.
+	## Manual assignment: the current value becomes the released position, the
+	## pressed end is learned from the driver's first press, so the direction can
+	## never be wrong and `invert` is not needed for pedals.
 	var ax: int = _axis_of(which)
-	_pedal_rest[which] = _raw_axis(ax)
-	_pedal_span[which] = -1.0 if invert else 1.0
+	_pedal_rest.erase(which)
+	_auto_rest[which] = _raw_axis(ax)
+	_auto_press.erase(which)
 
 
 func _axis_of(name: String) -> int:
@@ -541,7 +586,8 @@ func load_profile() -> bool:
 	_pedal_rest["clutch"] = float(d.get("clutch_rest", _raw_axis(clutch_axis)))
 	_pedal_press["clutch"] = float(d.get("clutch_press", 0.0))
 	for name in ["throttle", "brake", "clutch"]:
-		_pedal_span[name] = float(_pedal_press[name]) - float(_pedal_rest[name])
+		_auto_rest.erase(name)
+		_auto_press.erase(name)
 	_profile_loaded = true
 	print("G29 profile loaded: gas=", throttle_axis, " brake=", brake_axis,
 		" clutch=", clutch_axis, " steer=", steer_axis, " invert=", steer_invert)

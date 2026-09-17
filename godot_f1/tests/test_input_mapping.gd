@@ -37,6 +37,7 @@ func _run() -> void:
 	_steer_math()
 	_guided_pedal_calibration()
 	_guided_steer_calibration()
+	_silent_start_then_real_data()
 	_profile_round_trip()
 	_manual_pedal_assignment()
 	_silent_device_detector()
@@ -56,11 +57,78 @@ func _configure_pedals(rest: float, press: float) -> void:
 	g.steer_axis = 0
 	g._pedal_rest = {"throttle": rest, "brake": rest, "clutch": rest}
 	g._pedal_press = {"throttle": press, "brake": press, "clutch": press}
-	g._pedal_span = {"throttle": press - rest, "brake": press - rest, "clutch": press - rest}
+	g._auto_rest.clear()
+	g._auto_press.clear()
 	g._steer_rest = 0.0
 	g._steer_span = 1.0
 	g.steer_invert = false
 	g.steer_deadzone = 0.03
+
+
+func _uncalibrated() -> void:
+	## Drop everything the driver has calibrated so far and start like a fresh
+	## installation: no profile, no explicit pedal points.
+	g._pedal_rest.clear()
+	g._pedal_press.clear()
+	g._auto_rest.clear()
+	g._auto_press.clear()
+	g._have_data = false
+	g.throttle_axis = 1
+	g.brake_axis = 2
+	g.clutch_axis = 3
+	g.steer_axis = 0
+	g._steer_rest = 0.0
+	g._steer_span = 1.0
+	g.steer_invert = false
+	g.steer_deadzone = 0.03
+
+
+func _silent_start_then_real_data() -> void:
+	## Measured on the real G29: SDL reports a flat 0.0 on every pedal until the
+	## wheel sends its first HID report, and only then the true value
+	## (released = 1.0). Treating those zeros as "released" made all three
+	## pedals read 100 % the moment the driver touched anything.
+	_uncalibrated()
+	for i in 12:
+		g.sim_set(i, 0.0)
+	for i in 60:
+		g.step(0.05)
+	_check(_near(g.throttle, 0.0) and _near(g.brake, 0.0) and _near(g.clutch, 0.0),
+		"flat_zeros_read_as_idle", "gas=%.2f brake=%.2f" % [g.throttle, g.brake])
+	_check(not g._have_data, "flat_zeros_are_not_trusted_as_data")
+
+	# first believable report: pedals released, value +1 on axes 1..3
+	g.sim_set(1, 1.0)
+	g.sim_set(2, 1.0)
+	g.sim_set(3, 1.0)
+	g.step(0.05)
+	_check(g._have_data, "first_real_report_is_recognised")
+	_check(_near(g.throttle, 0.0) and _near(g.brake, 0.0) and _near(g.clutch, 0.0),
+		"released_pedals_read_zero", "gas=%.2f brake=%.2f clutch=%.2f" % [
+			g.throttle, g.brake, g.clutch])
+
+	# driver presses the gas only
+	g.sim_set(1, 0.0)
+	g.step(0.05)
+	_check(_near(g.throttle, 1.0) and _near(g.brake, 0.0) and _near(g.clutch, 0.0),
+		"gas_press_moves_gas_only", "gas=%.2f brake=%.2f clutch=%.2f" % [
+			g.throttle, g.brake, g.clutch])
+	g.sim_set(1, 0.5)
+	g.step(0.05)
+	_check(g.throttle > 0.3 and g.throttle < 0.7, "half_press_is_half",
+		"gas=%.2f" % g.throttle)
+
+	# driver presses the brake only: gas must fall back to zero
+	g.sim_set(1, 1.0)
+	g.sim_set(2, 0.0)
+	g.step(0.05)
+	_check(_near(g.brake, 1.0) and _near(g.throttle, 0.0), "brake_press_moves_brake_only",
+		"gas=%.2f brake=%.2f" % [g.throttle, g.brake])
+	# and releasing everything reads idle again
+	g.sim_set(2, 1.0)
+	g.step(0.05)
+	_check(_near(g.brake, 0.0) and _near(g.throttle, 0.0), "released_again_reads_idle",
+		"gas=%.2f brake=%.2f" % [g.throttle, g.brake])
 
 
 func _pedal_polarities() -> void:
@@ -128,12 +196,13 @@ func _steer_math() -> void:
 
 
 func _guided_pedal_calibration() -> void:
-	g._pedal_rest.clear()
-	g._pedal_press.clear()
-	g._pedal_span.clear()
-	g.steer_axis = 0
+	_uncalibrated()
+	# a real device always reports something before calibration starts
+	g.sim_set(5, 1.0)
+	g.step(0.05)
 	for i in 12:
-		g.sim_set(i, 0.0)
+		if i != 5:
+			g.sim_set(i, 0.0)
 	g.begin_pedal_calibration("throttle")
 	_check(g.cal_phase == 1 and g.cal_hint != "", "calibration_starts_with_rest_sampling",
 		"phase=%d hint=%s" % [g.cal_phase, g.cal_hint])
@@ -146,11 +215,13 @@ func _guided_pedal_calibration() -> void:
 	g.step(0.02)
 	_check(g.cal_phase == 5, "calibration_finishes_on_full_press", "phase=%d" % g.cal_phase)
 	_check(g.throttle_axis == 5, "detected_axis_is_remembered", "axis=%d" % g.throttle_axis)
-	_check(_near(g._pedal_rest["throttle"], 0.0) and _near(g._pedal_press["throttle"], -1.0),
-		"rest_and_press_are_stored")
+	# released = +1 (rest), fully pressed = -1, exactly like the real G29
+	_check(_near(g._pedal_rest["throttle"], 1.0) and _near(g._pedal_press["throttle"], -1.0),
+		"rest_and_press_are_stored", "rest=%.2f press=%.2f" % [
+			float(g._pedal_rest["throttle"]), float(g._pedal_press["throttle"])])
 	g.step(0.02)
 	_check(_near(g.throttle, 1.0), "detected_pedal_reads_full", "gas=%.2f" % g.throttle)
-	g.sim_set(5, 0.0)
+	g.sim_set(5, 1.0)
 	g.step(0.02)
 	_check(_near(g.throttle, 0.0), "detected_pedal_reads_zero_at_rest", "gas=%.2f" % g.throttle)
 
@@ -165,6 +236,9 @@ func _guided_pedal_calibration() -> void:
 
 
 func _guided_steer_calibration() -> void:
+	# a real wheel always delivers data before the driver starts calibrating
+	g.sim_set(5, 1.0)
+	g.step(0.05)
 	for i in 12:
 		g.sim_set(i, 0.0)
 	g.begin_steer_calibration()
@@ -221,14 +295,19 @@ func _manual_pedal_assignment() -> void:
 	g.step(0.02)
 	_check(_near(g.throttle, 1.0), "manual_axis_press_reads_full", "gas=%.2f" % g.throttle)
 
-	# same axis, but the driver says the pedal works the other way round
+	# a manual assignment never needs an invert flag: the direction is learned
+	# from the driver's first press, so it cannot end up backwards.
 	g.sim_set(4, 0.0)
 	g.apply_manual("brake", 4, true)
 	g.step(0.02)
 	_check(_near(g.brake, 0.0), "manual_inverted_rest_is_zero", "brake=%.2f" % g.brake)
 	g.sim_set(4, -1.0)
 	g.step(0.02)
-	_check(_near(g.brake, 1.0), "manual_inverted_press_reads_full", "brake=%.2f" % g.brake)
+	_check(_near(g.brake, 1.0), "manual_press_reads_full_regardless_of_invert",
+		"brake=%.2f" % g.brake)
+	g.sim_set(4, 0.0)
+	g.step(0.02)
+	_check(_near(g.brake, 0.0), "manual_release_reads_zero_again", "brake=%.2f" % g.brake)
 
 
 func _silent_device_detector() -> void:
@@ -239,7 +318,7 @@ func _silent_device_detector() -> void:
 	root.add_child(h)
 	for i in 12:
 		h.sim_set(i, 0.0)
-	for i in 100:
+	for i in 200:
 		h.step(0.04)
 	_check(not h.axes_live and h.hardware_hint != "", "silent_device_is_detected",
 		"live=%s hint=%s" % [h.axes_live, h.hardware_hint])
