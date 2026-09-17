@@ -50,7 +50,18 @@ godot --path godot_f1
 | `blender/exports/cars/` | 6 Low-Poly-Lackierungen, Reifen getrennt |
 | `blender/exports/track/` | Apex Circuit + Racing Line |
 | `tools/glb_probe.py` | Diagnose: schneidet ein GLB entlang Z (welches Ende ist die Nase?) |
+| `tools/hid_probe.py` | Diagnose: liest rohe HID-Reports des G29 (Netzteil-/Kabel-Check ohne Godot) |
 | `docs/` | Inventar (Excel) |
+
+## Wenn das Lenkrad nicht reagiert
+
+Windows erkennt das G29 auch dann, wenn es **keine** Daten liefert — typisch, wenn das Netzteil nicht angeschlossen ist. Prüfen:
+
+```
+python tools/hid_probe.py 046d:c24f
+```
+
+Kommt nur `report timeout ... (no data)`, obwohl die Joystick-Schnittstelle mit sieben Achsen beschrieben wird, dann sendet das Lenkrad selbst nichts: Netzteil prüfen, Pedalkabel am Lenkrad festziehen, anderes USB-Port (möglichst direkt hinten am PC, kein Hub) probieren, Modusschalter am Lenkrad auf **PC** stellen. Danach im Spiel `Esc` → *Einstellungen* → *Gas kalibrieren*.
 
 ## Steuerung
 

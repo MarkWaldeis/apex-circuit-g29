@@ -37,7 +37,15 @@ Sobald das G29 über den Totbereich hinaus bewegt wird, schaltet der Auto-Pilot 
 
 Das Ergebnis landet in `user://g29_profile.json` (`%APPDATA%\Godot\app_userdata\Apex Circuit\`) und wird beim nächsten Start automatisch geladen. Vor der ersten Kalibrierung arbeitet das Spiel mit einer automatischen Schätzung, damit man sofort fahren kann.
 
-Wichtig: Das G29 braucht sein **Netzteil**. Hängt nur USB dran, wird das Lenkrad erkannt, liefert aber keine Achsendaten — die Einstellungen zeigen dann den Hinweis „G29 erkannt, aber es kommen keine Achsendaten an“.
+Wichtig: Das G29 braucht sein **Netzteil**. Hängt nur USB dran, meldet sich das Lenkrad zwar am PC an, sendet aber **keinen einzigen Eingabe-Report** — es kommen also keine Achsendaten an. Die Einstellungen zeigen dann den Hinweis „G29 erkannt, aber es kommen keine Achsendaten an — Lenkrad einschalten, Netzteil und Pedalkabel prüfen“.
+
+Das lässt sich unabhängig nachmessen, ohne Godot zu starten:
+
+```
+python tools/hid_probe.py 046d:c24f
+```
+
+Das Skript liest die rohen HID-Reports direkt über die Windows-HID-Schnittstelle (ohne SDL, DirectInput oder Godot dazwischen). Bei einem betriebsbereiten G29 kommen laufend Reports an; ohne Netzteil läuft jede Abfrage in einen Timeout. Erwartete Ausgabe im Fehlerfall: `report timeout ... (no data)` auf allen drei Schnittstellen, obwohl `usage_page=0x0001 usage=0x0004 input_len=13 values=7` genau die Joystick-Schnittstelle mit sieben Achsen beschreibt.
 
 ## Tests (headless)
 
