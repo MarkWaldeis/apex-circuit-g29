@@ -516,22 +516,25 @@ func cancel_calibration() -> void:
 
 
 func reset_to_defaults() -> void:
-	steer_axis = 0
-	throttle_axis = 1
-	brake_axis = 2
-	clutch_axis = 3
+	## "Standardwerte" must NOT throw away the axes the driver taught the game:
+	## on this wheel the pedals are 2/3/1, not 1/2/3, so resetting them would
+	## swap gas and clutch. It clears the learned points instead - the automatic
+	## mapping then re-anchors on the live device, and the guided calibration
+	## re-detects the axes if they really are wrong.
 	steer_invert = false
 	steer_deadzone = DEADZONE_DEFAULT
 	_steer_span = 0.0
+	_pedal_rest.clear()
 	_pedal_press.clear()
 	_auto_rest.clear()
 	_auto_press.clear()
+	_have_data = false
 	for i in AXES:
 		_rest[i] = _raw_axis(i)
-	_pedal_rest["throttle"] = _rest[throttle_axis]
-	_pedal_rest["brake"] = _rest[brake_axis]
-	_pedal_rest["clutch"] = _rest[clutch_axis]
 	_steer_rest = _rest[steer_axis]
+	invert_throttle = true
+	invert_brake = true
+	invert_clutch = true
 	save_profile()
 
 
@@ -627,12 +630,17 @@ func load_profile() -> bool:
 	steer_deadzone = float(d.get("steer_deadzone", steer_deadzone))
 	_steer_rest = float(d.get("steer_rest", _raw_axis(steer_axis)))
 	_steer_span = float(d.get("steer_span", 0.0))
-	_pedal_rest["throttle"] = float(d.get("throttle_rest", _raw_axis(throttle_axis)))
-	_pedal_press["throttle"] = float(d.get("throttle_press", 0.0))
-	_pedal_rest["brake"] = float(d.get("brake_rest", _raw_axis(brake_axis)))
-	_pedal_press["brake"] = float(d.get("brake_press", 0.0))
-	_pedal_rest["clutch"] = float(d.get("clutch_rest", _raw_axis(clutch_axis)))
-	_pedal_press["clutch"] = float(d.get("clutch_press", 0.0))
+	for name in ["throttle", "brake", "clutch"]:
+		var rest_key: String = str(name) + "_rest"
+		var press_key: String = str(name) + "_press"
+		# Only believe a stored calibration when both points exist and the
+		# travel between them is long enough to be a real pedal.
+		if d.has(rest_key) and d.has(press_key):
+			var r: float = float(d[rest_key])
+			var p: float = float(d[press_key])
+			if absf(p - r) >= 0.15:
+				_pedal_rest[name] = r
+				_pedal_press[name] = p
 	for name in ["throttle", "brake", "clutch"]:
 		_auto_rest.erase(name)
 		_auto_press.erase(name)

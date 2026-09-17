@@ -313,7 +313,7 @@ func _build_settings() -> Control:
 	steer.pressed.connect(_start_calibration.bind("steer"))
 	var all := _make_button(right, "Alles kalibrieren", false, 0, 26)
 	all.pressed.connect(_start_calibration.bind("all"))
-	var defaults := _make_button(right, "Standardwerte", false, 0, 26)
+	var defaults := _make_button(right, "Kalibrierung zurücksetzen", false, 0, 26)
 	defaults.pressed.connect(_reset_to_defaults)
 	_steer_toggle = _make_button(right, "Lenkrad invertieren: NEIN", false, 0, 26)
 	_steer_toggle.pressed.connect(_toggle_steer_invert)
@@ -369,7 +369,7 @@ func _build_calibrate() -> Control:
 	col.add_child(buttons)
 	var cancel := _make_button(buttons, "Abbrechen (Esc)", false, 300, 28)
 	cancel.pressed.connect(_cancel_calibration)
-	var defaults := _make_button(buttons, "Standardwerte verwenden", false, 340, 28)
+	var defaults := _make_button(buttons, "Ohne Kalibrierung weiter", false, 340, 28)
 	defaults.pressed.connect(_use_defaults_from_calibration)
 
 	_first_focus[Screen.CALIBRATE] = cancel
@@ -548,7 +548,7 @@ func _reset_car() -> void:
 func _reset_to_defaults() -> void:
 	var ok := _g29_call("reset_to_defaults")
 	ok = _g29_call("save_profile") or ok
-	_note(_cal_note, "Standardwerte gesetzt (rechts Gas, Mitte Bremse, links Kupplung)." if ok else "Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
+	_note(_cal_note, "Kalibrierung verworfen — die erkannten Achsen bleiben erhalten, die Zuordnung lernt neu." if ok else "Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
 
 
 func _toggle_steer_invert() -> void:
@@ -600,7 +600,7 @@ func _use_defaults_from_calibration() -> void:
 	if _g29_call("skip_calibration"):
 		_g29_call("save_profile")
 		_cal_finished = true
-		_cal_hint_label.text = "Standardwerte übernommen"
+		_cal_hint_label.text = "Ohne Kalibrierung weiter — die Pedale werden automatisch geschätzt"
 		await get_tree().create_timer(0.8).timeout
 		if is_inside_tree() and screen == Screen.CALIBRATE:
 			_show_screen(Screen.SETTINGS)

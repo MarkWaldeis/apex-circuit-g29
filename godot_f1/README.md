@@ -32,8 +32,10 @@ Sobald das G29 über den Totbereich hinaus bewegt wird, schaltet der Auto-Pilot 
 * **Bremse / Kupplung kalibrieren** — dasselbe für die anderen Pedale.
 * **Lenkrad kalibrieren** — Lenkrad loslassen, dann ganz nach rechts drehen; daraus erkennt das Spiel Achse und Drehrichtung.
 * **Alles kalibrieren** — Gas, Bremse und Kupplung hintereinander.
-* **Standardwerte** — zurück auf Lenkachse 0, Gas 1, Bremse 2, Kupplung 3.
+* **Kalibrierung zurücksetzen** — verwirft die gelernten Werte; die erkannten Achsen bleiben erhalten (wichtig, weil beim G29 Gas/Bremse/Kupplung nicht auf 1/2/3 liegen), und die Zuordnung schätzt sich neu.
 * **Lenkrad invertieren** — falls links/rechts vertauscht ist.
+
+Die Zuordnung lernt außerdem mit: Wird ein Pedal im Rennen weiter durchgetreten (oder das Lenkrad weiter gedreht) als beim Kalibrieren, erweitert das Spiel den Bereich automatisch und speichert ihn. Eine unplausible Kalibrierung wird verworfen statt übernommen.
 
 Die Lenkrichtung ist im ganzen Spiel einheitlich: **positiv = rechts**. Das G29 meldet nach dem Kalibrieren „ganz nach rechts“ als +1, `D` / Pfeil rechts sind +1, das Cockpit-Lenkrad dreht im Uhrzeigersinn und die Physik lenkt das Auto nach rechts. Alle vier Punkte prüft `tests/test_cockpit_wheel.gd`.
 
@@ -58,11 +60,25 @@ godot --headless --path godot_f1 --script tests/test_drive_unit.gd
 godot --headless --path godot_f1 --script tests/test_camera_pose.gd
 godot --headless --path godot_f1 --script tests/test_lap_drive.gd
 godot --headless --path godot_f1 --script tests/test_cockpit_wheel.gd
+godot --headless --path godot_f1 --script tests/test_gameplay_input.gd
 ```
 
 `test_lap_drive` fährt die echte Szene und prüft, dass Fahrer- und KI-Auto richtig herum fahren und auf der Strecke bleiben.
 
 `test_cockpit_wheel` prüft die Lenkrichtung einmal komplett durch: ein positiver Lenkwert (rechts) muss das Lenkrad im Cockpit im Uhrzeigersinn drehen, die sichtbaren Vorderräder nach rechts stellen und das Auto nach rechts (Richtung seiner eigenen -X-Achse) fahren lassen.
+
+`test_gameplay_input` ist der Integrationstest in der echten Szene mit einem Test-Lenkrad: Gas beschleunigt (87 km/h), die Bremse stoppt von 87 auf 1 km/h, rechts lenkt nach rechts, und das Cockpit-Lenkrad dreht mit.
+
+Diagnose-Werkzeuge (Fensterlauf, weil headless keine Joysticks sieht):
+
+```
+godot --path godot_f1 --resolution 320x200 --script tests/probe_g29_hardware.gd
+godot --path godot_f1 --resolution 320x200 --script tests/probe_g29_module.gd
+godot --path godot_f1 --resolution 320x200 --script tests/probe_g29_profile.gd
+godot --path godot_f1 --resolution 1920x1080 --script tests/probe_fps.gd
+godot --path godot_f1 --resolution 1280x720 --script tests/shot_game.gd
+python tools/hid_probe.py 046d:c24f
+```
 
 ## Starten
 

@@ -41,6 +41,7 @@ func _run() -> void:
 	_partial_calibration_keeps_learning()
 	_repairs_a_broken_profile_rest()
 	_profile_waits_for_data()
+	_reset_keeps_the_axes()
 	_profile_round_trip()
 	_manual_pedal_assignment()
 	_silent_device_detector()
@@ -241,6 +242,34 @@ func _profile_waits_for_data() -> void:
 	for i in 20:
 		g.step(0.02)
 	_check(not g._profile_dirty, "no_endless_profile_writes")
+
+
+func _reset_keeps_the_axes() -> void:
+	## "Standardwerte" used to force the axes back to 0/1/2/3. On the real wheel
+	## the pedals are 2/3/1, so that button silently swapped gas and clutch.
+	_uncalibrated()
+	g._have_data = true
+	g.steer_axis = 0
+	g.throttle_axis = 2
+	g.brake_axis = 3
+	g.clutch_axis = 1
+	g._pedal_rest = {"throttle": 1.0, "brake": 1.0, "clutch": 1.0}
+	g._pedal_press = {"throttle": 0.43, "brake": 0.44, "clutch": 0.37}
+	g.reset_to_defaults()
+	_check(g.throttle_axis == 2 and g.brake_axis == 3 and g.clutch_axis == 1,
+		"reset_keeps_the_detected_axes", "gas=%d brake=%d clutch=%d" % [
+			g.throttle_axis, g.brake_axis, g.clutch_axis])
+	_check(not g._pedal_press.has("throttle"), "reset_drops_the_learned_points")
+	# and the pedals still work through the automatic mapping afterwards
+	g.sim_set(1, 0.0)
+	g.sim_set(2, 1.0)
+	g.sim_set(3, 0.0)
+	g.step(0.05)
+	_check(_near(g.throttle, 0.0) and g._have_data, "reset_reanchors_on_live_data",
+		"gas=%.2f have_data=%s" % [g.throttle, g._have_data])
+	g.sim_set(2, 0.0)
+	g.step(0.05)
+	_check(_near(g.throttle, 1.0), "reset_still_reaches_full_press", "gas=%.2f" % g.throttle)
 
 
 func _pedal_polarities() -> void:
