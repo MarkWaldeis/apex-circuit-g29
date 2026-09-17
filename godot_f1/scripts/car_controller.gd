@@ -1,5 +1,11 @@
 extends VehicleBody3D
 
+const SurfaceModel = preload("res://scripts/surfaces.gd")
+const CrashModel = preload("res://scripts/crash.gd")
+const WheelFeedback = preload("res://scripts/wheel_feedback.gd")
+const Gearbox = preload("res://scripts/gearbox.gd")
+const TyreModel = preload("res://scripts/tyre_model.gd")
+
 @export var livery: String = "crimson"
 @export var auto_drive: bool = false
 @export var is_ai: bool = false
@@ -7,6 +13,17 @@ extends VehicleBody3D
 
 var racing_line
 var g29
+## Sub-systems. Each one owns one question: what is under the tyres (surfaces),
+## what does the engine do (gearbox), how much grip is left (tyres), did we hit
+## something (crash), and what does that feel like (feedback).
+var surfaces
+var gearbox
+var tyres
+var crash
+var feedback
+## Driver assists. F1 games ship with these on; the driver can switch the
+## automatic gearbox off and shift with the paddles himself.
+var assists: Dictionary = {"auto_gearbox": true}
 var spawn_transform: Transform3D
 var speed_kmh: float = 0.0
 var last_steer: float = 0.0
@@ -14,6 +31,17 @@ var gear: int = 1
 var rpm: float = 4200.0
 var clutch_assist: bool = true
 var _shift_cd: float = 0.0
+## Last racing line point, so finding "where am I" stays a window search
+## instead of walking all 1440 points every tick.
+var _line_hint: int = -1
+var surface_name: String = "Asphalt"
+var surface_drag: float = 0.0
+## Telemetry the HUD and the tests read: how hard the car is sliding, how much
+## downforce it carries, and how bent the tub is after a hit.
+var slip: float = 0.0
+var lateral_g: float = 0.0
+var downforce: float = 0.0
+var _prev_vel: Vector3 = Vector3.ZERO
 ## Visual wheel meshes, kept so the rims can steer and roll with the car.
 var _wheel_meshes: Array = []
 var _wheel_roll: float = 0.0
@@ -60,6 +88,16 @@ func setup(line, wheel_input, start: Transform3D) -> void:
 	can_sleep = false
 	_build_wheels_and_mesh()
 	_build_chassis_collider()
+	gearbox = Gearbox.new()
+	gearbox.setup(IDLE_RPM)
+	surfaces = SurfaceModel.new()
+	surfaces.setup(line)
+	tyres = TyreModel.new()
+	tyres.setup(self, line)
+	crash = CrashModel.new()
+	crash.setup(self, surfaces)
+	feedback = WheelFeedback.new()
+	feedback.setup(self, wheel_input)
 	global_transform = start
 	if g29 and not is_ai:
 		if not g29.shift_up.is_connected(_on_shift_up):
@@ -376,6 +414,9 @@ func _find_token(node: Node, token: String) -> Node3D:
 func _unhandled_input(event: InputEvent) -> void:
 	if is_ai:
 		return
+	if event.is_action_pressed("toggle_assists"):
+		assists["auto_gearbox"] = not bool(assists.get("auto_gearbox", true))
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_E or event.physical_keycode == KEY_PERIOD:
 			_on_shift_up()
@@ -393,20 +434,20 @@ func apply_brake(amount: float) -> void:
 
 
 func _on_shift_up() -> void:
-	if gear < MAX_GEAR and _shift_cd <= 0.0:
-		gear += 1
-		_shift_cd = 0.12
+	if gearbox and gearbox.request_shift(true):
+		if feedback:
+			feedback.poke("shift", 0.35)
 
 
 func _on_shift_down() -> void:
-	if gear > 1 and _shift_cd <= 0.0:
-		var next_rpm := _rpm_for_gear(gear - 1)
-		if next_rpm < REDLINE + 400.0:
-			gear -= 1
-			_shift_cd = 0.12
+	if gearbox and gearbox.request_shift(false):
+		if feedback:
+			feedback.poke("shift", 0.35)
 
 
 func _physics_process(delta: float) -> void:
+	if gearbox == null or surfaces == null or tyres == null or crash == null or feedback == null:
+		return
 	var forward_vel: float = global_transform.basis.z.dot(linear_velocity)
 	speed_kmh = linear_velocity.length() * 3.6
 	var steer_in := 0.0
@@ -430,13 +471,21 @@ func _physics_process(delta: float) -> void:
 	if not is_ai and Input.is_action_just_pressed("reset_car"):
 		_reset()
 
+	# --- what is under the tyres --------------------------------------------
+	# The track carries no material information, so the surface comes from the
+	# car's lateral offset to the racing line (see scripts/surfaces.gd).
+	var surface: Dictionary = surfaces.sample(global_position, _line_hint) if surfaces else {}
+	if not surface.is_empty():
+		_line_hint = int(surface["index"])
+		surface_name = String(surface["name"])
+	var surface_grip: float = float(surface.get("grip", 1.0))
+
 	if auto_drive or is_ai:
 		var ai: Dictionary = _auto_inputs()
 		steer_in = ai.steer
 		throttle_in = ai.throttle
 		brake_in = ai.brake
 		clutch_in = 0.0
-		_ai_shift()
 	else:
 		steer_in = Input.get_axis("steer_left", "steer_right")
 		throttle_in = Input.get_action_strength("throttle")
@@ -481,32 +530,65 @@ func _physics_process(delta: float) -> void:
 	if spd < 0.8 and throttle_in < 0.04 and clutch_in < 0.1:
 		engage = 0.0
 
-	var speed_rpm := _rpm_for_gear(gear)
-	var rev_rpm: float = IDLE_RPM + throttle_in * (REDLINE - IDLE_RPM)
-	if engage < 0.35:
-		rpm = lerp(rpm, rev_rpm, clampf(delta * 7.0, 0.0, 1.0))
-	else:
-		rpm = lerp(rpm, speed_rpm, clampf(delta * 8.0, 0.0, 1.0))
-	rpm = clampf(rpm, IDLE_RPM, REDLINE + 200.0)
-
-	var torque := _torque_at(rpm) * throttle_in * engage
-	_shift_cd = maxf(_shift_cd - delta, 0.0)
-	if rpm >= 9000.0 and gear < MAX_GEAR and _shift_cd <= 0.0:
-		gear += 1
-		_shift_cd = 0.16
-	if rpm >= REDLINE - 80.0:
-		torque *= 0.12
-	engine_force = torque * RATIOS[gear]
-	# Engine braking when off-throttle in gear.
-	if throttle_in < 0.05 and engage > 0.6 and spd > 8.0:
-		engine_force = -min(spd * 18.0 * RATIOS[gear] * 0.15, 420.0)
-
+	# --- drivetrain ---------------------------------------------------------
+	# The gearbox owns ratios, revs and shifting. `auto` is true for the AI and
+	# for the player while the automatic gearbox assist is on; switching it off
+	# makes the paddles (or Q/E) the only way to change gear.
+	var gb: Dictionary = gearbox.update(delta, {
+		"speed": maxf(forward_vel, 0.0),
+		"throttle": throttle_in,
+		"brake": brake_in,
+		"clutch": 1.0 - engage,
+		"auto": auto_drive or is_ai or bool(assists.get("auto_gearbox", true)),
+		"surface_grip": surface_grip,
+	})
+	gear = int(gb["gear"])
+	rpm = float(gb["rpm"])
+	engine_force = float(gb["engine_force"])
+	if int(gb["shift_event"]) != 0 and feedback:
+		feedback.poke("shift", 0.4)
+	# A damaged car is slower: broken bodywork costs drag and the engine
+	# cannot be used at full power.
+	if crash and crash.damage > 0.0:
+		engine_force *= 1.0 - 0.45 * crash.damage
 	var brake_force: float = brake_in * BRAKE_MAX
 	if brake_in > 0.08:
 		engine_force = min(engine_force, 0.0)
 	brake = brake_force
 
-	_apply_aero(spd, brake_in, abs(steer_in))
+	# --- tyres, downforce, surface ------------------------------------------
+	var accel_vec: Vector3 = (linear_velocity - _prev_vel) / maxf(delta, 0.0001)
+	lateral_g = accel_vec.dot(global_transform.basis.x.normalized()) / 9.81
+	_prev_vel = linear_velocity
+	var lateral_speed: float = absf(linear_velocity.dot(global_transform.basis.x.normalized()))
+	var slip_angle: float = atan2(lateral_speed, maxf(absf(forward_vel), 1.0))
+	var tyre: Dictionary = tyres.update(delta, {
+		"speed": spd,
+		"forward_speed": forward_vel,
+		"steer": last_steer,
+		"throttle": throttle_in,
+		"brake": brake_in,
+		"surface": surface,
+		"slip_angle": slip_angle,
+		"yaw_rate": angular_velocity.y,
+		"damage": float(crash.damage) if crash else 0.0,
+	})
+	_apply_wheel_grip(tyre, surface)
+	slip = float(tyre["slip"])
+	downforce = float(tyre["downforce"])
+	surface_drag = float(surface.get("drag", 0.0))
+	_apply_surface_drag(delta)
+
+	# --- what the driver feels and what the tub took -------------------------
+	crash.update(delta, surface, forward_vel)
+	feedback.update(delta, {
+		"speed": spd,
+		"surface": surface,
+		"slip": slip,
+		"lateral_g": lateral_g,
+		"crash": crash.last_impact_ms,
+		"damage": crash.damage,
+	})
 
 	_rejoin_cd = maxf(_rejoin_cd - delta, 0.0)
 	# Past the runoff apron there is no collision surface at all. Without this
@@ -533,17 +615,43 @@ func _torque_at(r: float) -> float:
 	return POWER * max(curve, 0.12)
 
 
-func _apply_aero(spd: float, brake_in: float, steer_amt: float) -> void:
-	var down: float = 1.0 + 1.15 * pow(clampf(spd / 75.0, 0.0, 1.0), 2.0)
-	if brake_in > 0.2:
-		down *= 0.92
-	if steer_amt > 0.35 and spd > 25.0:
-		down *= lerp(1.0, 0.78, clampf((steer_amt - 0.35) * 2.0, 0.0, 1.0))
+## Hand the tyre model's verdict to the four wheels.
+##
+## `downforce` is the aero load factor the car used to compute inline (it grows
+## with v^2), and `front_grip` / `rear_grip` are what is left after slip angle,
+## throttle and the surface have taken their share.
+func _apply_wheel_grip(tyre: Dictionary, surface: Dictionary) -> void:
+	var down: float = float(tyre.get("downforce", 1.0))
+	var damage: float = float(crash.damage) if crash else 0.0
 	for name in ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]:
 		var w: VehicleWheel3D = get_node_or_null(name)
-		if w:
-			var base := 8.4 if name.begins_with("Wheel_R") else 7.4
-			w.wheel_friction_slip = base * down
+		if w == null:
+			continue
+		var front: bool = name.begins_with("Wheel_F")
+		var base: float = 7.4 if front else 8.4
+		var grip: float = float(tyre["front_grip"] if front else tyre["rear_grip"])
+		if damage > 0.0:
+			grip *= 1.0 - 0.30 * damage
+		w.wheel_friction_slip = base * down * grip
+	# The surface's own pull: on grass and gravel the car is dragged back even
+	# while it still rolls, which is why running wide costs so much time.
+	surface_drag = float(surface.get("drag", 0.0))
+
+
+## Grass and gravel do not only take grip away, they pull the car back.
+##
+## Applied as a longitudinal deceleration instead of an engine force so it does
+## not depend on the tyres biting - a car sliding sideways on wet grass still
+## loses forward speed.
+func _apply_surface_drag(delta: float) -> void:
+	if surface_drag <= 0.01 or linear_velocity.length() < 0.6:
+		return
+	var fwd: Vector3 = global_transform.basis.z.normalized()
+	var v_long: float = fwd.dot(linear_velocity)
+	if absf(v_long) < 0.05:
+		return
+	var loss: float = minf(absf(v_long), surface_drag * delta)
+	linear_velocity -= fwd * (signf(v_long) * loss)
 
 
 func _ai_shift() -> void:
@@ -559,14 +667,18 @@ func _auto_inputs() -> Dictionary:
 		return result
 	var speed: float = linear_velocity.length()
 	var look: float = lerp(8.0, 30.0, clampf(speed / 55.0, 0.0, 1.0))
-	var target: Vector3 = racing_line.point_ahead(global_position, look)
+	# The line index from this tick's surface sample keeps this a window search
+	# instead of a full 1440 point walk on every physics frame.
+	var here: int = _line_hint if _line_hint >= 0 else racing_line.closest_index(global_position)
+	var target: Vector3 = racing_line.point_at_s(racing_line.s[here] + look)
 	var local: Vector3 = to_local(target)
 	var angle: float = atan2(local.x, local.z)
 	# Driver convention: positive = right. A target sitting on the car's local
 	# +X is on the driver's LEFT (the nose is +Z), so it needs a negative
 	# command. Without the minus the AI steers away from the racing line.
 	result.steer = clampf(-angle / max_steer, -1.0, 1.0)
-	var curve: float = racing_line.curvature_ahead(global_position, look)
+	var curve: float = absf(racing_line.flat_tangent(here).signed_angle_to(
+		racing_line.flat_tangent(wrapi(here + 12, 0, racing_line.tangents.size())), Vector3.UP))
 	var throttle: float = 0.95
 	throttle -= clampf(abs(angle) * 1.35, 0.0, 0.8)
 	throttle -= clampf(curve * 0.85, 0.0, 0.7)
@@ -589,6 +701,12 @@ func _reset() -> void:
 	gear = 1
 	rpm = IDLE_RPM
 	clutch_assist = true
+	if gearbox:
+		gearbox.reset()
+	if crash:
+		crash.reset()
+	if feedback:
+		feedback.poke("reset", 0.0)
 
 
 func rejoin_to_line() -> void:

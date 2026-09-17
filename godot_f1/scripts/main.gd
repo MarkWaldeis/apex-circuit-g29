@@ -7,13 +7,21 @@ const CockpitCamera = preload("res://scripts/cockpit_camera.gd")
 const TrackLoader = preload("res://scripts/track_loader.gd")
 const RaceHUD = preload("res://scripts/hud.gd")
 const MenuUI = preload("res://scripts/menu.gd")
+const IdealLine = preload("res://scripts/ideal_line.gd")
+const RacingLineDisplay = preload("res://scripts/racing_line_display.gd")
+const Barriers = preload("res://scripts/barriers.gd")
 
 var line = RacingLine.new()
+## The ideal line and the ribbon that shows it: green where the throttle stays
+## down, yellow where the driver lifts, red where the brakes come on.
+var ideal
+var guide
 var player
 var ai_car
 var cam
 var g29
 var menu
+var hud
 var _start_z: float = 0.0
 
 
@@ -22,6 +30,8 @@ func _ready() -> void:
 	if not line.load_json("res://assets/track/racing_line.json"):
 		push_error("Failed to load racing line")
 		return
+	ideal = IdealLine.new()
+	ideal.build(line)
 	g29 = G29Input.new()
 	g29.name = "G29"
 	add_child(g29)
@@ -33,6 +43,9 @@ func _ready() -> void:
 	track.name = "Track"
 	add_child(track)
 	_build_road_boxes()
+	# Walls where the circuit's barriers stand. Without them the barrier mesh
+	# is decoration and the car drives straight through it.
+	Barriers.build(self, line)
 
 	var start := _start_transform(0)
 	player = _spawn_car("crimson", false, false, start)
@@ -52,12 +65,17 @@ func _ready() -> void:
 		player.set_meta("headless_gas", true)
 		print("LAP_DRIVE start_z=", _start_z)
 
-	var hud := RaceHUD.new()
+	hud = RaceHUD.new()
 	hud.name = "HUD"
 	add_child(hud)
 	hud.car = player
 	hud.g29 = g29
 	hud.cam = cam
+
+	guide = RacingLineDisplay.new()
+	guide.name = "Guide"
+	add_child(guide)
+	guide.build(line, ideal)
 
 	menu = MenuUI.new()
 	menu.name = "Menu"
@@ -207,3 +225,5 @@ func _physics_process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("quit_game"):
 		get_tree().quit()
+	if event.is_action_pressed("toggle_line") and guide != null:
+		guide.set_enabled(not guide.is_enabled())
