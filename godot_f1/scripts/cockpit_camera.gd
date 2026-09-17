@@ -500,67 +500,75 @@ func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 		hand.name = "Hand_R" if side < 0.0 else "Hand_L"
 		pivot.add_child(hand)
 		hand.position = Vector3(cx, cy, 0.0)
-
-		# The closed fist is one smooth mass sitting on the rim - a hand seen
-		# from behind is a single shape, not a bundle of sausages.
-		var palm := MeshInstance3D.new()
-		palm.name = "Fist"
-		var ball := SphereMesh.new()
-		ball.radius = 0.030
-		ball.height = 0.060
-		ball.radial_segments = 20
-		ball.rings = 10
-		palm.mesh = ball
-		palm.material_override = glove
-		palm.position = Vector3(side * 0.004, 0.002, 0.012)
-		palm.scale = Vector3(0.86, 1.48, 0.82)
-		palm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		hand.add_child(palm)
-		# back of the hand: a second, lighter shell so the glove separates from
-		# the black carbon wheel instead of vanishing into it
+		# ---- where the parts of a gripping hand actually are -----------------
+		#
+		# The driver looks down the camera's -Z, so the rim sits between the lens
+		# and the nose. Gripping it means: the BACK of the hand faces the driver
+		# (negative z), the palm wraps the rim itself, and the fingers curl over
+		# to the far side (positive z). An earlier build had the fist sitting at
+		# +z and the "back of the hand" behind it, which is the wrong side of the
+		# rim - that is why the hands read as two black lumps parked on the far
+		# face of the wheel instead of as fists holding it.
+		var palm_z: float = 0.002
+		var back_z: float = -0.026
+		var wrap_z: float = 0.026
+		# the mass that grips the rim: a flattened box, so the hand has corners
+		# like a hand instead of being a sphere
+		_limb(hand, Vector3(side * 0.006, -0.026, palm_z), Vector3(side * 0.006, 0.030, palm_z),
+			0.0215, glove, "Palm")
+		# back of the hand: the big surface the driver actually sees
 		var back := MeshInstance3D.new()
 		back.name = "BackOfHand"
 		var shell := SphereMesh.new()
-		shell.radius = 0.023
-		shell.height = 0.046
-		shell.radial_segments = 16
-		shell.rings = 8
+		shell.radius = 0.021
+		shell.height = 0.042
+		shell.radial_segments = 20
+		shell.rings = 10
 		back.mesh = shell
 		back.material_override = glove_top
-		back.position = Vector3(side * 0.008, 0.002, 0.028)
-		back.scale = Vector3(0.84, 1.42, 0.46)
+		back.position = Vector3(side * 0.004, 0.002, back_z)
+		back.scale = Vector3(1.05, 1.52, 0.62)
 		back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		hand.add_child(back)
-		_box(hand, Vector3(0.014, 0.0075, 0.003), Vector3(side * 0.006, 0.024, 0.043),
-			Vector3(0, 0, side * 6.0), logo, "Logo")
+		# the white logo patch on the back of the glove: small, flat, and the one
+		# bright spot that makes the glove legible against the carbon wheel
+		_box(hand, Vector3(0.013, 0.007, 0.0015), Vector3(side * -0.002, 0.004, back_z - 0.012),
+			Vector3(0, 0, side * -7.0), logo, "Logo")
 		for f in 4:
-			var y: float = 0.034 - float(f) * 0.022
-			# fingers only just stand proud of the fist, the way a glove looks
-			# from the driver's side
-			_limb(hand, Vector3(side * -0.006, y, 0.020), Vector3(side * -0.030, y, 0.008),
-				0.0076, glove, "Finger%d" % f)
-			_limb(hand, Vector3(side * -0.030, y, 0.008), Vector3(side * -0.042, y - 0.004, -0.002),
-				0.0068, glove_dark, "FingerTip%d" % f)
-			# A knuckle bump on the back of the hand and a light seam between the
+			# four fingers, stacked along the rim
+			var y: float = 0.028 - float(f) * 0.019
+			# proximal phalanx: leaves the knuckle and crosses the rim
+			_limb(hand, Vector3(side * -0.004, y, back_z + 0.008), Vector3(side * -0.011, y, palm_z + 0.006),
+				0.0080, glove, "Finger%d" % f)
+			# middle: curls over the top of the rim to the far side
+			_limb(hand, Vector3(side * -0.011, y, palm_z + 0.006), Vector3(side * -0.016, y - 0.001, wrap_z - 0.004),
+				0.0074, glove, "FingerMid%d" % f)
+			# tip: turns back in, which is what a closed grip does
+			_limb(hand, Vector3(side * -0.016, y - 0.001, wrap_z - 0.004), Vector3(side * -0.022, y - 0.003, wrap_z - 0.014),
+				0.0066, glove_dark, "FingerTip%d" % f)
+			# A knuckle on the back of the hand and a dark crease between the
 			# fingers: without them a gloved fist renders as one dark lump.
 			var knuckle := MeshInstance3D.new()
 			knuckle.name = "Knuckle%d" % f
 			var bump := SphereMesh.new()
-			bump.radius = 0.0058
-			bump.height = 0.0116
+			bump.radius = 0.0052
+			bump.height = 0.0104
 			bump.radial_segments = 12
 			bump.rings = 6
 			knuckle.mesh = bump
 			knuckle.material_override = glove_top
-			knuckle.position = Vector3(side * -0.004, y + 0.006, 0.022)
-			knuckle.scale = Vector3(1.0, 0.9, 0.45)
+			knuckle.position = Vector3(side * 0.004, y + 0.007, back_z - 0.006)
+			knuckle.scale = Vector3(1.15, 0.72, 0.40)
 			knuckle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			hand.add_child(knuckle)
-			_box(hand, Vector3(0.024, 0.0016, 0.022), Vector3(side * -0.020, y - 0.011, 0.010),
-				Vector3(0.0, 0.0, side * 16.0), seam, "Seam%d" % f)
-		# thumb along the inside of the rim
-		_limb(hand, Vector3(side * 0.000, 0.046, 0.020), Vector3(side * -0.024, 0.060, 0.010),
-			0.0105, glove, "Thumb")
+			# crease between this finger and the next, lying on the back of the hand
+			_box(hand, Vector3(0.019, 0.0012, 0.013), Vector3(side * -0.002, y - 0.0095, back_z - 0.007),
+				Vector3(0.0, 0.0, side * 8.0), seam, "KnuckleSeam%d" % f)
+		# thumb: comes over the top of the rim and presses on the far side
+		_limb(hand, Vector3(side * 0.004, 0.034, back_z + 0.004), Vector3(side * -0.010, 0.036, palm_z),
+			0.0104, glove, "Thumb")
+		_limb(hand, Vector3(side * -0.010, 0.036, palm_z), Vector3(side * -0.019, 0.031, wrap_z - 0.008),
+			0.0090, glove, "ThumbTip")
 		# Cuff and forearm live on the cockpit, NOT on the turning wheel: a real
 		# driver's forearms pivot from his shoulders, so they stay put while the
 		# hands travel around the rim. Gluing them to the wheel swung them up
@@ -648,41 +656,62 @@ func _build_dash(parent: Node3D) -> void:
 
 
 func _build_halo(parent: Node3D) -> void:
-	## The bar is a swept tube along an arc, so it reads as the curved hoop of a
-	## Formula car. Built from boxes it was a flat slab straight across the top
-	## of the frame, which is what the reference picture does NOT show.
+	## A flat carbon band, not a round tube.
+	##
+	## The bar is the one piece of cockpit furniture the driver always sees, so
+	## it sets the tone of the whole view. Swept as a circle it showed a bright
+	## rolling highlight down a glossy black pipe that ran off both frame edges;
+	## the reference instead shows a matte band with its ends INSIDE the frame
+	## and sky above them. The cross-section is therefore flattened front-to-back
+	## (HALO_BAR_SQUASH) and the material is rough carbon, so it reads as the
+	## fairing it is. See camera_poses.gd for the framed numbers.
 	var halo := Node3D.new()
 	halo.name = "Halo"
 	parent.add_child(halo)
-	var carbon := _mat(Color(0.028, 0.028, 0.033), 0.44, 0.12)
+	var carbon := _mat(Color(0.026, 0.026, 0.031), 0.78, 0.04)
+	var carbon_edge := _mat(Color(0.040, 0.041, 0.047), 0.66, 0.06)
 	var arc := _halo_arc()
-	_swept(halo, arc, Poses.HALO_TUBE_R, 1.0, 22, carbon, "HaloBar")
+	_swept(halo, arc, Poses.HALO_TUBE_R, Poses.HALO_BAR_SQUASH, 20, carbon, "HaloBar")
+	# A thin lighter lip along the top of the band: at this size a pure matte
+	# slab loses its silhouette against the bodywork, and one lit edge is what
+	# tells the eye the bar is a solid object and not a painted stripe.
+	var lip: Array = []
+	for p in arc:
+		lip.append(p + Vector3(0.0, Poses.HALO_TUBE_R * 0.86, 0.0))
+	_swept(halo, lip, Poses.HALO_TUBE_R * 0.30, Poses.HALO_BAR_SQUASH * 0.8, 10,
+		carbon_edge, "HaloBarLip")
 
-	# Centre pod (the onboard camera mount) and the thin pillar down to the
-	# chassis - the vertical detail the reference shows between bar and dash.
-	var pod_y: float = Poses.HALO_FRONT.y - 0.038
-	var pod_z: float = Poses.HALO_FRONT.z - 0.004
-	_box(halo, Vector3(0.050, 0.034, 0.044), Vector3(0.0, pod_y, pod_z),
+	# Centre pod (the onboard camera mount) sitting ON the band, plus the thin
+	# pillar down to the chassis - the vertical detail between bar and dash.
+	var pod_y: float = Poses.HALO_FRONT.y + Poses.HALO_TUBE_R * 0.30
+	var pod_z: float = Poses.HALO_FRONT.z - 0.010
+	_box(halo, Vector3(0.046, 0.030, 0.052), Vector3(0.0, pod_y, pod_z),
 		Vector3.ZERO, carbon, "HaloPod")
-	_box(halo, Vector3(0.028, 0.013, 0.005), Vector3(0.0, pod_y - 0.002, pod_z + 0.024),
-		Vector3.ZERO, _mat(Color(0.008, 0.010, 0.016), 0.12, 0.0), "HaloPodLens")
-	_beam(halo, Vector3(0.0, pod_y - 0.012, pod_z + 0.004), Poses.HALO_PILLAR_BOTTOM,
-		0.015, carbon, "HaloPillar")
-	# The two shoulder legs the hoop continues into, just inside the frame edge.
+	_box(halo, Vector3(0.030, 0.016, 0.006), Vector3(0.0, pod_y - 0.001, pod_z + 0.028),
+		Vector3.ZERO, _mat(Color(0.010, 0.012, 0.018), 0.42, 0.0), "HaloPodLens")
+	_beam(halo, Vector3(0.0, pod_y - 0.014, pod_z + 0.006), Poses.HALO_PILLAR_BOTTOM,
+		0.013, carbon, "HaloPillar")
+	# The two shoulder legs the band continues into. They now leave the frame
+	# inside the picture (the band no longer reaches the edges), which is what
+	# opens up the two windows of sky the reference shows beside the pillar.
 	for side in [-1.0, 1.0]:
 		var end := Vector3(side * Poses.HALO_HALF_SPAN,
 			Poses.HALO_FRONT.y + Poses.HALO_END_LIFT,
 			Poses.HALO_FRONT.z + Poses.HALO_END_BACK)
-		_beam(halo, end, end + Vector3(side * 0.06, -0.30, -0.06),
-			Poses.HALO_TUBE_R * 1.9, carbon, "HaloLeg_%s" % ("L" if side < 0.0 else "R"))
+		var knee: Vector3 = end + Vector3(side * 0.055, -0.052, 0.020)
+		_beam(halo, end, knee, Poses.HALO_TUBE_R * 1.35, carbon,
+			"HaloLeg_%s" % ("L" if side < 0.0 else "R"))
+		_beam(halo, knee, knee + Vector3(side * 0.075, -0.215, 0.030),
+			Poses.HALO_TUBE_R * 1.15, carbon,
+			"HaloLegLow_%s" % ("L" if side < 0.0 else "R"))
 
 
 func _halo_arc() -> Array:
 	## Points along the bar, sampled by the projected shape rather than by a
-	## physical ring: y and z both grow with u^2, which is exactly the shallow
-	## arc the reference shows (lowest in the middle, lifting to the shoulders).
+	## physical ring: the ends lift a hair and sit farther away, which is the
+	## shallow droop towards the shoulders the reference shows.
 	var out: Array = []
-	var n := 32
+	var n := 40
 	for i in n + 1:
 		var u: float = -1.0 + 2.0 * float(i) / float(n)
 		out.append(Vector3(

@@ -16,6 +16,8 @@ var _warn: Label
 var _cal: Label
 var _leds: HBoxContainer
 var _bars: Dictionary = {}   ## "throttle"/"brake"/"clutch" -> ColorRect fill
+var _pedal_panel: VBoxContainer
+var _pedal_debug_visible: bool = true
 
 const PEDALS := [
 	{"key": "throttle", "label": "GAS", "color": Color(0.20, 0.85, 0.35)},
@@ -107,6 +109,7 @@ func _ready() -> void:
 func _build_pedal_panel(root: Control) -> void:
 	var panel := VBoxContainer.new()
 	panel.name = "Pedals"
+	_pedal_panel = panel
 	panel.add_theme_constant_override("separation", 3)
 	root.add_child(panel)
 	panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -176,6 +179,17 @@ func _update_pedals() -> void:
 	var live: bool = true
 	if g29 and g29.get("axes_live") != null:
 		live = bool(g29.get("axes_live"))
+	# The pedal bars and the mapping line are setup information, not racing
+	# information: while driving they only clutter the view. They appear when the
+	# car is standing (setup happens on the grid) and whenever something is wrong
+	# with the wheel.
+	var standing: bool = car != null and float(car.speed_kmh) < 3.0
+	var show_debug: bool = standing or not connected or not live
+	if show_debug != _pedal_debug_visible:
+		_pedal_debug_visible = show_debug
+		if _pedal_panel:
+			_pedal_panel.visible = show_debug
+		_mapping.visible = show_debug
 	# A powered-off G29 enumerates and then sends a flat 0.0 on every axis, which
 	# looks exactly like "all pedals released". Only real reports count.
 	if live and g29 and g29.has_method("has_axis_data"):

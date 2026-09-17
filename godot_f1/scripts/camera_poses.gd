@@ -41,23 +41,33 @@ const DASH_LOCAL := Vector3(0.0, 0.020, -0.55)
 const DASH_SIZE := Vector2(0.235, 0.068)
 const DASH_TILT := deg_to_rad(-16.0)
 
-## The halo bar is a real sweep, not a slab. HALO_FRONT is the centre of the bar
-## in camera space; the ends lift by HALO_END_LIFT and come back towards the
-## driver by HALO_END_BACK, which is what makes the bar arc the way the
-## reference picture shows it (dip in the middle, rise at the shoulders).
+## The halo bar, measured off the reference cockpit picture rather than guessed.
 ##
-## Solving the projection for a 54 deg lens: a point at height h and distance d
-## sits at  50% - 50*atan(h/d)/27%  of the frame height, so
-##   * centre  h=0.180 d=0.561 -> 17.0 %  (reference: the bar's centre line)
-##   * ends    rise to 20.4 deg  -> 12.2 % at the frame edge (reference: 12 %).
-const HALO_FRONT := Vector3(0.0, 0.180, -0.561)
-const HALO_HALF_SPAN := 0.72
-const HALO_END_LIFT := 0.030
-const HALO_END_BACK := 0.075
-const HALO_TUBE_R := 0.0265
+## The bar is NOT a round tube and it does NOT run off both frame edges. In the
+## reference the carbon band starts at about 22 % of the frame width, stays
+## level at 15..25 % of the frame height and ends at about 78 %, so above and
+## beside its ends you still see sky and the cockpit's shoulders. An earlier
+## build swept a round tube from edge to edge, which read as a glossy black pipe
+## laid across the top of the screen - the one thing the reference does not have.
+##
+## Solving the projection for the 54 deg lens (a point at height h and distance
+## d lands at  50% - 50*atan(h/d)/27%  of the frame height):
+##   * band centre line  h=0.176 d=0.575 -> 20.0 %  (reference: 20 %)
+##   * band ends         x=+/-0.320      -> 21 % / 79 % of the frame width
+##   * band thickness    2*R = 0.031 m   ->  9.5 % of the frame height
+## which is the reference's level band; HALO_BAR_SQUASH then stretches the same
+## section front-to-back so it reads as a flat carbon fairing, not a pipe.
+const HALO_FRONT := Vector3(0.0, 0.176, -0.575)
+const HALO_HALF_SPAN := 0.320
+const HALO_END_LIFT := 0.014
+## Negative: the ends sit a little FARTHER from the driver than the centre, so
+## the band droops towards its shoulders the way the reference shows it.
+const HALO_END_BACK := -0.042
+const HALO_TUBE_R := 0.0155
+const HALO_BAR_SQUASH := 2.30
 ## Bottom of the thin pillar that drops from the bar to the chassis, the
 ## vertical detail the reference shows between the bar and the dashboard.
-const HALO_PILLAR_BOTTOM := Vector3(0.0, 0.046, -0.556)
+const HALO_PILLAR_BOTTOM := Vector3(0.0, 0.050, -0.570)
 
 ## Cockpit surround: a U-shaped rail sweeping around the driver. It marks where
 ## the carbon tub enters the frame - the dark blue-grey shape down the left and
