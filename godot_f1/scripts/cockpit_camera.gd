@@ -472,13 +472,16 @@ func _build_wheel_leds(pivot: Node3D, half_h: float) -> void:
 func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 	## Gloved hands gripping the rim at 9 and 3 o'clock. They are children of the
 	## wheel pivot, so they turn with the wheel exactly like a real driver's.
-	var glove := _mat(Color(0.042, 0.043, 0.049), 0.70, 0.03)
-	var glove_top := _mat(Color(0.072, 0.074, 0.082), 0.62, 0.04)
-	var glove_dark := _mat(Color(0.030, 0.031, 0.035), 0.76, 0.02)
-	var logo := _mat(Color(0.80, 0.81, 0.83), 0.55, 0.03)
+	# A driving glove is nearly black. The tones are kept close together and
+	# only the creases go darker: an earlier pass used a light grey for the
+	# seams, and the "stitching" rendered as bright slabs stuck to the fists.
+	var glove := _mat(Color(0.044, 0.045, 0.051), 0.72, 0.03)
+	var glove_top := _mat(Color(0.066, 0.068, 0.076), 0.66, 0.04)
+	var glove_dark := _mat(Color(0.026, 0.027, 0.031), 0.78, 0.02)
+	var logo := _mat(Color(0.88, 0.89, 0.91), 0.50, 0.03)
 	var accent := _mat(Color(0.70, 0.09, 0.10), 0.62, 0.03)
 	var suit := _mat(Color(0.070, 0.073, 0.081), 0.74, 0.02)
-	var seam := _mat(Color(0.34, 0.35, 0.37), 0.55, 0.10)
+	var seam := _mat(Color(0.115, 0.118, 0.126), 0.70, 0.06)
 	# One carrier for both forearms, sitting on the wheel centre. It turns with
 	# a fraction of the wheel angle: a real driver's forearms follow the hands
 	# from the shoulders without swinging all the way, which keeps the wrist
@@ -578,13 +581,13 @@ func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 		arms_root.add_child(arms)
 		arms.position = Vector3(cx, cy, 0.0)
 		# wrist, owned by the hand so the seam to the forearm never opens
-		_limb(hand, Vector3(side * 0.004, -0.026, 0.016), Vector3(side * 0.010, -0.072, 0.018),
-			0.0270, suit, "Wrist")
-		_limb(arms, Vector3(side * 0.008, -0.058, 0.022), Vector3(side * 0.012, -0.090, 0.020),
-			0.0300, suit, "Cuff")
-		_limb(arms, Vector3(side * 0.011, -0.086, 0.020), Vector3(side * 0.014, -0.102, 0.019),
-			0.0312, accent, "CuffBand")
-		_limb(arms, Vector3(side * 0.014, -0.100, 0.019), Vector3(side * 0.240, -0.430, 0.020),
+		_limb(hand, Vector3(side * 0.005, -0.030, -0.014), Vector3(side * 0.012, -0.076, -0.010),
+			0.0265, suit, "Wrist")
+		_limb(arms, Vector3(side * 0.010, -0.062, -0.008), Vector3(side * 0.014, -0.096, -0.004),
+			0.0298, suit, "Cuff")
+		_limb(arms, Vector3(side * 0.013, -0.090, -0.005), Vector3(side * 0.016, -0.106, -0.003),
+			0.0310, accent, "CuffBand")
+		_limb(arms, Vector3(side * 0.016, -0.104, -0.003), Vector3(side * 0.240, -0.430, 0.020),
 			0.0288, suit, "Arm")
 
 
