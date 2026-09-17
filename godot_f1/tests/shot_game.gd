@@ -52,11 +52,13 @@ func _on_frame() -> void:
 				player.set_meta("headless_gas", true)
 		760:
 			_shot("game_cockpit.png")
+			print("FPS ", Engine.get_frames_per_second())
 			var cam = main.get("cam")
 			if cam:
 				cam.mode = 1
 		800:
 			_shot("game_chase.png")
+			print("FPS ", Engine.get_frames_per_second())
 			quit(0)
 
 
