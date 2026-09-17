@@ -177,6 +177,14 @@ func _build_wheels_and_mesh() -> void:
 
 	# Front axle = nose side (+Z), left hand side = +X for a +Z/+Y body.
 	entries.sort_custom(func(a, b): return a.pos.z > b.pos.z)
+	# The imported model is not perfectly symmetric: the rear hubs sit 1 cm
+	# off centre (|x| 0.882 vs 0.860). That is invisible in the cockpit, but the
+	# drive force acts through those two points, so the car carried a constant
+	# 0.001 rad/s yaw rate - at 300 km/h it wandered 37 m sideways in 20 s
+	# (measured with tests/test_gearbox.gd). Only the PHYSICS hubs are
+	# symmetrised; the artwork keeps the shape the modeller built.
+	var half_track_front: float = (absf(entries[0].pos.x) + absf(entries[1].pos.x)) * 0.5
+	var half_track_rear: float = (absf(entries[2].pos.x) + absf(entries[3].pos.x)) * 0.5
 	_wheel_meshes.clear()
 	var radius_sum: float = 0.0
 	for i in entries.size():
@@ -185,6 +193,8 @@ func _build_wheels_and_mesh() -> void:
 		var is_left: bool = e.pos.x > 0.0
 		var role: String = ("Wheel_F" if is_front else "Wheel_R") + ("L" if is_left else "R")
 		var hub: Vector3 = e.pos
+		var half_track: float = half_track_front if is_front else half_track_rear
+		hub.x = half_track if is_left else -half_track
 		var radius: float = e.radius
 		radius_sum += radius
 		var wheel := VehicleWheel3D.new()

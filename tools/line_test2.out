@@ -1,0 +1,48 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+RacingLine loaded 1440 pts, 1656.6 m
+IdealLine pts=1440 len=1614.0 m max|k|=0.2281 sum|k|=11.4 (Mitte 11.3, +0.5%) max|offset|=4.80
+PASS same_point_count 1440
+PASS line_stays_inside_the_corridor max|offset|=4.80 m (Grenze 4.8)
+PASS every_point_is_on_asphalt_or_kerb worst=4.80 m von der Mitte
+ERROR: FAIL ideal_line_is_smoother_than_the_centre sum|k| 11.3 -> 11.4 (-0.5% glatter)
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://tests/test_racing_line.gd:37)
+       [1] _run (res://tests/test_racing_line.gd:62)
+       [2] _initialize (res://tests/test_racing_line.gd:30)
+ERROR: FAIL no_point_is_sharper_than_the_centre worst ratio=7.61
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://tests/test_racing_line.gd:37)
+       [1] _run (res://tests/test_racing_line.gd:70)
+       [2] _initialize (res://tests/test_racing_line.gd:30)
+PASS apex_is_clipped_on_the_inside Index 1432: k=-0.1357, offset=-3.61 m
+PASS lap_length_plausible 1614.0 m (Mitte 1656.6 m)
+ERROR: FAIL corner_speed_never_exceeds_the_grip_limit violations=3 worst=0.79 m/s
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://tests/test_racing_line.gd:37)
+       [1] _run (res://tests/test_racing_line.gd:110)
+       [2] _initialize (res://tests/test_racing_line.gd:30)
+PASS braking_profile_is_physically_reachable violations=0 worst=0.00 m/s
+PASS all_three_phases_exist gas=862 lupfen=5 bremsen=573
+PASS the_track_has_several_braking_zones 18 Zonen
+ERROR: FAIL no_braking_zone_is_shorter_than_25_m kuerzeste=3.2 m
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://tests/test_racing_line.gd:37)
+       [1] _run (res://tests/test_racing_line.gd:140)
+       [2] _initialize (res://tests/test_racing_line.gd:30)
+ERROR: FAIL braking_distance_matches_v_squared_over_2as geprueft=18 groesste Abweichung=621%
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://tests/test_racing_line.gd:37)
+       [1] _run (res://tests/test_racing_line.gd:158)
+       [2] _initialize (res://tests/test_racing_line.gd:30)
+IDEAL_LINE summary length=1614.0 m max|offset|=4.80 m sum|k|=11.4 (Mitte 11.3) Zonen=18
+  Bremszone ab Index 0: 3.2 m lang, 51.0 -> 49.1 km/h
+  Bremszone ab Index 292: 57.2 m lang, 337.3 -> 234.3 km/h
+  Bremszone ab Index 343: 28.5 m lang, 232.4 -> 164.0 km/h
+  Bremszone ab Index 377: 25.8 m lang, 164.8 -> 181.0 km/h
+RACING_LINE FAIL count=5

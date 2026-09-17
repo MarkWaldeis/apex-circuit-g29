@@ -37,7 +37,11 @@ const FRONT_SHARE_FAST := 0.44
 ## and that number is what turns "it accelerates forever" into a real top
 ## speed: with ~700 kW it caps the car a little above 300 km/h.
 const AIR_DENSITY := 1.2
-const CDA := 1.35
+## Cd x A for a Formula car in race trim. 1.15 m^2 is the number that puts the
+## top speed in the right place together with the gearbox ratios: measure with
+## `tests/test_gearbox.gd`, which drives a full-throttle straight until the
+## speed stops rising.
+const CDA := 1.15
 
 ## --- tyres -----------------------------------------------------------------
 ## Slip angle (rad) at which the tyre makes its most lateral force. Radial

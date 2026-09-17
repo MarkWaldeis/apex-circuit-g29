@@ -1,0 +1,4 @@
+  File "C:\Users\Mark", line 8
+    Date: 2026-09-10T20:16:43Z
+               ^
+SyntaxError: leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers
