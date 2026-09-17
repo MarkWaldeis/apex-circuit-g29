@@ -31,7 +31,7 @@ const LOOK := Vector3(0.0, -1.971, 16.0)
 const FOV_COCKPIT := 54.0
 
 ## Cockpit props, in camera space: in front of the lens (negative Z).
-const WHEEL_LOCAL := Vector3(0.0, -0.118, -0.404)
+const WHEEL_LOCAL := Vector3(0.0, -0.120, -0.455)
 const WHEEL_WIDTH := 0.30          ## a real Formula wheel is about 0.30 m wide
 const WHEEL_TILT := deg_to_rad(-24.0)
 ## How far the visible steering wheel turns for full lock (radians).

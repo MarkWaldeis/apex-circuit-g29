@@ -36,6 +36,7 @@ var _dash_leds: Array = []
 var _leds: Array = []
 var _wheel_rot: float = 0.0
 var _props_shown: int = -1
+var _arm_root: Node3D
 var _fov: float = 54.0
 
 
@@ -113,6 +114,9 @@ func _snap(delta: float = 0.0) -> void:
 	_wheel_rot = lerpf(_wheel_rot, -steer_amt * Poses.WHEEL_TURN, 0.35)
 	if wheel_visual:
 		wheel_visual.rotation = Vector3(Poses.WHEEL_TILT, 0.0, _wheel_rot)
+	if _arm_root:
+		# forearms follow about a third of the wheel angle
+		_arm_root.rotation = Vector3(Poses.WHEEL_TILT, 0.0, _wheel_rot * 0.35)
 
 
 func set_rpm(rpm: float) -> void:
@@ -475,6 +479,16 @@ func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 	var accent := _mat(Color(0.70, 0.09, 0.10), 0.62, 0.03)
 	var suit := _mat(Color(0.070, 0.073, 0.081), 0.74, 0.02)
 	var seam := _mat(Color(0.34, 0.35, 0.37), 0.55, 0.10)
+	# One carrier for both forearms, sitting on the wheel centre. It turns with
+	# a fraction of the wheel angle: a real driver's forearms follow the hands
+	# from the shoulders without swinging all the way, which keeps the wrist
+	# junction closed at full lock.
+	var arms_root := Node3D.new()
+	arms_root.name = "Arms"
+	parent.add_child(arms_root)
+	arms_root.position = pivot.position
+	arms_root.rotation = Vector3(Poses.WHEEL_TILT, 0.0, 0.0)
+	_arm_root = arms_root
 	# The rim tube of the wheel model sits at roughly 41 % of the wheel width.
 	var rim_x: float = Poses.WHEEL_WIDTH * 0.41
 	for side in [-1.0, 1.0]:
@@ -553,9 +567,11 @@ func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 		# across the halo at full lock.
 		var arms := Node3D.new()
 		arms.name = "Arm_R" if side < 0.0 else "Arm_L"
-		parent.add_child(arms)
-		arms.position = pivot.position + Vector3(cx, cy, 0.0)
-		arms.rotation = Vector3(Poses.WHEEL_TILT, 0.0, 0.0)
+		arms_root.add_child(arms)
+		arms.position = Vector3(cx, cy, 0.0)
+		# wrist, owned by the hand so the seam to the forearm never opens
+		_limb(hand, Vector3(side * 0.004, -0.026, 0.016), Vector3(side * 0.010, -0.072, 0.018),
+			0.0270, suit, "Wrist")
 		_limb(arms, Vector3(side * 0.008, -0.058, 0.022), Vector3(side * 0.012, -0.090, 0.020),
 			0.0300, suit, "Cuff")
 		_limb(arms, Vector3(side * 0.011, -0.086, 0.020), Vector3(side * 0.014, -0.102, 0.019),

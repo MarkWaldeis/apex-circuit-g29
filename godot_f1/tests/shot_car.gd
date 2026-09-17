@@ -25,9 +25,13 @@ var plan := [
 	{"frame": 350, "mode": 3, "file": "shot_steer_right.png", "steer": 1.0},
 	# Same pair from inside the cockpit: the wheel and the gloved hands have to
 	# turn together, and the front wheels must be visible steering.
-	{"frame": 380, "mode": 0, "file": "shot_cockpit_straight.png", "steer": 0.0},
-	{"frame": 386, "steer": 1.0},
-	{"frame": 440, "mode": 0, "file": "shot_cockpit_right.png", "steer": 1.0},
+	# The wheel slews back over about a second, so the straight picture needs
+	# real settling time after the full-lock picture - otherwise the hands are
+	# caught mid-return and look lopsided.
+	{"frame": 356, "steer": 0.0},
+	{"frame": 430, "mode": 0, "file": "shot_cockpit_straight.png"},
+	{"frame": 436, "steer": 1.0},
+	{"frame": 500, "mode": 0, "file": "shot_cockpit_right.png", "steer": 1.0},
 ]
 var _side_cam: Camera3D
 
