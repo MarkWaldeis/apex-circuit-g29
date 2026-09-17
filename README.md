@@ -63,6 +63,8 @@ python tools/hid_probe.py 046d:c24f
 
 Kommt nur `report timeout ... (no data)`, obwohl die Joystick-Schnittstelle mit sieben Achsen beschrieben wird, dann sendet das Lenkrad selbst nichts: Netzteil prüfen, Pedalkabel am Lenkrad festziehen, anderes USB-Port (möglichst direkt hinten am PC, kein Hub) probieren, Modusschalter am Lenkrad auf **PC** stellen. Danach im Spiel `Esc` → *Einstellungen* → *Gas kalibrieren*.
 
+Einfacher geht es per Doppelklick im Projektordner: **`Lenkrad pruefen.cmd`** startet dieselbe Prüfung und zeigt die Checkliste an.
+
 ## Steuerung
 
 Siehe `godot_f1/README.md`.
