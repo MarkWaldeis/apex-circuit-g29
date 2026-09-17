@@ -8,6 +8,7 @@ GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
 
 * **Startmenü** mit *Fahren*, *Einstellungen* und *Beenden*; `Esc` öffnet jederzeit das Pausenmenü und führt immer wieder zurück ins Rennen.
 * **Pedale selbst anlernen**: unter *Einstellungen* Gas, Bremse und Kupplung einzeln kalibrieren — Taste drücken, Pedal durchtreten, das Spiel erkennt die Achse und merkt sie sich (`user://g29_profile.json`). Die Zuordnung verbessert sich danach von selbst, wenn du im Rennen härter trittst.
+* **Pedale von Hand korrigieren**: die Zeilen *Gas / Bremse / Kupplung* unter den Achsenbalken zeigen live, was das Spiel wirklich als Gas, Bremse und Kupplung verwendet. Falsch erkannte Achse? Ein Klick auf **Gas ⟷ Bremse tauschen** oder auf **Achse aN ändern** — belegte Achsen werden dabei übersprungen, die Wahl wird sofort gespeichert.
 * **Lenkrad-Kalibrierung** inklusive Drehrichtung.
 * **Cockpit-Ansicht**, in der sich das Lenkrad im Spiel mit dem echten G29 mitdreht, mit Schaltblitzen und Pedalanzeige im HUD.
 * Der Wagen fährt vorwärts in die richtige Richtung (Nase = Fahrtrichtung), Vorderräder lenken sichtbar mit, Hinterräder treiben an.
