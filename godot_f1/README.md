@@ -74,6 +74,30 @@ wird sichtbar langsamer — das Auto fährt nie durch die Mauer. Wände, die auf
 einem anderen Streckenteil gelandet wären (die T9-Ausfahrt läuft direkt neben
 der Start-Ziel-Geraden), werden beim Bauen verworfen.
 
+Ein Streifer ist kein Crash, und ein Crash ist nicht eine Vollbremsung.
+`scripts/crash.gd` misst die Geschwindigkeitsabgabe deshalb über ein Fenster
+von 0,15 s und zieht vorher ab, was der Wagen ohnehin verloren hätte
+(Bremsen, Luftwiderstand, Untergrund-Zug). Nur der Rest — die Abgabe, die
+das Auto sich nicht erklären kann — zählt als Einschlag. Gemessen
+(`tests/test_crash_surfaces.gd`, `tests/probe_scrape.gd`):
+
+| Fall | Unerklärte Abgabe im Fenster | Crash? |
+|---|---|---|
+| Streifer an der Wand, 104 Kontakt-Ticks | 0,0 m/s (pro Tick −0,7) | nein |
+| Frontal in die Barriere, 107 km/h | 27,1 m/s | ja, Schaden 0,22 |
+| Vollbremsung 190 → 20 km/h auf Asphalt | bis 5,6 m/s | nein |
+
+Beim Streifer wird die Abgabe pro Tick sogar **negativ** (−0,7 m/s): das Auto
+verliert weniger, als Bremsen, Luftwiderstand und Untergrund-Zug vorhersagen,
+weil in dieser Rechnung die Wand die Arbeit macht. Für die Frage „war das ein
+Crash?“ ist das die sichere Richtung — die Zahl bleibt unter der Schwelle.
+
+Die Schwelle liegt bei 3,0 m/s unerklärter Abgabe — 9-facher Abstand unter
+einem echten Einschlag. Ein Crash ist aber nicht „die Zahl ist groß“, sondern
+„die Zahl ist groß **und** der Tub berührt etwas“: beim harten Bremsen steigt
+die unerklärte Abgabe auf 5,6 m/s, ohne dass irgendwo eine Wand ist, deshalb
+bleibt sie folgenlos (gemessen: 0 Crashs bei 190 → 20 km/h Vollbremsung).
+
 Der Untergrund unter den Reifen wird aus dem Querabstand zur Ideallinie
 bestimmt (Asphalt 12 m breit, Kerb 0,85 m, Runoff 10 m, dahinter Gras):
 
@@ -156,6 +180,9 @@ Zum Nachmessen des Fahrgefühls (schreibt nur Zahlen, keine Dateien):
 godot --headless --path godot_f1 --script tests/probe_feel.gd
 godot --headless --path godot_f1 --script tests/probe_grip.gd
 godot --headless --path godot_f1 --script tests/probe_thrust.gd
+godot --headless --path godot_f1 --script tests/probe_scrape.gd
+godot --headless --path godot_f1 --script tests/probe_brake_crash.gd
+godot --headless --path godot_f1 --script tests/probe_barrier_geometry.gd
 ```
 
 `probe_feel` misst 0–100 km/h, Endgeschwindigkeit, Bremsverzögerung in g und

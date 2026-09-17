@@ -38,7 +38,6 @@ var damage: float = 0.0
 var last_impact_ms: float = 0.0
 var crash_count: int = 0
 var _cooldown: float = 0.0
-var _prev_speed: float = 0.0
 var _window_t: float = 0.0
 var _window_speed: float = 0.0
 var _window_ready: bool = false
@@ -95,7 +94,6 @@ func update(delta: float, _surface: Dictionary, forward_speed: float) -> void:
 	if _contact_seen and unexplained_ms >= IMPACT_MIN_MS:
 		_register(unexplained_ms, "wall")
 	_contact_seen = false
-	_prev_speed = forward_speed
 
 
 ## How much speed the car would have lost inside `WINDOW` with no wall in the
