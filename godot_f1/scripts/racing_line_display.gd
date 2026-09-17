@@ -6,11 +6,16 @@ extends Node3D
 
 const IdealLine = preload("res://scripts/ideal_line.gd")
 
-const HEIGHT := 0.07
+## Höhe über dem Asphalt: aus dem Cockpit schaut man flach über die Nase, und
+## bei 7 cm verschwand die Linie in der Anfahrt auf die Kurve hinter dem
+## Dashboard. 12 cm heben sie ins Blickfeld, ohne zu schweben.
+const HEIGHT := 0.12
 ## Breit genug, dass die Linie aus dem Cockpit (Kamera 1,1 m hoch, FOV ~70)
 ## schon 30 m vor dem Auto klar zu lesen ist - eine 0,55 m schmale Linie ging
 ## dort im Asphalt unter.
-const WIDTH := 0.9
+## Breite des Bandes. 1,1 m liest sich aus 200 m Entfernung noch als Linie und
+## ist aus dem Cockpit nicht mehr nur ein Strich.
+const WIDTH := 1.1
 const COLOR_THROTTLE := Color(0.22, 1.0, 0.32, 0.92)
 const COLOR_LIFT := Color(1.0, 0.86, 0.16, 0.94)
 const COLOR_BRAKE := Color(1.0, 0.15, 0.12, 0.96)
