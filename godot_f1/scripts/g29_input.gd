@@ -225,6 +225,10 @@ func _anchor_auto_rest() -> void:
 	if _profile_loaded:
 		for name in ["throttle", "brake", "clutch"]:
 			if not (_pedal_rest.has(name) and _pedal_press.has(name)):
+				## A manual axis change before the first HID report erases both
+				## points; re-anchor on the live device instead of keeping the
+				## flat zeros that the G29 sends while it is still waking up.
+				_auto_rest[name] = _raw[_axis_of(name)]
 				continue
 			var stored_rest: float = float(_pedal_rest[name])
 			var stored_press: float = float(_pedal_press[name])

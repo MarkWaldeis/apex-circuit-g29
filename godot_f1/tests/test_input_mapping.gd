@@ -44,6 +44,7 @@ func _run() -> void:
 	_reset_keeps_the_axes()
 	_profile_round_trip()
 	_manual_pedal_assignment()
+	_manual_pedal_assignment_before_first_report()
 	_silent_device_detector()
 
 	if failed > 0:
@@ -449,6 +450,35 @@ func _manual_pedal_assignment() -> void:
 	g.sim_set(4, 0.0)
 	g.step(0.02)
 	_check(_near(g.brake, 0.0), "manual_release_reads_zero_again", "brake=%.2f" % g.brake)
+
+
+func _manual_pedal_assignment_before_first_report() -> void:
+	## A driver can change a pedal's axis in the settings before the G29 has
+	## sent its first real HID report. In that window every axis still reads a
+	## flat 0.0, so a manual assignment anchored to that zero would later show
+	## 100 % while the pedal is actually released. The live device must win.
+	_uncalibrated()
+	g._profile_loaded = true
+	g.throttle_axis = 2
+	g.apply_manual("throttle", 2, true)
+	for i in 12:
+		g.sim_set(i, 0.0)
+	for i in 20:
+		g.step(0.02)
+	_check(not g._have_data and _near(g.throttle, 0.0),
+		"manual_axis_waits_for_real_data", "gas=%.2f have_data=%s" % [
+			g.throttle, g._have_data])
+	# first real report: the pedal sits released at +1.0, not at the flat zero
+	# the manual button was pressed against.
+	g.sim_set(2, 1.0)
+	g.step(0.02)
+	_check(g._have_data and _near(g.throttle, 0.0),
+		"manual_axis_reanchors_at_release", "gas=%.2f auto_rest=%.2f" % [
+			g.throttle, float(g._auto_rest.get("throttle", -9.0))])
+	g.sim_set(2, 0.0)
+	g.step(0.02)
+	_check(_near(g.throttle, 1.0), "manual_axis_still_reaches_full_after_data",
+		"gas=%.2f" % g.throttle)
 
 
 func _silent_device_detector() -> void:
