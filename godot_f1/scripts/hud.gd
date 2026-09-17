@@ -166,6 +166,10 @@ func _update_pedals() -> void:
 	var live: bool = true
 	if g29 and g29.get("axes_live") != null:
 		live = bool(g29.get("axes_live"))
+	# A powered-off G29 enumerates and then sends a flat 0.0 on every axis, which
+	# looks exactly like "all pedals released". Only real reports count.
+	if live and g29 and g29.has_method("has_axis_data"):
+		live = bool(g29.call("has_axis_data"))
 	for key in _bars.keys():
 		var entry: Dictionary = _bars[key]
 		var track: ColorRect = entry["track"]

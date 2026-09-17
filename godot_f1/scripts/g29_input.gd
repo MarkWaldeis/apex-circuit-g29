@@ -18,7 +18,7 @@ extends Node
 ##            begin_steer_calibration(), skip_calibration(),
 ##            cancel_calibration(), reset_to_defaults(), save_profile(),
 ##            load_profile(), apply_manual(which, axis, invert),
-##            axis_snapshot(), axis_moved(), has_driver_input()
+##            axis_snapshot(), axis_moved(), has_axis_data(), has_driver_input()
 
 signal connection_changed(connected: bool, device_name: String)
 signal calibrated
@@ -178,6 +178,13 @@ func axis_snapshot() -> PackedFloat32Array:
 
 func axis_moved() -> int:
 	return last_axis_moved
+
+
+## True as soon as the device has delivered one believable sample. A G29 that
+## only enumerates reports a flat 0.0 on every axis, so "connected" alone does
+## not mean the wheel is really talking to us.
+func has_axis_data() -> bool:
+	return _have_data
 
 
 ## ---- raw input ------------------------------------------------------------

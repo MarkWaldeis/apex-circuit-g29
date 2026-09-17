@@ -30,14 +30,20 @@ var _screens: Dictionary = {}
 var _first_focus: Dictionary = {}
 var _status_label: Label
 var _mapping_label: Label
+var _settings_note: Label
 var _cal_title: Label
 var _cal_hint_label: Label
 var _cal_note: Label
 var _pause_note: Label
 var _start_status: Label
 var _steer_toggle: Button
+var _swap_button: Button
 var _axis_rows: Array = []
 var _cal_axis_rows: Array = []
+## "throttle"/"brake"/"clutch" -> {name, bar, value, axis} of the settings rows
+## that show what the game really receives and let the driver move a pedal to
+## another axis without running the whole calibration again.
+var _pedal_rows: Dictionary = {}
 var _note_serial: int = 0
 
 
@@ -263,7 +269,7 @@ func _build_pause() -> Control:
 
 
 func _build_settings() -> Control:
-	var parts := _new_screen("Settings", Vector2(1240, 760))
+	var parts := _new_screen("Settings", Vector2(1240, 900))
 	var scr: Control = parts[0]
 	var col: Control = parts[1]
 
@@ -298,6 +304,18 @@ func _build_settings() -> Control:
 	_mapping_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left.add_child(_mapping_label)
 
+	_spacer(left, 6)
+	var pedal_title := Label.new()
+	pedal_title.text = "Was im Spiel ankommt — falsches Pedal? Hier die Achse umstellen"
+	UI.label(pedal_title, 17, UI.TEXT_DIM)
+	left.add_child(pedal_title)
+	_pedal_rows = _make_pedal_rows(left)
+
+	_settings_note = Label.new()
+	UI.label(_settings_note, 18, UI.ACCENT_BRIGHT)
+	_settings_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left.add_child(_settings_note)
+
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 8)
 	right.custom_minimum_size = Vector2(500, 0)
@@ -313,6 +331,8 @@ func _build_settings() -> Control:
 	steer.pressed.connect(_start_calibration.bind("steer"))
 	var all := _make_button(right, "Alles kalibrieren", false, 0, 26)
 	all.pressed.connect(_start_calibration.bind("all"))
+	_swap_button = _make_button(right, "Gas ⟷ Bremse tauschen", false, 0, 26)
+	_swap_button.pressed.connect(_swap_pedals)
 	var defaults := _make_button(right, "Kalibrierung zurücksetzen", false, 0, 26)
 	defaults.pressed.connect(_reset_to_defaults)
 	_steer_toggle = _make_button(right, "Lenkrad invertieren: NEIN", false, 0, 26)
@@ -322,7 +342,7 @@ func _build_settings() -> Control:
 	back.pressed.connect(_on_back)
 
 	var hint := Label.new()
-	hint.text = "Kalibrieren: Knopf drücken, dann das genannte Pedal durchtreten bzw. das Lenkrad drehen — das Spiel erkennt die Achse und speichert sie."
+	hint.text = "Kalibrieren: Knopf drücken, dann das genannte Pedal durchtreten bzw. das Lenkrad drehen — das Spiel erkennt die Achse und speichert sie. Trittst du Gas und oben füllt sich trotzdem die Bremse, tausche die beiden oder stelle die Achse von Hand um."
 	UI.label(hint, 16, UI.TEXT_DIM)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(hint)
@@ -404,6 +424,45 @@ func _make_axis_rows(parent: Control) -> Array:
 	return rows
 
 
+## One row per pedal: the mapped value the game will use, plus a button that
+## walks that pedal through the axes a0…a7. Colouring the row makes it obvious
+## which pedal the driver is moving right now.
+func _make_pedal_rows(parent: Control) -> Dictionary:
+	var rows: Dictionary = {}
+	for entry in [["throttle", "Gas"], ["brake", "Bremse"], ["clutch", "Kupplung"]]:
+		var which: String = entry[0]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		parent.add_child(row)
+
+		var name_label := Label.new()
+		name_label.text = entry[1]
+		UI.label(name_label, 19, UI.TEXT)
+		name_label.custom_minimum_size = Vector2(116, 0)
+		row.add_child(name_label)
+
+		var bar := UI.bar(ProgressBar.new())
+		bar.value = 0.0
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(bar)
+
+		var value_label := Label.new()
+		value_label.text = "0 %"
+		UI.label(value_label, 18, UI.TEXT_DIM)
+		value_label.custom_minimum_size = Vector2(72, 0)
+		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(value_label)
+
+		var axis_button := Button.new()
+		UI.button(axis_button, false, 17)
+		axis_button.custom_minimum_size = Vector2(170, 52)
+		axis_button.pressed.connect(_cycle_pedal_axis.bind(which))
+		row.add_child(axis_button)
+
+		rows[which] = {"name": name_label, "bar": bar, "value": value_label, "axis": axis_button}
+	return rows
+
+
 # ------------------------------------------------------------- input module IO
 
 
@@ -442,6 +501,14 @@ func _g29_call(method: String, args: Array = []) -> bool:
 		return false
 	g29.callv(method, args)
 	return true
+
+
+## "Connected" is not enough: a G29 without power enumerates and then reports a
+## flat 0.0 on every axis. Only real data may be shown as a live value.
+func _g29_axis_data() -> bool:
+	if is_instance_valid(g29) and g29.has_method("has_axis_data"):
+		return bool(g29.call("has_axis_data"))
+	return _g29_bool("connected", false) and _g29_bool("axes_live", true)
 
 
 func _snapshot() -> PackedFloat32Array:
@@ -548,7 +615,7 @@ func _reset_car() -> void:
 func _reset_to_defaults() -> void:
 	var ok := _g29_call("reset_to_defaults")
 	ok = _g29_call("save_profile") or ok
-	_note(_cal_note, "Kalibrierung verworfen — die erkannten Achsen bleiben erhalten, die Zuordnung lernt neu." if ok else "Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
+	_note_visible("Kalibrierung verworfen — die erkannten Achsen bleiben erhalten, die Zuordnung lernt neu." if ok else "Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
 
 
 func _toggle_steer_invert() -> void:
@@ -556,9 +623,62 @@ func _toggle_steer_invert() -> void:
 	var want: bool = not _g29_bool("steer_invert", false)
 	if _g29_call("apply_manual", ["steer", axis, want]):
 		_g29_call("save_profile")
-		_note(_cal_note, "Lenkrad invertiert: %s (gespeichert)." % ("JA" if want else "NEIN"), 2.4)
+		_note_visible("Lenkrad invertiert: %s (gespeichert)." % ("JA" if want else "NEIN"), 2.4)
 	else:
-		_note(_cal_note, "Eingabe-Modul nicht verfügbar — Lenkrad-Invertierung wirkungslos.", 2.6)
+		_note_visible("Eingabe-Modul nicht verfügbar — Lenkrad-Invertierung wirkungslos.", 2.6)
+
+
+## Move one pedal through the axes a0 … a7 by hand. The input module keeps the
+## rest position of the new axis and learns the pressed end on the next press,
+## so a manual assignment can never end up mirrored either.
+func _cycle_pedal_axis(which: String) -> void:
+	if not _g29_has(which + "_axis"):
+		_note_visible("Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
+		return
+	var current: int = _g29_int(which + "_axis", -1)
+	var next_axis: int = _next_free_axis(which, current)
+	if _g29_call("apply_manual", [which, next_axis, true]):
+		_refresh_mapping()
+		_refresh_pedal_rows()
+		_note_visible("%s liegt jetzt auf Achse a%d — Pedal einmal ganz durchtreten, dann lernt das Spiel den Weg." % [
+			_which_name(which), next_axis], 4.0)
+	else:
+		_note_visible("Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
+
+
+## Walk to the next axis that no other control uses, so a pedal can never land
+## on the steering axis or on top of another pedal by accident.
+func _next_free_axis(which: String, current: int) -> int:
+	var used: Array = [_g29_int("steer_axis", -1)]
+	for other in ["throttle", "brake", "clutch"]:
+		if other != which:
+			used.append(_g29_int(other + "_axis", -1))
+	var axis: int = current if current >= 0 else -1
+	for _step in AXIS_COUNT:
+		axis = (axis + 1) % AXIS_COUNT
+		if not used.has(axis):
+			return axis
+	return current if current >= 0 else 0
+
+
+func _swap_pedals() -> void:
+	if not _g29_has("throttle_axis") or not _g29_has("brake_axis"):
+		_note_visible("Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
+		return
+	var gas: int = _g29_int("throttle_axis", -1)
+	var bremse: int = _g29_int("brake_axis", -1)
+	if gas < 0 or bremse < 0 or gas == bremse:
+		_note_visible("Tauschen nicht möglich — Gas und Bremse liegen auf derselben Achse a%d." % gas, 3.4)
+		return
+	var ok := _g29_call("apply_manual", ["throttle", bremse, true])
+	ok = _g29_call("apply_manual", ["brake", gas, true]) and ok
+	ok = _g29_call("save_profile") and ok
+	_refresh_mapping()
+	_refresh_pedal_rows()
+	if ok:
+		_note_visible("Getauscht: Gas = a%d, Bremse = a%d (gespeichert)." % [bremse, gas], 3.4)
+	else:
+		_note_visible("Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
 
 
 func _start_calibration(which: String) -> void:
@@ -644,6 +764,7 @@ func _process(_delta: float) -> void:
 		return
 	if screen == Screen.SETTINGS:
 		_update_readout()
+		_refresh_pedal_rows()
 		_refresh_mapping()
 	elif screen == Screen.CALIBRATE:
 		_update_readout()
@@ -656,6 +777,7 @@ func _update_readout() -> void:
 	var snapshot := _snapshot()
 	var connected: bool = _g29_bool("connected", false)
 	_update_status_label(connected)
+	var live: bool = connected and _g29_axis_data()
 	var mapped: Dictionary = {}
 	var keys := ["steer_axis", "throttle_axis", "brake_axis", "clutch_axis"]
 	for key in keys:
@@ -663,11 +785,11 @@ func _update_readout() -> void:
 			mapped[_g29_int(key, -1)] = true
 	for i in AXIS_COUNT:
 		var value: float = snapshot[i]
-		if not connected:
+		if not live:
 			value = 0.0
-		var highlight: bool = connected and mapped.has(i)
-		_set_row(_axis_rows, i, value, connected, highlight)
-		_set_row(_cal_axis_rows, i, value, connected, highlight)
+		var highlight: bool = live and mapped.has(i)
+		_set_row(_axis_rows, i, value, live, highlight)
+		_set_row(_cal_axis_rows, i, value, live, highlight)
 
 
 func _update_status_label(connected: bool) -> void:
@@ -678,6 +800,11 @@ func _update_status_label(connected: bool) -> void:
 	var hint := str(_g29_get("hardware_hint", ""))
 	if not connected:
 		_status_label.text = "Kein G29 erkannt — Tastatur: W = Gas, S = Bremse, A/D = Lenken."
+		_status_label.add_theme_color_override("font_color", UI.WARN)
+	elif not _g29_axis_data():
+		_status_label.text = ("G29 verbunden (%s), aber noch keine Achsendaten — "
+			+ "Lenkrad oder Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen.") % str(
+				_g29_get("device_name", "G29"))
 		_status_label.add_theme_color_override("font_color", UI.WARN)
 	elif hint != "":
 		_status_label.text = hint
@@ -710,14 +837,44 @@ func _refresh_mapping() -> void:
 	if not _g29_has("throttle_axis") and not _g29_has("steer_axis"):
 		_mapping_label.text = "Eingabe-Modul: nicht verfügbar.\nTastatur: W = Gas, S = Bremse, A/D = Lenken."
 		return
-	var lines := PackedStringArray()
-	lines.append("Gas = Achse %d (%s)" % [_g29_int("throttle_axis", 1), _invert_word(_g29_bool("invert_throttle", true))])
-	lines.append("Bremse = Achse %d (%s)" % [_g29_int("brake_axis", 2), _invert_word(_g29_bool("invert_brake", true))])
-	lines.append("Kupplung = Achse %d (%s)" % [_g29_int("clutch_axis", 3), _invert_word(_g29_bool("invert_clutch", true))])
-	lines.append("Lenkrad = Achse %d (%s)" % [_g29_int("steer_axis", 0), _invert_word(_g29_bool("steer_invert", false))])
-	_mapping_label.text = "\n".join(lines)
+	_mapping_label.text = "Lenkrad = Achse a%d (%s)" % [
+		_g29_int("steer_axis", 0), _invert_word(_g29_bool("steer_invert", false))]
 	if _steer_toggle != null:
 		_steer_toggle.text = "Lenkrad invertieren: %s" % ("JA" if _g29_bool("steer_invert", false) else "NEIN")
+
+
+func _refresh_pedal_rows() -> void:
+	if _pedal_rows.is_empty():
+		return
+	var connected: bool = _g29_bool("connected", false)
+	for which in _pedal_rows.keys():
+		var row: Dictionary = _pedal_rows[which]
+		var bar: ProgressBar = row["bar"]
+		var value_label: Label = row["value"]
+		var name_label: Label = row["name"]
+		var axis_button: Button = row["axis"]
+		var axis: int = _g29_int(which + "_axis", -1)
+		var value: float = clampf(float(_g29_get(which, 0.0)), 0.0, 1.0)
+		var live: bool = connected and _g29_axis_data() and _g29_bool("axes_live", true)
+		if live:
+			bar.value = value * 100.0
+			value_label.text = "%d %%" % int(round(value * 100.0))
+			# Highlight the pedal that is actually being pressed right now.
+			name_label.add_theme_color_override("font_color",
+				UI.ACCENT_BRIGHT if value > 0.05 else UI.TEXT)
+		else:
+			bar.value = 0.0
+			value_label.text = "—"
+			name_label.add_theme_color_override("font_color", UI.TEXT_DIM)
+		value_label.add_theme_color_override("font_color",
+			UI.ACCENT_BRIGHT if (live and value > 0.05) else UI.TEXT_DIM)
+		axis_button.text = ("Achse a%d ändern" % axis) if axis >= 0 else "Achse —"
+
+
+## Notes belong on the screen the driver is actually looking at; the calibrate
+## screen owns `_cal_note`, everything else is shown under the pedal rows.
+func _note_visible(text: String, seconds: float) -> void:
+	_note(_cal_note if screen == Screen.CALIBRATE else _settings_note, text, seconds)
 
 
 func _invert_word(inverted: bool) -> String:
@@ -727,12 +884,15 @@ func _invert_word(inverted: bool) -> String:
 func _refresh_start_status() -> void:
 	if _start_status == null:
 		return
-	if _g29_bool("connected", false):
-		_start_status.text = "G29 verbunden: %s" % str(_g29_get("device_name", "Logitech G29"))
-		_start_status.add_theme_color_override("font_color", UI.GOOD)
-	else:
+	if not _g29_bool("connected", false):
 		_start_status.text = "Kein G29 erkannt — Tastatur: W = Gas, S = Bremse, A/D = Lenken"
 		_start_status.add_theme_color_override("font_color", UI.WARN)
+	elif not _g29_axis_data():
+		_start_status.text = "G29 verbunden, aber ohne Achsendaten — Netzteil und Pedalkabel prüfen"
+		_start_status.add_theme_color_override("font_color", UI.WARN)
+	else:
+		_start_status.text = "G29 verbunden: %s" % str(_g29_get("device_name", "Logitech G29"))
+		_start_status.add_theme_color_override("font_color", UI.GOOD)
 
 
 func _poll_calibration() -> void:
