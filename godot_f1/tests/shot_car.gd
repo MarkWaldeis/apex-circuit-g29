@@ -23,6 +23,11 @@ var plan := [
 	# before the second picture so the two are actually comparable.
 	{"frame": 296, "steer": 1.0},
 	{"frame": 350, "mode": 3, "file": "shot_steer_right.png", "steer": 1.0},
+	# Same pair from inside the cockpit: the wheel and the gloved hands have to
+	# turn together, and the front wheels must be visible steering.
+	{"frame": 380, "mode": 0, "file": "shot_cockpit_straight.png", "steer": 0.0},
+	{"frame": 386, "steer": 1.0},
+	{"frame": 440, "mode": 0, "file": "shot_cockpit_right.png", "steer": 1.0},
 ]
 var _side_cam: Camera3D
 

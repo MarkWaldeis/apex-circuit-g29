@@ -350,7 +350,7 @@ func _build_wheel(parent: Node3D) -> void:
 		rim.mesh = torus
 		rim.material_override = _mat(Color(0.07, 0.07, 0.08), 0.6, 0.05)
 		pivot.add_child(rim)
-	_build_hands(pivot)
+	_build_hands(pivot, parent)
 
 
 func _build_wheel_leds(pivot: Node3D, half_h: float) -> void:
@@ -365,7 +365,7 @@ func _build_wheel_leds(pivot: Node3D, half_h: float) -> void:
 		_leds.append(led)
 
 
-func _build_hands(pivot: Node3D) -> void:
+func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 	## Gloved hands gripping the rim at 9 and 3 o'clock. They are children of the
 	## wheel pivot, so they turn with the wheel exactly like a real driver's.
 	var glove := _mat(Color(0.042, 0.043, 0.049), 0.70, 0.03)
@@ -429,12 +429,20 @@ func _build_hands(pivot: Node3D) -> void:
 		# thumb along the inside of the rim
 		_limb(hand, Vector3(side * 0.000, 0.046, 0.020), Vector3(side * -0.024, 0.060, 0.010),
 			0.0105, glove, "Thumb")
-		# cuff and forearm, dropping out of the bottom of the frame
-		_limb(hand, Vector3(side * 0.008, -0.046, 0.022), Vector3(side * 0.012, -0.078, 0.020),
+		# Cuff and forearm live on the cockpit, NOT on the turning wheel: a real
+		# driver's forearms pivot from his shoulders, so they stay put while the
+		# hands travel around the rim. Gluing them to the wheel swung them up
+		# across the halo at full lock.
+		var arms := Node3D.new()
+		arms.name = "Arm_R" if side < 0.0 else "Arm_L"
+		parent.add_child(arms)
+		arms.position = pivot.position + Vector3(cx, cy, 0.0)
+		arms.rotation = Vector3(Poses.WHEEL_TILT, 0.0, 0.0)
+		_limb(arms, Vector3(side * 0.008, -0.058, 0.022), Vector3(side * 0.012, -0.090, 0.020),
 			0.0300, suit, "Cuff")
-		_limb(hand, Vector3(side * 0.011, -0.074, 0.020), Vector3(side * 0.014, -0.090, 0.019),
+		_limb(arms, Vector3(side * 0.011, -0.086, 0.020), Vector3(side * 0.014, -0.102, 0.019),
 			0.0312, accent, "CuffBand")
-		_limb(hand, Vector3(side * 0.014, -0.088, 0.019), Vector3(side * 0.240, -0.420, 0.020),
+		_limb(arms, Vector3(side * 0.014, -0.100, 0.019), Vector3(side * 0.240, -0.430, 0.020),
 			0.0288, suit, "Arm")
 
 
