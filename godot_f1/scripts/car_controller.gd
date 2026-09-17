@@ -5,6 +5,7 @@ const CrashModel = preload("res://scripts/crash.gd")
 const WheelFeedback = preload("res://scripts/wheel_feedback.gd")
 const Gearbox = preload("res://scripts/gearbox.gd")
 const TyreModel = preload("res://scripts/tyre_model.gd")
+const FfbLink = preload("res://scripts/ffb_link.gd")
 
 @export var livery: String = "crimson"
 @export var auto_drive: bool = false
@@ -24,6 +25,9 @@ var gearbox
 var tyres
 var crash
 var feedback
+## The channel to the real wheel: `tools/g29_ffb.py` turns these numbers into
+## DirectInput forces on the G29. Harmless when nothing is listening.
+var ffb
 ## Driver assists. F1 games ship with these on; the driver can switch the
 ## automatic gearbox off and shift with the paddles himself.
 var assists: Dictionary = {"auto_gearbox": true, "traction_control": true}
@@ -37,6 +41,8 @@ var _shift_cd: float = 0.0
 ## Last racing line point, so finding "where am I" stays a window search
 ## instead of walking all 1440 points every tick.
 var _line_hint: int = -1
+## Last point index on the ideal line, so aiming at it stays a window search.
+var _ideal_hint: int = -1
 var surface_name: String = "Asphalt"
 var surface_drag: float = 0.0
 ## Telemetry the HUD and the tests read: how hard the car is sliding, how much
@@ -109,6 +115,14 @@ func setup(line, wheel_input, start: Transform3D) -> void:
 	crash.setup(self, surfaces)
 	feedback = WheelFeedback.new()
 	feedback.setup(self, wheel_input)
+	# Only the player's car drives the wheel: two cars sending force at the same
+	# time would fight over the same G29.
+	ffb = null
+	if not is_ai:
+		ffb = FfbLink.new()
+		ffb.setup()
+	if crash and crash.has_signal("crashed") and not crash.crashed.is_connected(_on_crash):
+		crash.crashed.connect(_on_crash)
 	global_transform = start
 	if g29 and not is_ai:
 		if not g29.shift_up.is_connected(_on_shift_up):
@@ -448,12 +462,24 @@ func _on_shift_up() -> void:
 	if gearbox and gearbox.request_shift(true):
 		if feedback:
 			feedback.poke("shift", 0.35)
+		if ffb:
+			ffb.poke("shift", 0.45)
 
 
 func _on_shift_down() -> void:
 	if gearbox and gearbox.request_shift(false):
 		if feedback:
 			feedback.poke("shift", 0.35)
+		if ffb:
+			ffb.poke("shift", 0.45)
+
+
+## A wall hurts the hands first: the impact goes straight to the wheel.
+func _on_crash(severity: float, kind: String) -> void:
+	if feedback:
+		feedback.poke("crash" if kind == "wall" else "contact", severity)
+	if ffb:
+		ffb.poke("crash" if kind == "wall" else "contact", severity)
 
 
 func _physics_process(delta: float) -> void:
@@ -583,6 +609,8 @@ func _physics_process(delta: float) -> void:
 	engine_force = float(gb["engine_force"])
 	if int(gb["shift_event"]) != 0 and feedback:
 		feedback.poke("shift", 0.4)
+		if ffb:
+			ffb.poke("shift", 0.45)
 	# A damaged car is slower: broken bodywork costs drag and the engine
 	# cannot be used at full power.
 	if crash and crash.damage > 0.0:
@@ -615,6 +643,17 @@ func _physics_process(delta: float) -> void:
 		"crash": crash.last_impact_ms,
 		"damage": crash.damage,
 	})
+	# Force feedback for the real wheel (tools/g29_ffb.py listens on UDP).
+	if ffb:
+		ffb.update(delta, {
+			"steer_angle": steering,
+			"lateral_g": lateral_g,
+			"speed": spd,
+			"surface": surface,
+			"slip_front": float(tyre.get("slip_front", 0.0)),
+			"understeer": float(tyre.get("understeer", 0.0)),
+			"damage": crash.damage,
+		})
 
 	_rejoin_cd = maxf(_rejoin_cd - delta, 0.0)
 	# Past the runoff apron there is no collision surface at all. Without this
@@ -747,6 +786,7 @@ func _ai_shift() -> void:
 
 func _auto_inputs() -> Dictionary:
 	var result := {"steer": 0.0, "throttle": 0.55, "brake": 0.0}
+	var have_ideal: bool = ideal_line != null and ideal_line.points.size() >= 8
 	if racing_line == null or racing_line.points.size() == 0:
 		return result
 	var speed: float = linear_velocity.length()
@@ -754,13 +794,39 @@ func _auto_inputs() -> Dictionary:
 	# The line index from this tick's surface sample keeps this a window search
 	# instead of a full 1440 point walk on every physics frame.
 	var here: int = _line_hint if _line_hint >= 0 else racing_line.closest_index(global_position)
-	var target: Vector3 = racing_line.point_at_s(racing_line.s[here] + look)
+	var target: Vector3
+	var v_target: float = -1.0
+	if have_ideal:
+		# The hint tracks where the CAR is, not where it is aiming: feeding the
+		# aim index back in advances the hint by the look-ahead distance on
+		# every tick, and after a second the AI is steering at a corner half a
+		# lap away (measured: hint 20 -> 444 in 60 ticks).
+		if _ideal_hint < 0:
+			_ideal_hint = ideal_line.closest_index(global_position)
+		else:
+			_ideal_hint = ideal_line.closest_index_near(global_position, _ideal_hint)
+		var aim: Dictionary = ideal_line.sample_ahead(global_position, look, _ideal_hint)
+		if not aim.is_empty():
+			target = aim["point"]
+			v_target = _ideal_speed_limit(speed, aim)
+	if target == Vector3.ZERO:
+		target = racing_line.point_at_s(racing_line.s[here] + look)
 	var local: Vector3 = to_local(target)
 	var angle: float = atan2(local.x, local.z)
 	# Driver convention: positive = right. A target sitting on the car's local
 	# +X is on the driver's LEFT (the nose is +Z), so it needs a negative
 	# command. Without the minus the AI steers away from the racing line.
 	result.steer = clampf(-angle / max_steer, -1.0, 1.0)
+	if v_target > 0.0:
+		# Follow the corner speed the line prescribes. `_ideal_speed_limit()`
+		# has already taken the braking distance into account, so this is a
+		# plain speed follower and not a corner detector.
+		var err: float = v_target - speed
+		result.throttle = clampf(0.4 + err * 0.25, 0.0, 1.0)
+		if err < -0.4:
+			result.throttle = 0.0
+			result.brake = clampf(-err * 0.09, 0.0, 1.0)
+		return result
 	var curve: float = absf(racing_line.flat_tangent(here).signed_angle_to(
 		racing_line.flat_tangent(wrapi(here + 12, 0, racing_line.tangents.size())), Vector3.UP))
 	var throttle: float = 0.95
@@ -774,6 +840,26 @@ func _auto_inputs() -> Dictionary:
 		result.brake = clampf(curve * 0.55, 0.0, 0.7)
 		result.throttle = min(result.throttle, 0.25)
 	return result
+
+
+## How fast the car may still be going now and still make every corner in the
+## braking horizon: v_now = sqrt(v_i^2 + 2 * a * distance_i), minimised over
+## the points ahead. This is what lets the AI brake at the right point for a
+## hairpin instead of only noticing the corner it is already in.
+func _ideal_speed_limit(speed: float, aim: Dictionary) -> float:
+	const BRAKE_A := 24.0     ## m/s^2 the AI plans with (just under the limit)
+	const STEP := 10.0        ## m between planning samples
+	var horizon: float = clampf(speed * speed / (2.0 * BRAKE_A), 20.0, 190.0)
+	var limit: float = float(aim.get("target_speed", -1.0))
+	var d: float = 0.0
+	while d < horizon:
+		d += STEP
+		var point: Dictionary = ideal_line.sample_ahead(global_position, d, _ideal_hint)
+		if point.is_empty():
+			break
+		var v_i: float = float(point["target_speed"])
+		limit = minf(limit, sqrt(v_i * v_i + 2.0 * BRAKE_A * d))
+	return limit
 
 
 func _reset() -> void:
