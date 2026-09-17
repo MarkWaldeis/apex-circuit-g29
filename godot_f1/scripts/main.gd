@@ -10,6 +10,7 @@ const MenuUI = preload("res://scripts/menu.gd")
 const IdealLine = preload("res://scripts/ideal_line.gd")
 const RacingLineDisplay = preload("res://scripts/racing_line_display.gd")
 const Barriers = preload("res://scripts/barriers.gd")
+const StatusHUD = preload("res://scripts/status_hud.gd")
 
 var line = RacingLine.new()
 ## The ideal line and the ribbon that shows it: green where the throttle stays
@@ -22,6 +23,7 @@ var cam
 var g29
 var menu
 var hud
+var status
 var _start_z: float = 0.0
 
 
@@ -76,6 +78,13 @@ func _ready() -> void:
 	guide.name = "Guide"
 	add_child(guide)
 	guide.build(line, ideal)
+
+	# Zweite, kleinere HUD-Ebene: der Bremshinweis der Ideallinie. Untergrund,
+	# Schaden und Crash-Warnung stehen in hud.gd (Ebene 10).
+	status = StatusHUD.new()
+	status.name = "Status"
+	add_child(status)
+	status.setup(player, ideal, g29)
 
 	menu = MenuUI.new()
 	menu.name = "Menu"
