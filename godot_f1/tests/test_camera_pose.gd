@@ -22,10 +22,24 @@ func _initialize() -> void:
 	else:
 		print("PASS chase_looks_forward")
 	if not Poses.is_outside_hull(Poses.HELMET):
-		push_error("FAIL helmet inside hull %s" % Poses.HELMET)
+		# The helmet cam sits in the cockpit opening, so it may be inside the
+		# hull box - what matters is that it is above the cockpit floor, still
+		# between the axles and behind the front axle.
+		var ok: bool = (Poses.HELMET.y > 1.0
+			and Poses.HELMET.z > Poses.REAR_AXLE_Z
+			and Poses.HELMET.z < Poses.FRONT_AXLE_Z)
+		if not ok:
+			push_error("FAIL helmet pose %s" % Poses.HELMET)
+			failed += 1
+		else:
+			print("PASS helmet_in_cockpit ", Poses.HELMET)
+	else:
+		print("PASS helmet_above_hull ", Poses.HELMET)
+	if Poses.CHASE_LOCAL.z > Poses.REAR_AXLE_Z:
+		push_error("FAIL chase camera is not behind the car: %s" % Poses.CHASE_LOCAL)
 		failed += 1
 	else:
-		print("PASS helmet_outside_hull ", Poses.HELMET)
+		print("PASS chase_behind_rear_axle ", Poses.CHASE_LOCAL)
 	if not Poses.is_outside_hull(Poses.CHASE_LOCAL):
 		push_error("FAIL chase origin inside hull %s" % Poses.CHASE_LOCAL)
 		failed += 1

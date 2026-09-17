@@ -14,9 +14,30 @@ var gear: int = 1
 var rpm: float = 4200.0
 var clutch_assist: bool = true
 var _shift_cd: float = 0.0
+## Visual wheel meshes, kept so the rims can steer and roll with the car.
+var _wheel_meshes: Array = []
+var _wheel_roll: float = 0.0
+var _wheel_radius_avg: float = 0.365
+## Below this height there is no track, apron or terrain left - the car is in
+## the void and has to be put back on the line.
+const VOID_Y := -3.0
+var _rejoin_cd: float = 0.0
+var rejoin_count: int = 0
 
 const LIVERY_PATH := "res://assets/cars/car_%s.glb"
 const RIG_PATH := "res://assets/cars/car_rig.json"
+const LIVERY_SHADER := "res://assets/shaders/livery.gdshader"
+const WHEEL_KEYS := ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]
+
+## Paint / accent per livery (the GLB itself carries no colour at all).
+const LIVERIES := {
+	"crimson": {"paint": Color(0.74, 0.035, 0.05), "accent": Color(1.0, 0.95, 0.92)},
+	"silver": {"paint": Color(0.62, 0.65, 0.68), "accent": Color(0.02, 0.12, 0.42)},
+	"navy": {"paint": Color(0.02, 0.05, 0.16), "accent": Color(0.92, 0.78, 0.08)},
+	"papaya": {"paint": Color(0.92, 0.38, 0.08), "accent": Color(0.05, 0.05, 0.06)},
+	"green": {"paint": Color(0.02, 0.22, 0.14), "accent": Color(0.95, 0.82, 0.12)},
+	"azure": {"paint": Color(0.05, 0.28, 0.72), "accent": Color(0.95, 0.35, 0.55)},
+}
 const REST := 0.18
 const IDLE_RPM := 4200.0
 const REDLINE := 12500.0
@@ -33,7 +54,8 @@ func setup(line, wheel_input, start: Transform3D) -> void:
 	spawn_transform = start
 	mass = 740.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0, -0.12, -0.18)
+	# Weight slightly towards the rear axle (nose is +Z), like a real F1 car.
+	center_of_mass = Vector3(0.0, -0.10, -0.42)
 	continuous_cd = true
 	can_sleep = false
 	_build_wheels_and_mesh()
@@ -49,36 +71,62 @@ func _build_chassis_collider() -> void:
 	var col := CollisionShape3D.new()
 	col.name = "Chassis"
 	var box := BoxShape3D.new()
-	box.size = Vector3(1.7, 0.5, 3.8)
+	# Hull box centred between the axles (front axle +1.43, rear axle -2.00).
+	box.size = Vector3(1.8, 0.55, 3.9)
 	col.shape = box
-	col.position = Vector3(0.0, 0.55, 0.15)
+	col.position = Vector3(0.0, 0.60, -0.25)
 	add_child(col)
 
 
 func _build_wheels_and_mesh() -> void:
 	var rig: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(RIG_PATH))
-	var radius: float = float(rig.get("wheel_radius", 0.365))
-	var wheels: Dictionary = rig["wheels"]
+	var rig_radius: float = float(rig.get("wheel_radius", 0.365))
 	var packed: PackedScene = load(LIVERY_PATH % livery)
 	var visual: Node3D = packed.instantiate()
 	visual.name = "Visual"
 	add_child(visual)
-	var specs := [
-		["Wheel_FL", false, true],
-		["Wheel_FR", false, true],
-		["Wheel_RL", true, false],
-		["Wheel_RR", true, false],
-	]
-	for spec in specs:
-		var key: String = spec[0]
-		var src: Dictionary = wheels[key]
-		var loc: Array = src["location"]
+	# The artwork is modelled nose-first along +Z, and VehicleBody3D pushes the
+	# hull towards +Z for a positive engine_force, so the visual must stay
+	# unrotated. Any yaw here makes the car drive tail-first (the "I drive
+	# backwards" bug: nose pointing at the rear wing, cockpit over the engine).
+	visual.rotation = Vector3.ZERO
+	visual.position = Vector3.ZERO
+	_apply_livery(visual)
+
+	# The wheel meshes are the only nodes with a translation in the GLB, so the
+	# model itself tells us where the axles are. car_rig.json stays the fallback.
+	var entries: Array = []
+	for key in WHEEL_KEYS:
+		var node := _find_token(visual, key)
+		var pos := Vector3.ZERO
+		var radius: float = rig_radius
+		if node:
+			pos = node.position
+			radius = _mesh_radius(node, rig_radius)
+		else:
+			var loc: Array = rig["wheels"][key]["location"]
+			# Blender (X right, Y forward, Z up) -> Godot (X, Z, -Y).
+			pos = Vector3(float(loc[0]), float(loc[2]), -float(loc[1]))
+		entries.append({"key": key, "pos": pos, "node": node, "radius": radius})
+
+	# Front axle = nose side (+Z), left hand side = +X for a +Z/+Y body.
+	entries.sort_custom(func(a, b): return a.pos.z > b.pos.z)
+	_wheel_meshes.clear()
+	var radius_sum: float = 0.0
+	for i in entries.size():
+		var e: Dictionary = entries[i]
+		var is_front: bool = i < 2
+		var is_left: bool = e.pos.x > 0.0
+		var role: String = ("Wheel_F" if is_front else "Wheel_R") + ("L" if is_left else "R")
+		var hub: Vector3 = e.pos
+		var radius: float = e.radius
+		radius_sum += radius
 		var wheel := VehicleWheel3D.new()
-		wheel.name = key
-		var hub := Vector3(float(loc[0]), float(loc[2]), float(loc[1]))
+		wheel.name = role
 		wheel.position = hub + Vector3(0.0, REST, 0.0)
-		wheel.use_as_traction = spec[1]
-		wheel.use_as_steering = spec[2]
+		# Formula 1: the front axle steers, the rear axle drives.
+		wheel.use_as_steering = is_front
+		wheel.use_as_traction = not is_front
 		wheel.wheel_radius = radius
 		wheel.wheel_rest_length = REST
 		wheel.suspension_travel = 0.18
@@ -89,17 +137,92 @@ func _build_wheels_and_mesh() -> void:
 		wheel.wheel_friction_slip = 7.8
 		wheel.wheel_roll_influence = 0.08
 		add_child(wheel)
-		var mesh := _find_token(visual, key)
+		var mesh: Node3D = e.node
 		if mesh:
 			var old_parent := mesh.get_parent()
 			if old_parent:
 				old_parent.remove_child(mesh)
 			wheel.add_child(mesh)
 			mesh.owner = wheel
-			mesh.position = Vector3.ZERO
+			# The wheel node marks the suspension mount, one rest length above
+			# the hub - drop the rim back down onto the axle.
+			mesh.position = Vector3(0.0, -REST, 0.0)
 			mesh.rotation = Vector3.ZERO
-	visual.rotate_y(PI)
-	visual.position.y = 0.03
+			_wheel_meshes.append({"mesh": mesh, "front": is_front})
+	_wheel_radius_avg = radius_sum / maxf(float(entries.size()), 1.0)
+
+
+func _paint_material() -> Material:
+	var entry: Dictionary = LIVERIES.get(livery, LIVERIES["crimson"])
+	var shader: Shader = load(LIVERY_SHADER)
+	if shader:
+		var sm := ShaderMaterial.new()
+		sm.shader = shader
+		sm.set_shader_parameter("paint_color", entry["paint"])
+		sm.set_shader_parameter("accent_color", entry["accent"])
+		return sm
+	# Fallback for a missing shader file: plain painted metal.
+	var m := StandardMaterial3D.new()
+	m.albedo_color = entry["paint"]
+	m.metallic = 0.28
+	m.roughness = 0.18
+	m.clearcoat_enabled = true
+	m.clearcoat = 0.85
+	m.clearcoat_roughness = 0.06
+	return m
+
+
+func _apply_livery(node: Node) -> void:
+	## The GLB exports a single "Paint_*" surface per body mesh without any base
+	## colour, so the livery is applied on top of it here.
+	var paint := _paint_material()
+	_paint_walk(node, paint)
+
+
+func _paint_walk(node: Node, paint: Material) -> void:
+	var mi := node as MeshInstance3D
+	if mi and mi.mesh:
+		for i in mi.mesh.get_surface_count():
+			var src: Material = mi.get_active_material(i)
+			var sname: String = src.resource_name if src else ""
+			if "Paint" in sname or (src == null and mi.mesh.get_surface_count() == 1 and i == 0):
+				mi.set_surface_override_material(i, paint)
+	for c in node.get_children():
+		_paint_walk(c, paint)
+
+
+func _mesh_radius(node: Node3D, fallback: float) -> float:
+	var mi := node as MeshInstance3D
+	if mi == null or mi.mesh == null:
+		return fallback
+	var aabb: AABB = mi.mesh.get_aabb()
+	# A wheel is a disc: two of the three extents describe its diameter.
+	var sizes: Array = [aabb.size.x, aabb.size.y, aabb.size.z]
+	sizes.sort()
+	var r: float = float(sizes[2]) * 0.5
+	if r < 0.15 or r > 0.7:
+		return fallback
+	return r
+
+
+func wheel_roles() -> Dictionary:
+	## Debug/test helper: role -> local hub position.
+	var out: Dictionary = {}
+	for name in ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]:
+		var w := get_node_or_null(name) as VehicleWheel3D
+		if w:
+			out[name] = w.position - Vector3(0.0, REST, 0.0)
+	return out
+
+
+func _animate_wheels(delta: float, forward_speed: float) -> void:
+	_wheel_roll = fposmod(_wheel_roll + forward_speed * delta / maxf(_wheel_radius_avg, 0.1), TAU)
+	for item in _wheel_meshes:
+		var mesh: Node3D = item["mesh"]
+		if mesh == null or not is_instance_valid(mesh):
+			continue
+		var yaw: float = -steering if item["front"] else 0.0
+		mesh.rotation = Vector3(_wheel_roll, yaw, 0.0)
 
 
 func _find_token(node: Node, token: String) -> Node3D:
@@ -197,6 +320,7 @@ func _physics_process(delta: float) -> void:
 	var steer_limit: float = max_steer * lerp(1.0, 0.22, clampf(spd / 70.0, 0.0, 1.0))
 	steering = lerp(steering, clampf(steer_in, -1.0, 1.0) * steer_limit, clampf(delta * 10.0, 0.0, 1.0))
 	last_steer = steering
+	_animate_wheels(delta, forward_vel)
 
 	var engage := 1.0 - clampf(clutch_in, 0.0, 1.0)
 	if clutch_assist and clutch_in < 0.1:
@@ -231,6 +355,13 @@ func _physics_process(delta: float) -> void:
 
 	_apply_aero(spd, brake_in, abs(steer_in))
 
+	_rejoin_cd = maxf(_rejoin_cd - delta, 0.0)
+	# Past the runoff apron there is no collision surface at all. Without this
+	# the car free-falls for seconds on end (the lap-drive telemetry used to
+	# show the player at y = -30 m still doing 175 km/h) and only came back by
+	# tumbling into the "car is upside down" reset.
+	if global_position.y < VOID_Y and _rejoin_cd <= 0.0:
+		rejoin_to_line()
 	if global_transform.basis.y.dot(Vector3.UP) < 0.25:
 		_reset()
 
@@ -302,3 +433,30 @@ func _reset() -> void:
 	gear = 1
 	rpm = IDLE_RPM
 	clutch_assist = true
+
+
+func rejoin_to_line() -> void:
+	## Put the car back on the racing line facing the way round, keeping the
+	## current gear. Used when a car has fallen out of the world.
+	rejoin_count += 1
+	_rejoin_cd = 0.5
+	var target: Transform3D = spawn_transform
+	if racing_line != null and racing_line.points.size() > 0:
+		var i: int = racing_line.closest_index(global_position)
+		var t: Vector3 = racing_line.tangents[i]
+		t.y = 0.0
+		if t.length() < 0.001:
+			t = Vector3(0, 0, -1)
+		# The car's forward axis is +Z, so the basis has to look along -t.
+		var basis := Basis.looking_at(-t.normalized(), Vector3.UP)
+		target = Transform3D(basis, racing_line.points[i] + Vector3(0.0, 0.35, 0.0))
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	global_transform = target
+	engine_force = 0.0
+	brake = 0.0
+	# Stationary on the line: a high gear at idle gives ~0.5 m/s^2 and the car
+	# crawls away in 8th, so start the rejoin from first.
+	gear = 1
+	rpm = IDLE_RPM
+	_shift_cd = 0.0

@@ -1,16 +1,29 @@
 extends RefCounted
-## Testable camera poses. Vehicle +Z is forward. Camera looks along local -Z.
+## Testable camera poses.
+##
+## Vehicle space is the imported GLB space: the nose sits on +Z (front wing at
+## +2.7, rear wing at -2.6, front axle +1.43, rear axle -2.00) and that is also
+## the direction a positive engine_force pushes the hull. Cameras always look
+## along their own local -Z, so anything mounted in front of the lens needs a
+## negative local z.
 
-## Body hull in vehicle space (visual after +Z remap). y=height, z=length.
-const HULL_MIN := Vector3(-1.16, 0.0, -2.75)
-const HULL_MAX := Vector3(1.16, 1.24, 2.75)
+## Body hull in vehicle space (measured on car_crimson.glb). y=height, z=length.
+const HULL_MIN := Vector3(-1.16, 0.06, -2.75)
+const HULL_MAX := Vector3(1.16, 1.21, 2.75)
+## Axle heights, used by the orientation tests.
+const FRONT_AXLE_Z := 1.434
+const REAR_AXLE_Z := -2.005
 
-## Cockpit sits ABOVE the hull, looking down the nose at the asphalt.
-const HELMET := Vector3(0.0, 1.55, 0.20)
-const LOOK := Vector3(0.0, 0.55, 16.0)
-## In front of a Camera3D lens (negative Z).
-const WHEEL_LOCAL := Vector3(0.0, -0.24, -0.55)
-const DASH_LOCAL := Vector3(0.0, -0.34, -0.42)
+## Helmet cam: just above the airbox, behind the driver's head, looking down the
+## nose at the asphalt. The car's cockpit sits between the axles, so the camera
+## must live there too - never at the tail behind the rear wing.
+const HELMET := Vector3(0.0, 1.29, 0.05)
+const LOOK := Vector3(0.0, 0.42, 16.0)
+## Cockpit props, in camera space: in front of the lens (negative Z).
+const WHEEL_LOCAL := Vector3(0.0, -0.16, -0.58)
+const DASH_LOCAL := Vector3(0.0, -0.46, -0.80)
+## How far the visible steering wheel turns for full lock (radians).
+const WHEEL_TURN := 2.4
 
 const CHASE_LOCAL := Vector3(0.0, 2.50, -7.60)
 const CHASE_LOOK_LOCAL := Vector3(0.0, 0.45, 12.0)

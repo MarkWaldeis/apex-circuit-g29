@@ -6,12 +6,14 @@ const F1Car = preload("res://scripts/car_controller.gd")
 const CockpitCamera = preload("res://scripts/cockpit_camera.gd")
 const TrackLoader = preload("res://scripts/track_loader.gd")
 const RaceHUD = preload("res://scripts/hud.gd")
+const MenuUI = preload("res://scripts/menu.gd")
 
 var line = RacingLine.new()
 var player
 var ai_car
 var cam
 var g29
+var menu
 var _start_z: float = 0.0
 
 
@@ -23,6 +25,9 @@ func _ready() -> void:
 	g29 = G29Input.new()
 	g29.name = "G29"
 	add_child(g29)
+	# Pedals/wheel must keep being read while the menu pauses the race
+	# (calibration happens with the race frozen).
+	g29.process_mode = Node.PROCESS_MODE_ALWAYS
 
 	var track := TrackLoader.new()
 	track.name = "Track"
@@ -53,6 +58,16 @@ func _ready() -> void:
 	hud.car = player
 	hud.g29 = g29
 
+	menu = MenuUI.new()
+	menu.name = "Menu"
+	add_child(menu)
+	menu.setup(player, g29, self)
+	if DisplayServer.get_name() == "headless":
+		# Smoke runs and tests drive straight away — no menu, no pause.
+		menu.headless_autostart()
+	else:
+		menu.open_start_menu()
+
 
 func _start_transform(grid_index: int) -> Transform3D:
 	# Main straight is Godot -Z. Aim vehicle +Z that way so the cockpit
@@ -72,6 +87,13 @@ func _build_road_boxes() -> void:
 	var body := StaticBody3D.new()
 	body.name = "RoadBoxes"
 	add_child(body)
+	# The 18 m road strip only reaches ~9 m either side of the line. Everything
+	# beyond it used to be empty space, so a car that ran wide free-fell out of
+	# the world (test_lap_drive telemetry: player at y = -30 m at 175 km/h).
+	# A wide apron at track height gives those excursions a surface to rejoin
+	# from; car_controller.gd::rejoin_to_line() is the net below that.
+	_build_strip(body, 60.0, 8.0, 6, -0.11)
+	_build_strip(body, 18.0, 4.0, 2, -0.11)
 	# Backup slab on the main straight (Godot -Z from the S/F).
 	var slab := CollisionShape3D.new()
 	var slab_box := BoxShape3D.new()
@@ -79,7 +101,11 @@ func _build_road_boxes() -> void:
 	slab.shape = slab_box
 	slab.position = Vector3(0.0, -0.12, -210.0)
 	body.add_child(slab)
-	var step := 2
+	print("RoadBoxes ", body.get_child_count())
+
+
+func _build_strip(body: StaticBody3D, width: float, depth: float, step: int, y_offset: float) -> void:
+	## Boxes every `step` line points, laid flat along the local tangent.
 	var n: int = line.points.size()
 	var i := 0
 	while i < n:
@@ -91,13 +117,12 @@ func _build_road_boxes() -> void:
 		t = t.normalized()
 		var col := CollisionShape3D.new()
 		var box := BoxShape3D.new()
-		box.size = Vector3(18.0, 0.3, 4.0)
+		box.size = Vector3(width, 0.3, depth)
 		col.shape = box
 		var basis := Basis.looking_at(-t, Vector3.UP)
-		col.transform = Transform3D(basis, p + Vector3(0, -0.11, 0))
+		col.transform = Transform3D(basis, p + Vector3(0, y_offset, 0))
 		body.add_child(col)
 		i += step
-	print("RoadBoxes ", body.get_child_count())
 
 
 func _spawn_car(livery: String, is_ai: bool, auto: bool, xform: Transform3D):
@@ -115,10 +140,15 @@ func _spawn_car(livery: String, is_ai: bool, auto: bool, xform: Transform3D):
 func _build_world() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-48, 35, 0)
-	sun.light_energy = 1.35
+	# Warm, low-ish afternoon sun with a soft edge.
+	sun.rotation_degrees = Vector3(-42, 38, 0)
+	sun.light_color = Color(1.0, 0.95, 0.87)
+	sun.light_energy = 1.55
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 420.0
+	sun.light_angular_distance = 0.6
+	sun.shadow_bias = 0.04
+	sun.shadow_normal_bias = 1.5
+	sun.directional_shadow_max_distance = 600.0
 	add_child(sun)
 
 	var env := WorldEnvironment.new()
@@ -127,17 +157,33 @@ func _build_world() -> void:
 	environment.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.35, 0.55, 0.82)
-	sky_mat.sky_horizon_color = Color(0.72, 0.78, 0.86)
-	sky_mat.ground_bottom_color = Color(0.08, 0.16, 0.08)
-	sky_mat.ground_horizon_color = Color(0.18, 0.28, 0.16)
+	# Late-afternoon race light: warm horizon, deeper blue overhead.
+	sky_mat.sky_top_color = Color(0.22, 0.42, 0.78)
+	sky_mat.sky_horizon_color = Color(0.85, 0.80, 0.72)
+	sky_mat.ground_bottom_color = Color(0.07, 0.12, 0.06)
+	sky_mat.ground_horizon_color = Color(0.24, 0.32, 0.18)
+	sky_mat.sun_angle_max = 24.0
+	sky_mat.sun_curve = 0.12
 	sky.sky_material = sky_mat
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.55
+	environment.ambient_light_energy = 0.75
 	environment.fog_enabled = true
-	environment.fog_density = 0.0008
+	environment.fog_density = 0.0009
+	environment.fog_light_color = Color(0.78, 0.80, 0.86)
+	environment.fog_sky_affect = 0.35
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
+	environment.tonemap_white = 6.0
+	environment.ssao_enabled = true
+	environment.ssao_radius = 3.0
+	environment.ssao_intensity = 1.4
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.35
+	environment.glow_bloom = 0.05
+	environment.glow_hdr_threshold = 1.15
+	environment.adjustment_enabled = true
+	environment.adjustment_saturation = 1.08
+	environment.adjustment_contrast = 1.05
 	env.environment = environment
 	add_child(env)
 

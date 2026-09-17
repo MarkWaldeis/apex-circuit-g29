@@ -1,6 +1,9 @@
 extends Node3D
 
 const TRACK_PATH := "res://assets/track/apex_circuit.glb"
+const LINE_PATH := "res://assets/track/racing_line.json"
+const RacingLine = preload("res://scripts/racing_line.gd")
+const Look = preload("res://scripts/look.gd")
 
 
 func _ready() -> void:
@@ -10,6 +13,19 @@ func _ready() -> void:
 	add_child(root)
 	_add_collision(root)
 	print("Track loaded")
+	_dress(root)
+
+
+func _dress(root: Node3D) -> void:
+	## Trackside decoration + material polish (see scripts/look.gd).
+	var line = RacingLine.new()
+	if not line.load_json(LINE_PATH):
+		push_warning("Track: racing line missing, skipping props")
+		return
+	var look := Look.new()
+	look.name = "Look"
+	add_child(look)
+	look.build(line, root)
 
 
 func _add_collision(node: Node) -> void:
