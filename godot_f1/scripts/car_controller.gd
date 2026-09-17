@@ -45,6 +45,9 @@ var _line_hint: int = -1
 var _ideal_hint: int = -1
 var surface_name: String = "Asphalt"
 var surface_drag: float = 0.0
+## 0..1 how much the ground rattles the car (kerb, gravel, grass). The camera
+## and the wheel read this; it is 0 on clean asphalt.
+var surface_rumble: float = 0.0
 ## Telemetry the HUD and the tests read: how hard the car is sliding, how much
 ## downforce it carries, and how bent the tub is after a hit.
 var slip: float = 0.0
@@ -515,6 +518,7 @@ func _physics_process(delta: float) -> void:
 	if not surface.is_empty():
 		_line_hint = int(surface["index"])
 		surface_name = String(surface["name"])
+	surface_rumble = float(surface.get("rumble", 0.0))
 	var surface_grip: float = float(surface.get("grip", 1.0))
 
 	if auto_drive or is_ai:

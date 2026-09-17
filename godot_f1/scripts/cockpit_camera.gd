@@ -94,7 +94,14 @@ func _snap(delta: float = 0.0) -> void:
 	## Rigid helmet cam: bolted to the car, so the halo, the mirrors and the dash
 	## stay where they belong while the wheel in front of the driver turns.
 	var xf: Transform3D = target.global_transform
-	global_transform = xf * Poses.cockpit_transform()
+	# `Transform3D * Basis` is not a legal Godot 4 operation: the head motion has
+	# to be wrapped in a transform (no translation) before it can be multiplied
+	# onto the cockpit pose. Mixing them up is a parse error, i.e. the game does
+	# not start at all - which is exactly what happened here.
+	var pose: Transform3D = xf * Poses.cockpit_transform() * Transform3D(_head_basis(delta), Vector3.ZERO)
+	pose.origin += pose.basis * _shake_offset(delta)
+	global_transform = pose
+	_collect_shake(delta)
 	# A little more field of view at speed - the only camera cue that does not
 	# move the cockpit props around.
 	var speed: float = 0.0
@@ -114,6 +121,73 @@ func _snap(delta: float = 0.0) -> void:
 	_wheel_rot = lerpf(_wheel_rot, -steer_amt * Poses.WHEEL_TURN, 0.35)
 	if wheel_visual:
 		wheel_visual.rotation = Vector3(Poses.WHEEL_TILT, 0.0, _wheel_rot)
+
+
+## What the driver's head does.
+##
+## The tub of a real car pitches under braking and rolls in a corner, and the
+## driver feels it through the seat long before the horizon moves. Godot's
+## `VehicleBody3D` wheels are rays, so the rigid body stays perfectly level and
+## the cockpit view would otherwise sit on rails - the single biggest "this is
+## a toy" tell in the main view.
+##
+## The rotation is applied to the CAMERA only, which keeps the halo, mirrors and
+## dashboard exactly where they belong while the world tips a couple of degrees
+## the other way. It is deliberately small: 4 g of cornering leans the head
+## about 2.5 degrees, 4 g of braking pitches it about 2 degrees.
+const LEAN_PER_G := 0.0063      ## rad per m/s^2 of lateral acceleration
+const PITCH_PER_G := 0.0050     ## rad per m/s^2 of longitudinal acceleration
+const LEAN_LIMIT := 0.055
+const PITCH_LIMIT := 0.045
+
+var _head_lean: float = 0.0
+var _head_pitch: float = 0.0
+var _shake: float = 0.0
+var _shake_phase: float = 0.0
+
+
+func _head_basis(delta: float) -> Basis:
+	var lat: float = 0.0
+	var lon: float = 0.0
+	if target.get("lat_accel") != null:
+		lat = float(target.lat_accel)
+	if target.get("long_accel") != null:
+		lon = float(target.long_accel)
+	var want_lean: float = clampf(lat * LEAN_PER_G, -LEAN_LIMIT, LEAN_LIMIT)
+	var want_pitch: float = clampf(lon * PITCH_PER_G, -PITCH_LIMIT, PITCH_LIMIT)
+	# A driver's neck is stiff but not rigid: it settles in a few tenths of a
+	# second without wobbling for ever.
+	var rate: float = clampf(delta * 6.0, 0.0, 1.0)
+	_head_lean = lerpf(_head_lean, want_lean, rate)
+	_head_pitch = lerpf(_head_pitch, want_pitch, rate)
+	return Basis(Vector3.FORWARD, _head_lean) * Basis(Vector3.RIGHT, _head_pitch)
+
+
+## Kerbs, gravel and impacts rattle the driver. `amount` is 0..1, and the shake
+## decays on its own so a single poke is enough.
+func add_shake(amount: float) -> void:
+	_shake = clampf(maxf(_shake, amount), 0.0, 1.0)
+
+
+## Where the rattle comes from: the car's own feedback strength (kerbs, slides,
+## impacts, shifts) plus the roughness of the surface under the tyres. Reading
+## it here keeps the camera independent - nothing else has to know the camera
+## exists.
+func _collect_shake(_delta: float) -> void:
+	var fb = target.get("feedback")
+	if fb != null and fb.get("strength") != null:
+		add_shake(float(fb.strength) * 0.55)
+	if target.get("surface_rumble") != null:
+		add_shake(float(target.surface_rumble) * 0.35)
+
+
+func _shake_offset(delta: float) -> Vector3:
+	_shake = maxf(_shake - delta * 2.2, 0.0)
+	if _shake <= 0.001:
+		return Vector3.ZERO
+	_shake_phase += delta * 47.0
+	var amp: float = _shake * _shake * 0.012
+	return Vector3(sin(_shake_phase * 1.7) * amp, sin(_shake_phase * 2.3) * amp, 0.0)
 	if _arm_root:
 		# forearms follow about a third of the wheel angle
 		_arm_root.rotation = Vector3(Poses.WHEEL_TILT, 0.0, _wheel_rot * 0.35)

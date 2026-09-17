@@ -38,6 +38,8 @@ var _pause_note: Label
 var _start_status: Label
 var _steer_toggle: Button
 var _swap_button: Button
+var _assist_button: Button
+var _line_button: Button
 var _axis_rows: Array = []
 var _cal_axis_rows: Array = []
 ## "throttle"/"brake"/"clutch" -> {name, bar, value, axis} of the settings rows
@@ -337,6 +339,19 @@ func _build_settings() -> Control:
 	defaults.pressed.connect(_reset_to_defaults)
 	_steer_toggle = _make_button(right, "Lenkrad invertieren: NEIN", false, 0, 26)
 	_steer_toggle.pressed.connect(_toggle_steer_invert)
+	_spacer(right, 10)
+	# Fahrhilfen: der Wagen fährt sich mit Automatik und Traktionskontrolle
+	# ruhiger, ohne ist er der ehrliche Formel-1-Wagen. Beides geht auch im
+	# Rennen mit `F`, damit man es nicht erst im Menü einschalten muss.
+	var assist_title := Label.new()
+	assist_title.text = "Fahrhilfen (im Rennen: F)"
+	UI.label(assist_title, 17, UI.TEXT_DIM)
+	right.add_child(assist_title)
+	_assist_button = _make_button(right, "Automatik + TC", false, 0, 26)
+	_assist_button.pressed.connect(_toggle_assists)
+	_line_button = _make_button(right, "Ideallinie: AN  (im Rennen: L)", false, 0, 26)
+	_line_button.pressed.connect(_toggle_line)
+	_refresh_assist_button()
 	_spacer(right, 6)
 	var back := _make_button(right, "Zurück", false, 0, 28)
 	back.pressed.connect(_on_back)
@@ -613,6 +628,37 @@ func _reset_car() -> void:
 
 
 func _reset_to_defaults() -> void:
+	_apply_reset_to_defaults()
+
+
+## Fahrhilfen an/aus: genau derselbe Schalter wie `F` im Rennen, damit Menü und
+## Taste nie unterschiedliche Dinge erzählen.
+func _toggle_assists() -> void:
+	if player != null and player.has_method("toggle_assists"):
+		player.toggle_assists()
+	_refresh_assist_button()
+
+
+func _toggle_line() -> void:
+	if main == null:
+		return
+	var guide = main.get("guide")
+	if guide == null or not guide.has_method("set_enabled"):
+		return
+	guide.set_enabled(not guide.is_enabled())
+	_line_button.text = "Ideallinie: %s  (im Rennen: L)" % ("AN" if guide.is_enabled() else "AUS")
+
+
+func _refresh_assist_button() -> void:
+	if _assist_button == null:
+		return
+	if player != null and player.has_method("assists_label"):
+		_assist_button.text = "Fahrhilfen: %s  (im Rennen: F)" % String(player.assists_label())
+	else:
+		_assist_button.text = "Fahrhilfen"
+
+
+func _apply_reset_to_defaults() -> void:
 	var ok := _g29_call("reset_to_defaults")
 	ok = _g29_call("save_profile") or ok
 	_note_visible("Kalibrierung verworfen — die erkannten Achsen bleiben erhalten, die Zuordnung lernt neu." if ok else "Eingabe-Modul nicht verfügbar — Tastatur: W A S D.", 2.6)
