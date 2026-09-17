@@ -152,6 +152,10 @@ func _spawn_car(livery: String, is_ai: bool, auto: bool, xform: Transform3D):
 	car.auto_drive = auto
 	add_child(car)
 	car.setup(line, g29, xform)
+	# The AI drives the ideal line (apex, corner speed, brake points); the
+	# player's car gets it too, so the HUD and the tests can see the same line
+	# the game shows on the road.
+	car.set_ideal_line(ideal)
 	car.global_transform = xform
 	return car
 

@@ -211,3 +211,210 @@ Jeder Prüf-Agent sucht Fehler, nicht Bestätigung: Er liest den Code, fährt di
 Szene headless mit eigenen Messungen, vergleicht gegen die F1-Realität und
 gegen die drei Bestandstests, und schreibt eine Liste mit reproduzierbaren
 Mängeln. Erst wenn er ohne Einwände ist, gilt der Punkt als fertig.
+
+---
+
+# Nachtrag Welle 2 (gültig ab jetzt)
+
+## 0. Godot nur noch über den Wrapper starten
+
+Godot schreibt beim Laufen in `.godot/`. Zwei Instanzen auf demselben Projekt
+gleichzeitig lesen dann einen halb geschriebenen Cache; das erzeugt Fehler wie
+`Nonexistent function 'new' in base 'GDScript'` und **falsche PASS-Zeilen**
+(gemessen am 17.09.: `test_lap_drive` meldete PASS, obwohl Player und AI nie
+erzeugt wurden). Deshalb:
+
+```
+powershell -NoProfile -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/test_x.gd
+```
+
+Der Wrapper nimmt eine Dateisperre; parallele Agents warten automatisch. Jeder
+Agent benutzt ausschließlich diesen Aufruf.
+
+## 1. Zusätzliches Datei-Eigentum
+
+| Datei | Eigentümer |
+|---|---|
+| `tools/g29_ffb.py` | ROOT |
+| `Apex Circuit FFB starten.cmd` | ROOT |
+| `godot_f1/scripts/wheel_feedback.gd` (UDP-Senke) | CRASH |
+| `godot_f1/tests/test_lap_drive.gd`, `test_gameplay_input.gd`, `test_car_orientation.gd` | ROOT |
+| `godot_f1/tests/test_feel_gate.gd` | ROOT |
+
+## 2. Lenkrad-Feedback (G29) — verbindliche Schnittstelle
+
+Godot selbst kann am G29 **kein** Force Feedback erzeugen (kein FF-API, keine
+Rumble-Motoren, `Input.start_joy_vibration` ist dort wirkungslos). Der G29 hängt
+aber als DirectInput-Gerät am PC, also übernimmt ein kleiner Helfer
+`tools/g29_ffb.py` (DirectInput über `ctypes`) die echte Kraft. Damit beide
+Seiten unabhängig arbeiten können, ist das Protokoll fix:
+
+* `wheel_feedback.gd` schickt **pro Physik-Tick** ein UDP-Paket an
+  `127.0.0.1:5601` (`PacketPeerUDP`), UTF-8-JSON, ein Objekt pro Paket:
+
+  ```json
+  {"v":1,"force":0.0,"damp":0.0,"fric":0.0,"rumble":0.0,"pulse":0.0,
+   "event":"shift","speed":42.5,"surface":"Asphalt","damage":0.0}
+  ```
+
+  * `force`  −1.0 … +1.0, Grundkraft (untersteuert = leicht, Aufprall = hart)
+  * `damp`   0 … 1, geschwindigkeitsabhängige Dämpfung
+  * `fric`   0 … 1, Reibung (Kerb, Kies, Gras)
+  * `rumble` 0 … 1, hochfrequentes Rütteln (Kerb/Ausritt)
+  * `pulse`  0 … 1, einmaliger Stoß (Schaltvorgang, Aufprall)
+  * `event`  Text für die Diagnose, frei wählbar
+
+* Der Sender darf **niemals** blockieren und niemals crashen, wenn der Helfer
+  nicht läuft (`PacketPeerUDP` ist von sich aus verbindungslos → in Ordnung).
+* Der Helfer ist optional. Ist er nicht gestartet, darf das Spiel keinen
+  Unterschied zeigen außer „kein Kraft-Rückkanal“.
+* Die Diagnose steht unter `user://ffb_state.json` (bereits vorhanden) weiter
+  zur Verfügung.
+
+## 3. Harte Abnahmekriterien je Punkt (jeweils mit Messung belegt)
+
+**CRASH**
+
+1. Wandkontakt über 3 m/s Verlust erzeugt `crashed` + Schaden > 0; ein
+   Streifer über 8 m bleibt unter dem Schwellwert (kein Dauer-Crash).
+2. Neben der Strecke: GRASS/Kies kostet messbar Zeit — dasselbe Manöver (gleiche
+   Lenkung, gleiches Gas) ist auf Kies mindestens 25 % langsamer als auf
+   Asphalt, gemessen über 3 s.
+3. Ein Aufprall bei 200 km/h wirft den Wagen sichtbar quer (Gierrate > 0.3 rad/s)
+   und Schaden steigt monoton; die Rundenzeit-Relevanz ist im HUD sichtbar.
+4. `wheel_feedback.strength` steigt bei Kerb, Kies, Gras, Schlupf und Aufprall
+   messbar an — jeweils eigener Messwert, nicht nur „> 0“.
+
+**LINE**
+
+1. Ideallinie ist **nicht** die Mittellinie: mittlerer Abstand der Ideallinie zur
+   Mittellinie > 0,8 m, maximaler Queroffset ≤ 4,8 m (Straßenbreite 6 m).
+2. Ideallinie ist glatter als die Mittellinie: Gesamtkrümmung mindestens 12 %
+   kleiner; keine Selbstüberschneidung.
+3. Geschwindigkeitsprofil ist physikalisch konsistent: Bremsphase endet vor dem
+   Scheitel, Beschleunigungsphase folgt ihm, und die nötige Verzögerung zwischen
+   zwei Punkten überschreitet nie `brake_decel` (Rückwärtspass).
+4. Sichtbares Band liegt auf dem Asphalt (nicht in der Luft, kein Z-Fighting),
+   grün/gelb/rot an den richtigen Stellen; Beweis: Screenshot aus der
+   Cockpit-Perspektive + Draufsicht.
+
+**GEARBOX**
+
+1. 8 Gänge, Hochschalten nur in Richtung höherer Gang, kein Gangsprung.
+2. Schaltvorgang: Drehmoment fällt für die Schaltzeit aus (0 N), Drehzahl
+   springt auf die Drehzahl des neuen Gangs (`rpm_after ≈ rpm_before * ratio_new
+   / ratio_old`, Toleranz 8 %).
+3. Herunterschalten wird verweigert, wenn die Zieldrehzahl über der Grenze
+   liegt (`DOWN_PROTECT_RPM`) — inklusive Testfall.
+4. Mit ausgeschalteter Automatik schaltet das Spiel **nie** von selbst.
+5. Bei konstantem Gas steigt die Geschwindigkeit über die Gänge hinweg monoton
+   (kein Einbruch, kein Steckenbleiben in einem Gang).
+
+## 4. Beweise
+
+Jeder Agent legt seinen Nachweis in `docs/evidence/<thema>/` ab: Roh-Log der
+Messung, Screenshot(s) wo sichtbar, und einen kurzen Absatz mit dem, was
+gemessen wurde und was dabei herauskam. Erst damit gilt ein Punkt als
+abgenommen.
+
+---
+
+# Runde 2 — der aktuell gueltige Auftrag
+
+Runde 1 hat die Module angelegt, aber drei davon sind noch Gerippe:
+
+* `ideal_line.gd` kopiert die **Mittellinie** (`offsets` ist ueberall 0.0) und
+  hat damit weder Einlenkpunkt noch Scheitel — es ist keine Ideallinie.
+* `racing_line_display.gd` malt dieses Gerippe als flaches Band.
+* `gearbox.gd` schaltet bei 9.000 rpm hoch (Serienauto-Drehzahl), hat keinen
+  Schaltmoment-Aussetzer, keine Runterschalt-Sperre und kein Schleppmoment.
+* `tyre_model.gd` liest `steer_angle`, `lateral_speed` und `traction_control`
+  aus `ctx`, aber `car_controller.gd` fuellt genau diese Schluessel **nicht**,
+  also rechnet das Reifenmodell mit Lenkwinkel 0 und Quergeschwindigkeit 0.
+* `wheel_feedback.gd` schreibt seine Werte nur in eine JSON-Datei, die
+  niemand liest: am G29 kommt kein Kraftaufwand an.
+
+## Ziele dieser Runde
+
+1. **Crashen und Kontakt** (Agent CRASH): Wand- und Autokontakt mit
+   Aufprallhaerte, Schaden, Verlust von Anpressdruck/Leistung, HUD-Warnung,
+   Kamera-Ruetteln, Lenkrad-Rueckmeldung. Neben der Strecke: Kerb/Kies/Gras
+   verlangsamen und geben Feedback.
+2. **Ideallinie** (Agent LINE): eine echte Ideallinie (Scheitel innen, weiter
+   Bogen aussen), Gruen = Gas, Gelb = lupfen, Rot = bremsen, samt
+   Bremsabstand, der zur Physik passt.
+3. **Schalten** (Agent GEARBOX): 8 Gaenge, Hochschalten ~11.500 rpm,
+   Schaltzeit mit Drehmoment-Aussetzer, Runterschalten nur wenn die Drehzahl
+   danach unter den Begrenzer passt, Schleppmoment, kein Fremdschalten wenn
+   der Automatik-Assi aus ist.
+4. **Fahrgefuehl** (ROOT): Traktion, Anpressdruck, Gewichtsverlagerung,
+   Bremsbalance, Unter-/Uebersteuern — und die Verdrahtung, ohne die die
+   Module ihr Wissen nicht anwenden.
+
+## Eigentum Runde 2
+
+| Datei | Eigentuemer |
+|---|---|
+| `scripts/surfaces.gd`, `crash.gd`, `barriers.gd`, `wheel_feedback.gd` | CRASH |
+| `scripts/hud.gd` | CRASH |
+| `tests/test_crash_surfaces.gd`, `tools/ffb_bridge.py`, `tools/ffb_probe.py` | CRASH |
+| `scripts/ideal_line.gd`, `racing_line_display.gd`, `line_hud.gd` | LINE |
+| `scripts/racing_line.gd` (nur neue Helfer) | LINE |
+| `tests/test_racing_line.gd` | LINE |
+| `scripts/gearbox.gd` | GEARBOX |
+| `tests/test_gearbox.gd` | GEARBOX |
+| `scripts/car_controller.gd`, `main.gd`, `tyre_model.gd`, `menu.gd`, `track_loader.gd` | ROOT |
+
+Niemand ausser ROOT aendert `car_controller.gd`, `main.gd` oder `menu.gd`.
+Wer dort etwas braucht, schickt ROOT eine Nachricht mit Datei, Zweck und dem
+gewuenschten Aufruf (Signatur). ROOT verdrahtet am Ende.
+
+## Schnittstellen Runde 2 (verbindlich)
+
+```gdscript
+# ideal_line.gd (LINE)
+func build(line, overrides: Dictionary = {}) -> bool
+var points / offsets / curvature / target_speed / phase
+func sample_ahead(pos: Vector3, look: float, hint: int = -1) -> Dictionary
+func brake_distance_from(index: int) -> float   # m bis zum Bremsbeginn
+func offset_limit() -> float                    # Korridorbreite (m)
+
+# line_hud.gd (LINE)
+extends CanvasLayer
+func setup(car, ideal, line) -> void
+var visible_now: bool
+
+# gearbox.gd (GEARBOX)
+func update(delta: float, ctx: Dictionary) -> Dictionary
+#   ctx wie Runde 1, plus {"redline": float} optional
+#   return plus {"torque_cut": float, "engine_brake": float,
+#                "shift_time_left": float, "blocked_downshift": bool,
+#                "auto_shift": bool}
+
+# crash.gd (CRASH)
+func update(delta: float, surface: Dictionary, forward_speed: float,
+            lateral_speed: float = 0.0) -> void
+var damage / last_impact_ms / crash_count / last_kind / scraping
+signal crashed(severity: float, kind: String)
+
+# wheel_feedback.gd (CRASH)
+func update(delta: float, ctx: Dictionary) -> void
+var strength: float        # 0..1, jetzt inkl. Fahrbahn/Ruckeln/Aufprall
+var torque_nm: float       # Zielkraft fuer das echte Lenkrad (falls Bruecke)
+func poke(kind: String, severity: float) -> void
+```
+
+## Abnahme Runde 2
+
+Jeder Bau-Agent liefert:
+
+1. eigenen Headless-Test (`tests/test_<bereich>.gd`), der echtes Verhalten in
+   der Szene misst (nicht nur Existenz von Nodes), Ausgabe `... PASS`.
+2. die drei Bestandstests gruen:
+   `test_car_orientation.gd`, `test_gameplay_input.gd`, `test_lap_drive.gd`.
+3. mindestens eine Zahl/Screenshot als Beweis (captures/).
+
+Danach folgt die Pruefwelle: ein **fremder** Pruef-Agent liest den Code,
+faehrt die Szene headless mit eigenen Messungen, sucht Fehler und schreibt
+eine Liste reproduzierbarer Maengel. Erst wenn kein Mangel mehr offen ist,
+gilt der Punkt als fertig. ROOT exportiert erst danach.

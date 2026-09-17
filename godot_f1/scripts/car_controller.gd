@@ -12,6 +12,9 @@ const TyreModel = preload("res://scripts/tyre_model.gd")
 @export var max_steer: float = 0.48
 
 var racing_line
+## The ideal line, when the game has one: the AI drives it and takes its corner
+## speeds from it. The player's own driving is never assisted by it.
+var ideal_line
 var g29
 ## Sub-systems. Each one owns one question: what is under the tyres (surfaces),
 ## what does the engine do (gearbox), how much grip is left (tyres), did we hit
@@ -23,7 +26,7 @@ var crash
 var feedback
 ## Driver assists. F1 games ship with these on; the driver can switch the
 ## automatic gearbox off and shift with the paddles himself.
-var assists: Dictionary = {"auto_gearbox": true}
+var assists: Dictionary = {"auto_gearbox": true, "traction_control": true}
 var spawn_transform: Transform3D
 var speed_kmh: float = 0.0
 var last_steer: float = 0.0
@@ -41,6 +44,11 @@ var surface_drag: float = 0.0
 var slip: float = 0.0
 var lateral_g: float = 0.0
 var downforce: float = 0.0
+## Aerodynamic drag this tick, in Newton, and the acceleration the car feels
+## in its own frame (used by the camera and by the HUD).
+var aero_drag_n: float = 0.0
+var long_accel: float = 0.0
+var lat_accel: float = 0.0
 var _prev_vel: Vector3 = Vector3.ZERO
 ## Visual wheel meshes, kept so the rims can steer and roll with the car.
 var _wheel_meshes: Array = []
@@ -51,6 +59,9 @@ var _wheel_radius_avg: float = 0.365
 const VOID_Y := -3.0
 var _rejoin_cd: float = 0.0
 var rejoin_count: int = 0
+## How often the car had to be put back on its wheels. A non-zero value while
+## driving normally is a physics bug, not a driving mistake.
+var reset_count: int = 0
 
 const LIVERY_PATH := "res://assets/cars/car_%s.glb"
 const RIG_PATH := "res://assets/cars/car_rig.json"
@@ -530,6 +541,31 @@ func _physics_process(delta: float) -> void:
 	if spd < 0.8 and throttle_in < 0.04 and clutch_in < 0.1:
 		engage = 0.0
 
+	# --- tyres first --------------------------------------------------------
+	# The tyre model is asked BEFORE the engine, because what the rear tyres can
+	# take decides how much torque the driver is allowed to use.
+	# Local frame used throughout: +Z is forward, +X is the driver's LEFT and a
+	# positive yaw rate turns left - the same convention as `steering`.
+	var accel_vec: Vector3 = (linear_velocity - _prev_vel) / maxf(delta, 0.0001)
+	var lat_accel: float = accel_vec.dot(global_transform.basis.x.normalized())
+	long_accel = accel_vec.dot(global_transform.basis.z.normalized())
+	lateral_g = lat_accel / 9.81
+	_prev_vel = linear_velocity
+	var lateral_speed: float = linear_velocity.dot(global_transform.basis.x.normalized())
+	var tyre: Dictionary = tyres.update(delta, {
+		"speed": spd,
+		"forward_speed": forward_vel,
+		"lateral_speed": lateral_speed,
+		"steer": last_steer,
+		"steer_angle": steering,
+		"throttle": throttle_in,
+		"brake": brake_in,
+		"surface": surface,
+		"yaw_rate": angular_velocity.y,
+		"damage": float(crash.damage) if crash else 0.0,
+		"traction_control": bool(assists.get("traction_control", true)),
+	})
+
 	# --- drivetrain ---------------------------------------------------------
 	# The gearbox owns ratios, revs and shifting. `auto` is true for the AI and
 	# for the player while the automatic gearbox assist is on; switching it off
@@ -551,33 +587,23 @@ func _physics_process(delta: float) -> void:
 	# cannot be used at full power.
 	if crash and crash.damage > 0.0:
 		engine_force *= 1.0 - 0.45 * crash.damage
+	# Traction control: the rear tyres are already past their peak, so the
+	# torque is cut instead of being turned into wheelspin.
+	var torque_cut: float = float(tyre.get("throttle_cut", 0.0))
+	if torque_cut > 0.0 and engine_force > 0.0:
+		engine_force *= 1.0 - torque_cut
 	var brake_force: float = brake_in * BRAKE_MAX
 	if brake_in > 0.08:
 		engine_force = min(engine_force, 0.0)
 	brake = brake_force
 
-	# --- tyres, downforce, surface ------------------------------------------
-	var accel_vec: Vector3 = (linear_velocity - _prev_vel) / maxf(delta, 0.0001)
-	lateral_g = accel_vec.dot(global_transform.basis.x.normalized()) / 9.81
-	_prev_vel = linear_velocity
-	var lateral_speed: float = absf(linear_velocity.dot(global_transform.basis.x.normalized()))
-	var slip_angle: float = atan2(lateral_speed, maxf(absf(forward_vel), 1.0))
-	var tyre: Dictionary = tyres.update(delta, {
-		"speed": spd,
-		"forward_speed": forward_vel,
-		"steer": last_steer,
-		"throttle": throttle_in,
-		"brake": brake_in,
-		"surface": surface,
-		"slip_angle": slip_angle,
-		"yaw_rate": angular_velocity.y,
-		"damage": float(crash.damage) if crash else 0.0,
-	})
+	# --- apply the grip the tyres have left ---------------------------------
 	_apply_wheel_grip(tyre, surface)
 	slip = float(tyre["slip"])
 	downforce = float(tyre["downforce"])
 	surface_drag = float(surface.get("drag", 0.0))
 	_apply_surface_drag(delta)
+	_apply_aero_drag(delta, tyre)
 
 	# --- what the driver feels and what the tub took -------------------------
 	crash.update(delta, surface, forward_vel)
@@ -620,6 +646,14 @@ func _torque_at(r: float) -> float:
 ## `downforce` is the aero load factor the car used to compute inline (it grows
 ## with v^2), and `front_grip` / `rear_grip` are what is left after slip angle,
 ## throttle and the surface have taken their share.
+##
+## The base numbers are the friction COEFFICIENT the physics uses, so they are
+## the car's low-speed grip in g. A slick makes about 1.6-1.8 g before the aero
+## load arrives; the tyre model multiplies the aero on top of that.
+const FRICTION_FRONT := 1.9
+const FRICTION_REAR := 2.1
+
+
 func _apply_wheel_grip(tyre: Dictionary, surface: Dictionary) -> void:
 	var down: float = float(tyre.get("downforce", 1.0))
 	var damage: float = float(crash.damage) if crash else 0.0
@@ -628,7 +662,7 @@ func _apply_wheel_grip(tyre: Dictionary, surface: Dictionary) -> void:
 		if w == null:
 			continue
 		var front: bool = name.begins_with("Wheel_F")
-		var base: float = 7.4 if front else 8.4
+		var base: float = FRICTION_FRONT if front else FRICTION_REAR
 		var grip: float = float(tyre["front_grip"] if front else tyre["rear_grip"])
 		if damage > 0.0:
 			grip *= 1.0 - 0.30 * damage
@@ -640,9 +674,12 @@ func _apply_wheel_grip(tyre: Dictionary, surface: Dictionary) -> void:
 
 ## Grass and gravel do not only take grip away, they pull the car back.
 ##
-## Applied as a longitudinal deceleration instead of an engine force so it does
-## not depend on the tyres biting - a car sliding sideways on wet grass still
-## loses forward speed.
+## Applied as a central force instead of an engine force, so it does not depend
+## on the tyres biting - a car sliding sideways on grass still loses forward
+## speed. It must NOT be applied by writing `linear_velocity`: that resets the
+## body state the vehicle solver is building on, and the car then loses its
+## suspension load and simply sinks onto the floor (measured on a flat plane:
+## a car that could not exceed 4 km/h with a 4000 N drive force).
 func _apply_surface_drag(delta: float) -> void:
 	if surface_drag <= 0.01 or linear_velocity.length() < 0.6:
 		return
@@ -650,8 +687,55 @@ func _apply_surface_drag(delta: float) -> void:
 	var v_long: float = fwd.dot(linear_velocity)
 	if absf(v_long) < 0.05:
 		return
-	var loss: float = minf(absf(v_long), surface_drag * delta)
-	linear_velocity -= fwd * (signf(v_long) * loss)
+	# Fade the drag in as the car starts rolling: at a standstill it would
+	# otherwise push the car backwards.
+	var fade: float = clampf(absf(v_long) / 4.0, 0.0, 1.0)
+	apply_central_force(-fwd * signf(v_long) * mass * surface_drag * fade)
+
+
+## Aerodynamic drag, applied against the direction of travel.
+##
+## Without it the top speed is whatever the gearbox can pull, which on a 400 m
+## straight means a Formula car that never stops accelerating. `tyre_model`
+## supplies F = 0.5 * rho * CdA * v^2 (CdA ~ 1.35 m^2 for an F1 car in race
+## trim) in Newton, and this turns it into the deceleration a body of `mass`
+## feels.
+func _apply_aero_drag(_delta: float, tyre: Dictionary) -> void:
+	aero_drag_n = float(tyre.get("drag", 0.0))
+	var v: float = linear_velocity.length()
+	if aero_drag_n <= 1.0 or v < 1.0:
+		return
+	apply_central_force(-(linear_velocity / v) * aero_drag_n)
+
+
+## Hand the car the ideal line. The AI drives it and reads its corner speeds
+## from it; null (or a stub) leaves the AI on the geometric centre line.
+func set_ideal_line(ideal) -> void:
+	if ideal != null and ideal.points.size() >= 8:
+		ideal_line = ideal
+	else:
+		ideal_line = null
+
+
+## `F`: automatic gearbox and traction control are one switch, the way an F1
+## game's "assists" profile works. The paddles (or Q/E) always work.
+func toggle_assists() -> Dictionary:
+	var on: bool = not bool(assists.get("auto_gearbox", true))
+	assists["auto_gearbox"] = on
+	assists["traction_control"] = on
+	return assists
+
+
+func assists_label() -> String:
+	var auto: bool = bool(assists.get("auto_gearbox", true))
+	var tcs: bool = bool(assists.get("traction_control", true))
+	if auto and tcs:
+		return "AUTO + TC"
+	if auto:
+		return "AUTO"
+	if tcs:
+		return "TC"
+	return "MANUELL"
 
 
 func _ai_shift() -> void:
@@ -693,6 +777,7 @@ func _auto_inputs() -> Dictionary:
 
 
 func _reset() -> void:
+	reset_count += 1
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	global_transform = spawn_transform
