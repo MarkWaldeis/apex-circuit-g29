@@ -124,18 +124,20 @@ func _place(offset: float, outward_speed: float) -> void:
 ## Streifer: der Wagen liegt fast parallel zur Wand und schiebt sich nur mit
 ## einem kleinen Queranteil hinaus. Der normale Anteil der Geschwindigkeit
 ## muss unter `crash.IMPACT_MIN_MS` bleiben, sonst ist es kein Streifer mehr.
-func _place_scrape(offset: float, along_speed: float, outward_speed: float) -> void:
+func _place_scrape(offset: float, along_speed: float, outward_speed: float,
+		spin: float = 0.0) -> void:
 	var tangent: Vector3 = line.flat_tangent(test_index)
 	var left: Vector3 = line.left_at(test_index)
 	var pos: Vector3 = line.points[test_index] + left * offset + Vector3(0, 0.35, 0)
 	player.global_transform = Transform3D(Basis.looking_at(-tangent, Vector3.UP), pos)
 	player.linear_velocity = tangent * along_speed + left * outward_speed
-	player.angular_velocity = Vector3.ZERO
+	# Spin around the car's own up axis, so the tail is pressed into the wall.
+	player.angular_velocity = Vector3(0.0, 0.0, spin)
 	player.apply_throttle(0.0)
 	player.set_meta("test_placed", true)
 	scrape_normal_ms = outward_speed
-	print("SCRAPE placed %.1f m out, %.1f m/s along, %.1f m/s towards the wall"
-		% [offset, along_speed, outward_speed])
+	print("SCRAPE placed %.1f m out, %.1f m/s along, %.1f m/s towards the wall, %.1f rad/s spin"
+		% [offset, along_speed, outward_speed, spin])
 
 
 func _on_phys() -> void:
@@ -183,10 +185,8 @@ func _on_phys() -> void:
 		crash.reset()
 		crash_before = 0
 		# 15,0 m: die Innenkante der Wand steht bei 16,0 - 0,3 = 15,7 m, das
-		# Auto hat also 0,7 m Luft. Zusätzlich dreht es sich um 20 m/s um die
-		# eigene Hochachse, damit es die Wand wirklich entlangschrammt statt
-		# sie einmal anzutippen und wieder wegzufliegen.
-		_place_scrape(15.0, 20.0, 0.5, 20.0)
+		# Auto hat also 0,7 m Luft und schiebt sich mit 0,5 m/s heran.
+		_place_scrape(15.0, 20.0, 0.5)
 		stage = 4
 	elif stage == 4:
 		var idx2: int = line.closest_index(player.global_position)
