@@ -17,8 +17,18 @@ signal crashed(severity: float, kind: String)
 ## over about a second, so a per-tick threshold of 3 m/s never fired and the
 ## driver stopped dead at the wall with `crash_count` still 0. The window is
 ## what makes "I hit the wall" a real event.
+##
+## A window alone is not enough, because losing speed over 0.15 s is something
+## the car does anyway: hard braking with drag over the same window costs
+## roughly 1.5 m/s, so any raw threshold low enough for a light hit also fires
+## on the braking zone for the first corner. What counts is the speed loss the
+## car cannot explain - `_expected_loss()` subtracts what brakes, drag and the
+## limiter already account for, and only the rest is damage.
 const WINDOW := 0.15              ## s over which the speed loss is measured
-const IMPACT_MIN_MS := 3.0        ## speed lost inside the window: a rub below this
+## UNEXPLAINED speed lost inside the window. 3 m/s in 0.15 s is 2 g that
+## nothing on the car can account for, which is a real hit; rubbing along a
+## barrier stays below it.
+const IMPACT_MIN_MS := 3.0
 const IMPACT_FULL_MS := 18.0      ## severity 1.0 from here up
 const DAMAGE_PER_CRASH := 0.22
 
@@ -33,6 +43,10 @@ var _window_t: float = 0.0
 var _window_speed: float = 0.0
 var _window_ready: bool = false
 var _contact_seen: bool = false
+## Diagnostics for the tests: what the car would have lost without a wall, and
+## what is left once that is subtracted.
+var expected_loss_ms: float = 0.0
+var unexplained_ms: float = 0.0
 
 
 func setup(owner_car, surface_model) -> void:
@@ -50,6 +64,8 @@ func reset() -> void:
 	_cooldown = 0.0
 	_window_ready = false
 	_contact_seen = false
+	expected_loss_ms = 0.0
+	unexplained_ms = 0.0
 
 
 func update(delta: float, _surface: Dictionary, forward_speed: float) -> void:
@@ -71,13 +87,34 @@ func update(delta: float, _surface: Dictionary, forward_speed: float) -> void:
 	var lost: float = _window_speed - forward_speed
 	_window_speed = forward_speed
 	_window_t = 0.0
+	expected_loss_ms = _expected_loss(_contact_seen)
+	unexplained_ms = lost - expected_loss_ms
 	if _cooldown > 0.0:
 		_contact_seen = false
 		return
-	if _contact_seen and lost >= IMPACT_MIN_MS:
-		_register(lost, "wall")
+	if _contact_seen and unexplained_ms >= IMPACT_MIN_MS:
+		_register(unexplained_ms, "wall")
 	_contact_seen = false
 	_prev_speed = forward_speed
+
+
+## How much speed the car would have lost inside `WINDOW` with no wall in the
+## way at all.
+##
+## The aerodynamic force is already computed by the car (`aero_drag_n`) and the
+## surface's own drag is a constant deceleration, so neither has to be
+## measured - only read. The roller term is what is left: with the brake pedal
+## down the car decelerates on its own (measured in the real scene: about
+## 10 m/s^2), without it only the limiter and the driveline slow the car down.
+func _expected_loss(braking: bool) -> float:
+	if car == null:
+		return 0.0
+	var mass: float = maxf(float(car.mass), 1.0)
+	var decel: float = float(car.aero_drag_n) / mass
+	if surfaces and not surfaces._last.is_empty():
+		decel += float(surfaces._last.get("drag", 0.0))
+	var roller: float = 4.5 if braking else 10.0
+	return (decel + roller) * WINDOW
 
 
 func _register(impact: float, kind: String) -> void:
