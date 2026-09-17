@@ -256,6 +256,83 @@ func _basis_along(dir: Vector3, along_y: bool) -> Basis:
 	return Basis(right, d.cross(right).normalized(), d)
 
 
+## A tube swept along a poly-line. A cage of boxes cannot make a curved hoop:
+## the halo, the cockpit surround and the dashboard cowl all need a surface that
+## bends smoothly, so they are generated here instead of assembled from
+## primitives. `squash` stretches the circular section into an ellipse, which
+## turns the same generator into a flattened rail.
+func _sweep_tube(pts: Array, radius: float, sides: int, squash: float = 1.0) -> ArrayMesh:
+	var n: int = pts.size()
+	var mesh := ArrayMesh.new()
+	if n < 2 or sides < 3:
+		return mesh
+	# Parallel transport a reference normal along the line, so the tube cannot
+	# twist around its own axis between segments.
+	var tangents: Array = []
+	for i in n:
+		var a: Vector3 = pts[maxi(i - 1, 0)]
+		var b: Vector3 = pts[mini(i + 1, n - 1)]
+		var t: Vector3 = b - a
+		tangents.append(t.normalized() if t.length() > 0.0001 else Vector3.FORWARD)
+	var up := Vector3.UP
+	if absf(tangents[0].dot(up)) > 0.9:
+		up = Vector3.FORWARD
+	var nrm: Vector3 = (up - tangents[0] * up.dot(tangents[0])).normalized()
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	for i in n:
+		var t: Vector3 = tangents[i]
+		if i > 0:
+			var prev: Vector3 = tangents[i - 1]
+			var axis: Vector3 = prev.cross(t)
+			if axis.length() > 0.000001:
+				nrm = nrm.rotated(axis.normalized(), prev.angle_to(t))
+			nrm = (nrm - t * nrm.dot(t))
+			nrm = nrm.normalized() if nrm.length() > 0.000001 else Vector3.UP
+		var bin: Vector3 = t.cross(nrm).normalized()
+		for j in sides:
+			var a2: float = TAU * float(j) / float(sides)
+			var ry: float = radius * squash
+			var off: Vector3 = nrm * (cos(a2) * radius) + bin * (sin(a2) * ry)
+			verts.append(pts[i] + off)
+			norms.append(off.normalized())
+			uvs.append(Vector2(float(j) / float(sides), float(i) / float(n - 1)))
+	var indices := PackedInt32Array()
+	for i in n - 1:
+		for j in sides:
+			var j2: int = (j + 1) % sides
+			var a3: int = i * sides + j
+			var b3: int = i * sides + j2
+			var c3: int = (i + 1) * sides + j
+			var d3: int = (i + 1) * sides + j2
+			indices.append(a3)
+			indices.append(c3)
+			indices.append(b3)
+			indices.append(b3)
+			indices.append(c3)
+			indices.append(d3)
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = norms
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+func _swept(parent: Node3D, pts: Array, radius: float, squash: float, sides: int,
+		mat: StandardMaterial3D, label: String) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = label
+	mi.mesh = _sweep_tube(pts, radius, sides, squash)
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	return mi
+
+
 ## Bounding box of a whole subtree in the coordinate system of `node`, so a GLB
 ## whose root carries an offset (this steering wheel sits 12 m off centre in its
 ## own file) can still be placed exactly where we want it.
@@ -518,41 +595,88 @@ func _build_dash(parent: Node3D) -> void:
 
 
 func _build_halo(parent: Node3D) -> void:
-	var carbon := _mat(Color(0.032, 0.032, 0.036), 0.60, 0.08)
-	var bar_y: float = Poses.HALO_LOCAL.y
-	var bar_z: float = Poses.HALO_LOCAL.z
-	var half: float = Poses.HALO_WIDTH * 0.5
-	_box(parent, Vector3(Poses.HALO_WIDTH, Poses.HALO_THICK, 0.055),
-		Vector3(0.0, bar_y, bar_z), Vector3.ZERO, carbon, "HaloBar")
-	# The centre pod hanging under the bar (in the reference this is the onboard
-	# camera mount) - the detail that makes the hoop read as a hoop.
-	_box(parent, Vector3(0.055, 0.062, 0.050),
-		Vector3(0.0, bar_y - Poses.HALO_THICK * 0.5 - 0.029, bar_z + 0.002),
+	## The bar is a swept tube along an arc, so it reads as the curved hoop of a
+	## Formula car. Built from boxes it was a flat slab straight across the top
+	## of the frame, which is what the reference picture does NOT show.
+	var halo := Node3D.new()
+	halo.name = "Halo"
+	parent.add_child(halo)
+	var carbon := _mat(Color(0.028, 0.028, 0.033), 0.44, 0.12)
+	var arc := _halo_arc()
+	_swept(halo, arc, Poses.HALO_TUBE_R, 1.0, 22, carbon, "HaloBar")
+
+	# Centre pod (the onboard camera mount) and the thin pillar down to the
+	# chassis - the vertical detail the reference shows between bar and dash.
+	var pod_y: float = Poses.HALO_FRONT.y - 0.038
+	var pod_z: float = Poses.HALO_FRONT.z - 0.004
+	_box(halo, Vector3(0.050, 0.034, 0.044), Vector3(0.0, pod_y, pod_z),
 		Vector3.ZERO, carbon, "HaloPod")
-	_box(parent, Vector3(0.026, 0.012, 0.004),
-		Vector3(0.0, bar_y - Poses.HALO_THICK * 0.5 - 0.040, bar_z + 0.028),
-		Vector3.ZERO, _mat(Color(0.01, 0.012, 0.02), 0.25, 0.0, Color(0.03, 0.06, 0.12), 1.0), "HaloPodLens")
-	# Legs sweeping from the ends of the bar down past the driver's shoulders.
+	_box(halo, Vector3(0.028, 0.013, 0.005), Vector3(0.0, pod_y - 0.002, pod_z + 0.024),
+		Vector3.ZERO, _mat(Color(0.008, 0.010, 0.016), 0.12, 0.0), "HaloPodLens")
+	_beam(halo, Vector3(0.0, pod_y - 0.012, pod_z + 0.004), Poses.HALO_PILLAR_BOTTOM,
+		0.015, carbon, "HaloPillar")
+	# The two shoulder legs the hoop continues into, just inside the frame edge.
 	for side in [-1.0, 1.0]:
-		_beam(parent,
-			Vector3(side * half, bar_y, bar_z),
-			Vector3(side * 0.62, -0.30, 0.02),
-			0.036, carbon, "HaloLeg_%s" % ("L" if side < 0.0 else "R"))
+		var end := Vector3(side * Poses.HALO_HALF_SPAN,
+			Poses.HALO_FRONT.y + Poses.HALO_END_LIFT,
+			Poses.HALO_FRONT.z + Poses.HALO_END_BACK)
+		_beam(halo, end, end + Vector3(side * 0.06, -0.30, -0.06),
+			Poses.HALO_TUBE_R * 1.9, carbon, "HaloLeg_%s" % ("L" if side < 0.0 else "R"))
+
+
+func _halo_arc() -> Array:
+	## Points along the bar, sampled by the projected shape rather than by a
+	## physical ring: y and z both grow with u^2, which is exactly the shallow
+	## arc the reference shows (lowest in the middle, lifting to the shoulders).
+	var out: Array = []
+	var n := 32
+	for i in n + 1:
+		var u: float = -1.0 + 2.0 * float(i) / float(n)
+		out.append(Vector3(
+			Poses.HALO_HALF_SPAN * u,
+			Poses.HALO_FRONT.y + Poses.HALO_END_LIFT * u * u,
+			Poses.HALO_FRONT.z + Poses.HALO_END_BACK * u * u))
+	return out
 
 
 func _build_tub(parent: Node3D) -> void:
-	var carbon := _mat(Color(0.075, 0.075, 0.082), 0.66, 0.05)
 	var tub := Node3D.new()
 	tub.name = "Tub"
 	parent.add_child(tub)
-	# Side walls: they only enter the frame at the bottom corners, exactly the
-	# way the reference shot frames the cockpit.
+	## The surround is one continuous swept rail from the left frame edge, round
+	## behind the driver, back out to the right edge. Boxes could never do this:
+	## they showed up as flat grey slabs floating in the lower corners, which is
+	## what made the old view look assembled rather than moulded.
+	var carbon := _mat(Color(0.048, 0.052, 0.064), 0.52, 0.10)
+	var shell_mat := _mat(Color(0.070, 0.075, 0.090), 0.66, 0.05)
+	_swept(tub, Poses.TUB_RAIL, Poses.TUB_RAIL_R, Poses.TUB_RAIL_SQUASH, 18, carbon, "TubRail")
+	_swept(tub, _tub_shell(), Poses.TUB_RAIL_R * 2.05, 1.12, 16, shell_mat, "TubShell")
+	# Floor and headrest mass, both well below the frame centre.
+	_box(tub, Vector3(1.30, 0.10, 1.10), Vector3(0.0, -0.66, -0.30),
+		Vector3(-7, 0, 0), carbon, "TubFloor")
 	for side in [-1.0, 1.0]:
-		_box(tub, Vector3(0.06, 0.55, 0.62), Vector3(side * 0.355, -0.33, -0.44),
-			Vector3(-4.0, side * -13.0, 0.0), carbon, "TubWall_%s" % ("L" if side < 0.0 else "R"))
-		_box(tub, Vector3(0.16, 0.05, 0.26), Vector3(side * 0.325, -0.245, -0.60),
-			Vector3(-18.0, side * -12.0, 0.0), carbon, "TubShoulder_%s" % ("L" if side < 0.0 else "R"))
-	_box(tub, Vector3(0.72, 0.06, 0.55), Vector3(0.0, -0.56, -0.42), Vector3(-6, 0, 0), carbon, "TubFloor")
+		var pad := SphereMesh.new()
+		pad.radius = 0.075
+		pad.height = 0.15
+		pad.radial_segments = 16
+		pad.rings = 8
+		var mi := MeshInstance3D.new()
+		mi.name = "Headrest_%s" % ("L" if side < 0.0 else "R")
+		mi.mesh = pad
+		mi.material_override = shell_mat
+		mi.position = Vector3(side * 0.30, -0.30, 0.06)
+		mi.scale = Vector3(1.0, 0.9, 1.3)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		tub.add_child(mi)
+
+
+func _tub_shell() -> Array:
+	## Same curve as the rail, pushed outwards and down: the bodywork just
+	## outside the rim of the cockpit opening.
+	var out: Array = []
+	for p in Poses.TUB_RAIL:
+		out.append(Vector3(p.x * 1.30, p.y - 0.075, p.z + 0.05))
+	return out
 
 
 func _build_mirrors(parent: Node3D) -> void:
