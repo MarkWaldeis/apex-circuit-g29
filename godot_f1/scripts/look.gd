@@ -19,18 +19,34 @@ const MIN_CLEARANCE := 10.5
 
 var _cache: Dictionary = {}
 var placed: int = 0
+var skipped: int = 0
+var _line: PackedVector3Array = PackedVector3Array()
 
 
 func build(line, track_root: Node3D) -> int:
 	if line == null or line.points.size() < 32:
 		push_warning("Look: racing line missing, skipping props")
 		return 0
+	_line = line.points
 	_tune_track_materials(track_root)
 	_place_corner_props(line)
 	_place_trackside_props(line)
-	print("PROPS placed=", placed)
+	print("PROPS placed=", placed, " skipped=", skipped)
 	print("PROPS nodes=", _count_nodes(self))
 	return placed
+
+
+func _clearance(pos: Vector3) -> float:
+	## Distance to the CLOSEST point of the whole circuit. The track folds back
+	## on itself, so a prop that is 12 m away from "its" corner can still end up
+	## in the middle of another straight.
+	var best := INF
+	var here := Vector2(pos.x, pos.z)
+	for p in _line:
+		var d: float = here.distance_squared_to(Vector2(p.x, p.z))
+		if d < best:
+			best = d
+	return sqrt(best)
 
 
 func _count_nodes(node: Node) -> int:
@@ -106,13 +122,13 @@ func _place_corner_props(line) -> void:
 		var outside: Vector3 = left * (-1.0 if turn > 0.0 else 1.0)
 		var inside: Vector3 = -outside
 		var p: Vector3 = line.points[i]
-		_spawn("tire_stack", p + outside * 11.5, outside, 1.0, 2.0)
-		_spawn("tire_stack", p + outside * 12.6 + t * 2.2, outside, 0.9, 2.4)
-		_spawn("tire_rack", p + outside * 13.4 + t * 4.4, outside, 1.0, 2.6)
+		_spawn("tire_stack", p + outside * 11.5, outside, 1.0)
+		_spawn("tire_stack", p + outside * 12.6 + t * 2.2, outside, 0.9)
+		_spawn("tire_rack", p + outside * 13.4 + t * 4.4, outside, 1.0)
 		# Cones mark the inside of the corner, but they stay beyond the kerb so
 		# the car never drives through them.
-		_spawn("cone", p + inside * 10.1 - t * 3.0, inside, 1.0, 3.2)
-		_spawn("cone", p + inside * 10.3 + t * 3.0, inside, 1.0, 3.2)
+		_spawn("cone", p + inside * 10.1 - t * 3.0, inside, 1.0)
+		_spawn("cone", p + inside * 10.3 + t * 3.0, inside, 1.0)
 		i += 26
 
 
@@ -128,11 +144,11 @@ func _place_trackside_props(line) -> void:
 		var left: Vector3 = t.cross(Vector3.UP).normalized()
 		var p: Vector3 = line.points[i]
 		var dir: Vector3 = left * side
-		_spawn("signboard", p + dir * 12.5, dir, 1.0, 0.9)
+		_spawn("signboard", p + dir * 12.5, dir, 1.0)
 		if (i / 55) % 3 == 0:
-			_spawn("guard_tower", p + dir * 19.0, dir, 1.0, 1.6)
+			_spawn("guard_tower", p + dir * 19.0, dir, 1.0)
 		if (i / 55) % 4 == 1:
-			_spawn("seating", p + dir * 24.0, dir, 1.0, 1.6)
+			_spawn("seating", p + dir * 24.0, dir, 1.0)
 		side = -side
 		i += 55
 	# Start/finish furniture and a little pit-lane life near the S/F line.
@@ -141,17 +157,20 @@ func _place_trackside_props(line) -> void:
 	sf_t = sf_t.normalized()
 	var sf_left: Vector3 = sf_t.cross(Vector3.UP).normalized()
 	var sf: Vector3 = line.points[2]
-	_spawn("gantry", sf - sf_left * 12.0, sf_left, 1.0, 1.0)
-	_spawn("gantry", sf + sf_left * 12.0, -sf_left, 1.0, 1.0)
-	_spawn("seating", sf - sf_left * 20.5, sf_left, 1.0, 1.0)
-	_spawn("seating", sf + sf_left * 20.5, -sf_left, 1.0, 1.0)
-	_spawn("bar", sf - sf_left * 16.0 + sf_t * 12.0, sf_left, 1.0, 1.0)
-	_spawn("tire_rack", sf + sf_left * 15.0 + sf_t * 26.0, sf_left, 1.0, 1.0)
-	_spawn("tire_stack", sf + sf_left * 14.0 + sf_t * 32.0, sf_left, 1.0, 1.0)
+	_spawn("gantry", sf - sf_left * 12.0, sf_left, 1.0)
+	_spawn("gantry", sf + sf_left * 12.0, -sf_left, 1.0)
+	_spawn("seating", sf - sf_left * 20.5, sf_left, 1.0)
+	_spawn("seating", sf + sf_left * 20.5, -sf_left, 1.0)
+	_spawn("bar", sf - sf_left * 16.0 + sf_t * 12.0, sf_left, 1.0)
+	_spawn("tire_rack", sf + sf_left * 15.0 + sf_t * 26.0, sf_left, 1.0)
+	_spawn("tire_stack", sf + sf_left * 14.0 + sf_t * 32.0, sf_left, 1.0)
 
 
-func _spawn(kind: String, pos: Vector3, face_dir: Vector3, scale_mul: float = 1.0, sink: float = 0.0) -> void:
+func _spawn(kind: String, pos: Vector3, face_dir: Vector3, scale_mul: float = 1.0, sink: float = 0.03) -> void:
 	var spec: Dictionary = PROPS[kind]
+	if _clearance(pos) < MIN_CLEARANCE:
+		skipped += 1
+		return
 	var packed: PackedScene = _load(spec["path"])
 	if packed == null:
 		return
@@ -164,7 +183,8 @@ func _spawn(kind: String, pos: Vector3, face_dir: Vector3, scale_mul: float = 1.
 	var h: float = maxf(aabb.size.y, 0.01)
 	var s: float = target / h
 	inst.scale = Vector3(s, s, s)
-	inst.position = pos + Vector3(0.0, target * 0.5 - sink, 0.0)
+	# Drop the model's own bounding box onto the ground, whatever its origin is.
+	inst.position = Vector3(pos.x, pos.y - aabb.position.y * s - sink, pos.z)
 	# Face the track.
 	var flat := Vector3(face_dir.x, 0.0, face_dir.z)
 	if flat.length() > 0.01:
