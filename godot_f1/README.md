@@ -19,6 +19,8 @@ Beim Start erscheint ein Menü. Der Wagen wartet auf dem Startplatz, bis Gas kom
 | `Enter` | Auto-Pilot ein/aus |
 | `R` | Reset auf die Startaufstellung |
 | `C` | Kamera (Cockpit / Verfolger / Helikopter) |
+| `L` | Ideallinie an/aus |
+| `F` | Fahrhilfen: Automatik + Traktionskontrolle an/aus |
 | `Esc` | Menü auf/zu (Pause, Einstellungen, Kalibrierung) |
 | `Ctrl`+`Q` | Spiel beenden |
 
@@ -59,6 +61,80 @@ Das Skript liest die rohen HID-Reports direkt über die Windows-HID-Schnittstell
 
 ## Tests (headless)
 
+## Fahrgefühl: crashen, Ideallinie, schalten, Kurven
+
+Seit dem Fahrgefühl-Paket fährt sich der Wagen wie ein Formel-Wagen statt wie
+ein Spielzeug. Alles unten ist gemessen, nicht behauptet — die Messwerkzeuge
+stehen in `tests/` und lassen sich einzeln starten.
+
+**Crashen und Ausritte.** Die Strecke hat jetzt echte Wände: 476
+Barriere-Boxen in 16 m Abstand zur Ideallinie, 1,15 m hoch, auf der ganzen
+Runde. Wer sie trifft, verliert Tempo, bekommt Schaden (`crash.damage`) und
+wird sichtbar langsamer — das Auto fährt nie durch die Mauer. Wände, die auf
+einem anderen Streckenteil gelandet wären (die T9-Ausfahrt läuft direkt neben
+der Start-Ziel-Geraden), werden beim Bauen verworfen.
+
+Der Untergrund unter den Reifen wird aus dem Querabstand zur Ideallinie
+bestimmt (Asphalt 12 m breit, Kerb 0,85 m, Runoff 10 m, dahinter Gras):
+
+| Untergrund | Grip | Längsverzögerung | Rückmeldung |
+|---|---|---|---|
+| Asphalt | 100 % | — | — |
+| Kerb | 94 % | 1,2 m/s² | starkes Rütteln |
+| Kies | 46 % | 7,5 m/s² | mittel |
+| Gras | 30 % | 10,0 m/s² | leicht, aber rutschig |
+
+Auf Gras und Kies wird das Auto also nicht nur langsamer, es schiebt auch über
+die Vorderräder — ein Ausritt kostet echt Zeit. Das HUD zeigt Untergrund, Grip,
+Schaden und einen Crash-Hinweis (`scripts/status_hud.gd`).
+
+**Ideallinie.** Die angezeigte Linie ist eine echte Ideallinie, nicht die
+Mittellinie: `scripts/ideal_line.gd` zieht die Punkte in den Korridor
+(max. 2,08 m Querabstand von der Mitte) und senkt die Krümmungsenergie von
+0,407 auf 0,322 — gemessen 0,82 s schneller als die Mittellinie auf 1634 m.
+Jeder Punkt bekommt eine Phase:
+
+* **grün** — Gas
+* **gelb** — lupfen
+* **rot** — bremsen (8 Bremszonen, die kürzeste 26 m)
+
+Die KI fährt dieselbe Linie und bremst mit einem Bremshorizont
+(`_ideal_speed_limit()`), also vor der Kurve statt in ihr. `L` blendet die
+Anzeige aus, im Pausenmenü geht es auch.
+
+**Schalten.** `scripts/gearbox.gd` ist ein sequenzielles 8-Gang-Getriebe:
+geometrische Übersetzungen von 3,60 (1. Gang, traktionsbegrenzt) bis 0,87
+(8. Gang), Drehmomentkurve mit Maximum bei 11.000/min, Schaltzeit 50 ms hoch /
+70 ms runter mit Drehmomentschnitt, Motorbremse und Runterschalt-Sperre gegen
+Überdrehen. Gemessen (`tests/test_gearbox.gd`): 0–100 km/h in 2,29 s, Spitze
+312 km/h im 8. Gang, geschaltet wird bei 11.500/min.
+
+Mit `F` (oder im Menü) schaltet man die **Fahrhilfen** um: Automatik und
+Traktionskontrolle an oder aus. Ohne Automatik schaltet nur der Fahrer
+(Paddles, `Q`/`E`, oder das HUD zeigt „MANUELL“), und der Drehzahlbegrenzer
+hält den Wagen, statt heimlich hochzuschalten.
+
+**Kurven.** Die Reifen haben eine echte Grip-Kurve (`scripts/tyre_model.gd`):
+Radlast-abhängiger Abtrieb (rund 3,5-faches Wagengewicht bei 300 km/h),
+Schräglaufwinkel je Achse aus einem Einspurmodell, Grip-Abfall hinter dem
+Maximum, Bremsen und Lenken teilen sich denselben Reifen (Friction Circle),
+Leistungsübersteuern bei niedriger Geschwindigkeit und Traktionskontrolle.
+Gemessen auf der echten Strecke: 0–100 km/h in 3,1 s, maximal 3,5 g
+Querbeschleunigung in den schnellen Kurven, kein Frame über 5 g.
+
+Die Aerodynamik bremst auch: `F = 0,5 · ρ · CdA · v²` mit CdA = 1,15 m² wird
+als echte Kraft aufgebracht, deshalb ist die Spitze eine Zahl und nicht
+„so schnell das Getriebe eben zieht“.
+
+**Rückmeldung.** Am Lenkrad gibt es den Effekt-Kanal (`scripts/ffb_link.gd` →
+UDP 127.0.0.1:5601 → `tools/g29_ffb.py` → DirectInput). Die Kette ist
+messtechnisch belegt (`tests/test_ffb_link.gd`, Mitschnitt: 1245 Pakete, 0
+kaputt). Ob am Ende wirklich Kraft am Lenkrad ankommt, hängt an der Hardware:
+ohne **Netzteil** kann das G29 keine Kraft erzeugen, und Godot selbst hat keine
+Force-Feedback-Schnittstelle. Im Bild ist die Rückmeldung immer da: das HUD
+zeigt sie, und der Kopf im Cockpit lehnt sich in die Kurve, nickt beim Bremsen
+und rüttelt über Kerbs (`scripts/cockpit_camera.gd`).
+
 ```
 godot --headless --path godot_f1 --script tests/test_car_orientation.gd
 godot --headless --path godot_f1 --script tests/test_input_mapping.gd
@@ -68,7 +144,24 @@ godot --headless --path godot_f1 --script tests/test_lap_drive.gd
 godot --headless --path godot_f1 --script tests/test_cockpit_wheel.gd
 godot --headless --path godot_f1 --script tests/test_gameplay_input.gd
 godot --headless --path godot_f1 --script tests/test_pedal_ui.gd
+godot --headless --path godot_f1 --script tests/test_racing_line.gd
+godot --headless --path godot_f1 --script tests/test_gearbox.gd
+godot --headless --path godot_f1 --script tests/test_crash_surfaces.gd
+godot --headless --path godot_f1 --script tests/test_ffb_link.gd
 ```
+
+Zum Nachmessen des Fahrgefühls (schreibt nur Zahlen, keine Dateien):
+
+```
+godot --headless --path godot_f1 --script tests/probe_feel.gd
+godot --headless --path godot_f1 --script tests/probe_grip.gd
+godot --headless --path godot_f1 --script tests/probe_thrust.gd
+```
+
+`probe_feel` misst 0–100 km/h, Endgeschwindigkeit, Bremsverzögerung in g und
+die Querbeschleunigung der KI. `probe_grip` misst die Grip-Kurve auf einer
+leeren Fläche, `probe_thrust` den Zusammenhang zwischen `engine_force` und
+echter Beschleunigung (rund Faktor 1,58).
 
 `test_lap_drive` fährt die echte Szene und prüft, dass Fahrer- und KI-Auto richtig herum fahren und auf der Strecke bleiben.
 
