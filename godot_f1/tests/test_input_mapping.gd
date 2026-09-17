@@ -38,6 +38,7 @@ func _run() -> void:
 	_guided_pedal_calibration()
 	_guided_steer_calibration()
 	_profile_round_trip()
+	_manual_pedal_assignment()
 	_silent_device_detector()
 
 	if failed > 0:
@@ -204,6 +205,30 @@ func _profile_round_trip() -> void:
 	_check(_near(float(g._pedal_rest["throttle"]), 0.25) and _near(float(g._pedal_press["throttle"]), -0.75),
 		"profile_restores_pedal_points")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.profile_path))
+
+
+func _manual_pedal_assignment() -> void:
+	## Manual axis assignment for a pedal, with and without inversion, has to
+	## behave like the guided calibration: 0 at rest, 1 at full press.
+	for i in 12:
+		g.sim_set(i, 0.0)
+	g.apply_manual("throttle", 4, false)
+	g.sim_set(4, 0.0)
+	g.step(0.02)
+	_check(g.throttle_axis == 4 and _near(g.throttle, 0.0), "manual_axis_takes_effect",
+		"axis=%d gas=%.2f" % [g.throttle_axis, g.throttle])
+	g.sim_set(4, 1.0)
+	g.step(0.02)
+	_check(_near(g.throttle, 1.0), "manual_axis_press_reads_full", "gas=%.2f" % g.throttle)
+
+	# same axis, but the driver says the pedal works the other way round
+	g.sim_set(4, 0.0)
+	g.apply_manual("brake", 4, true)
+	g.step(0.02)
+	_check(_near(g.brake, 0.0), "manual_inverted_rest_is_zero", "brake=%.2f" % g.brake)
+	g.sim_set(4, -1.0)
+	g.step(0.02)
+	_check(_near(g.brake, 1.0), "manual_inverted_press_reads_full", "brake=%.2f" % g.brake)
 
 
 func _silent_device_detector() -> void:

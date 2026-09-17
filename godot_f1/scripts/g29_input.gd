@@ -97,6 +97,7 @@ var _cal_peak_dev: float = 0.0
 var _cal_peak_value: float = 0.0
 var _live_timer: float = 0.0
 var _live_checked: bool = false
+var _profile_loaded: bool = false
 
 
 func _ready() -> void:
@@ -111,17 +112,20 @@ func _ready() -> void:
 	if auto_load_profile:
 		load_profile()
 	# Rest positions of whatever axes we can already see, so pedals work even
-	# before the driver opens the settings screen.
+	# before the driver opens the settings screen. A stored profile wins: its
+	# rest points were sampled during calibration, and the driver might already
+	# be resting a foot on a pedal right now.
 	for i in AXES:
-		var v := _raw_axis(i)
-		_rest[i] = v
-		_steer_rest = v if i == steer_axis else _steer_rest
+		_rest[i] = _raw_axis(i)
+		if _profile_loaded:
+			continue
+		_steer_rest = _rest[i] if i == steer_axis else _steer_rest
 		if i == throttle_axis:
-			_pedal_rest["throttle"] = v
+			_pedal_rest["throttle"] = _rest[i]
 		elif i == brake_axis:
-			_pedal_rest["brake"] = v
+			_pedal_rest["brake"] = _rest[i]
 		elif i == clutch_axis:
-			_pedal_rest["clutch"] = v
+			_pedal_rest["clutch"] = _rest[i]
 	cal_phase = 5
 	cal_hint = ""
 
@@ -449,13 +453,17 @@ func apply_manual(which: String, axis: int, invert: bool) -> void:
 			_steer_span = 0.0
 		"throttle", "brake", "clutch":
 			_set_axis_of(which, clampi(axis, 0, AXES - 1))
-			_pedal_span.erase(which)
 			_pedal_press.erase(which)
-			_pedal_rest[which] = _raw_axis(clampi(axis, 0, AXES - 1))
-			# A manual inversion is expressed by mirroring the rest point.
-			if invert:
-				_pedal_rest[which] = _raw_axis(clampi(axis, 0, AXES - 1))
+			_raw_pedal_reset(which, invert)
 	save_profile()
+
+
+func _raw_pedal_reset(which: String, invert: bool) -> void:
+	## Manual assignment: take the current axis value as rest and let the span
+	## grow adaptively - in the direction the driver picked.
+	var ax: int = _axis_of(which)
+	_pedal_rest[which] = _raw_axis(ax)
+	_pedal_span[which] = -1.0 if invert else 1.0
 
 
 func _axis_of(name: String) -> int:
@@ -534,6 +542,7 @@ func load_profile() -> bool:
 	_pedal_press["clutch"] = float(d.get("clutch_press", 0.0))
 	for name in ["throttle", "brake", "clutch"]:
 		_pedal_span[name] = float(_pedal_press[name]) - float(_pedal_rest[name])
+	_profile_loaded = true
 	print("G29 profile loaded: gas=", throttle_axis, " brake=", brake_axis,
 		" clutch=", clutch_axis, " steer=", steer_axis, " invert=", steer_invert)
 	return true
