@@ -64,6 +64,12 @@ func _on_phys() -> void:
 
 	var player2 = main.get("player")
 	var ai2 = main.get("ai_car")
+	# The player car spawns with the auto-pilot off and waits for the driver, so
+	# this run has to press the throttle itself. Leaving that out made the three
+	# "player ..." checks below fail no matter what the car did - they were
+	# reading a stationary car and blaming the physics for it.
+	if player2 and player2.has_method("apply_throttle"):
+		player2.apply_throttle(1.0)
 	if player2 and frames == 400:
 		var moved: float = player_start_z - player2.global_position.z
 		var fwd: float = player2.global_transform.basis.z.dot(player2.linear_velocity)

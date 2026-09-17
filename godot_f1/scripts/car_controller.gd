@@ -139,17 +139,37 @@ func _build_wheels_and_mesh() -> void:
 		add_child(wheel)
 		var mesh: Node3D = e.node
 		if mesh:
+			# The visual rim does NOT live under the VehicleWheel3D node.
+			#
+			# Godot turns that node itself - it carries the steering angle and a
+			# rolling angle - and a mesh child that also rolls therefore cancels
+			# it out. Measured on the real scene at 150 km/h: the tyre's world
+			# orientation stayed put to within 0.1 deg over eight physics ticks 
+			# while the node and the mesh rotated 73 deg per tick in opposite
+			# directions. That is why the wheels looked like they never turned,
+			# and the same cancellation swung the rim's centre around the
+			# suspension mount by +/-0.15 m, a wobble no wheel ever makes.
+			#
+			# So the rim gets its own carrier, parented to the car: the position
+			# comes from the modelled hub, the steering from the physics node
+			# (its X axis carries the yaw and nothing else) and the rolling angle
+			# from the speed. One owner per quantity, nothing to cancel.
 			var old_parent := mesh.get_parent()
 			if old_parent:
 				old_parent.remove_child(mesh)
-			wheel.add_child(mesh)
-			mesh.owner = wheel
-			# The wheel node marks the suspension mount, one rest length above
-			# the hub - drop the rim back down onto the axle.
-			mesh.position = Vector3(0.0, -REST, 0.0)
-			mesh.rotation = Vector3.ZERO
-			_add_wheel_details(mesh, hub.x, radius)
-			_wheel_meshes.append({"mesh": mesh, "front": is_front})
+			var vis := Node3D.new()
+			vis.name = "Vis_" + role
+			vis.position = hub
+			add_child(vis)
+			vis.add_child(mesh)
+			mesh.owner = vis
+			var base_scale: Vector3 = mesh.transform.basis.get_scale()
+			mesh.transform = Transform3D(Basis.from_scale(base_scale), Vector3.ZERO)
+			var detail := _add_wheel_details(mesh, hub.x, radius)
+			_wheel_meshes.append({
+				"mesh": mesh, "vis": vis, "wheel": wheel, "front": is_front,
+				"rim_mat": detail["rim"], "decal_mat": detail["decal"],
+			})
 	_wheel_radius_avg = radius_sum / maxf(float(entries.size()), 1.0)
 
 
@@ -206,14 +226,20 @@ func _mesh_radius(node: Node3D, fallback: float) -> float:
 	return r
 
 
-func _add_wheel_details(mesh: Node3D, _hub_x: float, radius: float) -> void:
+func _add_wheel_details(mesh: Node3D, _hub_x: float, radius: float) -> Dictionary:
 	## F1 wheels are bare slicks, so a plain tyre looks like it does not turn.
 	## A coloured sidewall band (the compound marking), a small decal and a star
 	## of rim spokes make the rotation visible - and they are what a real wheel
 	## looks like from the cockpit.
+	##
+	## The band is a closed ring, so spinning it changes nothing on screen. The
+	## spokes and the sticker are not: at racing speed they pass the eye many
+	## times per frame and strobe. Their materials are handed back to the caller
+	## so they can be faded into the tyre as the wheel speeds up - the same blur
+	## a photograph of a spinning wheel shows.
 	var mi := mesh as MeshInstance3D
 	if mi == null or mi.mesh == null:
-		return
+		return {}
 	var aabb: AABB = mi.mesh.get_aabb()
 	var half_width: float = maxf(aabb.size.x * 0.5, 0.12)
 	var compound: Color = Color(0.85, 0.12, 0.14) if livery != "crimson" else Color(0.92, 0.78, 0.12)
@@ -273,6 +299,7 @@ func _add_wheel_details(mesh: Node3D, _hub_x: float, radius: float) -> void:
 		badge.position = Vector3(face_x, radius * 0.55, 0.0)
 		badge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mesh.add_child(badge)
+	return {"rim": rim_mat, "decal": decal, "band": band_mat}
 
 
 func wheel_roles() -> Dictionary:
@@ -286,17 +313,54 @@ func wheel_roles() -> Dictionary:
 
 
 func _animate_wheels(delta: float, forward_speed: float) -> void:
-	_wheel_roll = fposmod(_wheel_roll + forward_speed * delta / maxf(_wheel_radius_avg, 0.1), TAU)
+	var radius: float = maxf(_wheel_radius_avg, 0.1)
+	var roll_rate: float = forward_speed / radius
+	_wheel_roll = fposmod(_wheel_roll + roll_rate * delta, TAU)
 	for item in _wheel_meshes:
-		var mesh: Node3D = item["mesh"]
-		if mesh == null or not is_instance_valid(mesh):
+		var vis: Node3D = item["vis"]
+		var wheel: VehicleWheel3D = item["wheel"]
+		if vis == null or not is_instance_valid(vis) or wheel == null:
 			continue
-		# Godot already yaws the VehicleWheel3D node itself by the steering
-		# angle, and the rim is a child of that node. Adding the steering yaw
-		# again here (with the opposite sign, as this used to) cancelled the
-		# parent's yaw, which pinned the visible front wheels straight ahead no
-		# matter how hard the driver turned. Only the rolling angle belongs here.
-		mesh.rotation = Vector3(_wheel_roll, 0.0, 0.0)
+		# VehicleWheel3D.transform is Y(yaw) * X(roll). An X rotation leaves the
+		# X axis alone, so reading the node's own x axis yields the steering
+		# angle and nothing else - the same angle the physics uses, with no sign
+		# to guess at.
+		var yaw: float = _wheel_yaw(wheel)
+		vis.basis = Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, _wheel_roll)
+		_blur_tyre_details(item, roll_rate)
+
+
+## Fade the asymmetric tyre markings as the wheel spins up.
+##
+## A wheel at 200 km/h turns about two full revolutions between two rendered
+## frames, so a crisp spoke star or sticker cannot read as rotation - it can only
+## shimmer. Fading it into the tyre as the angular speed rises is what makes the
+## wheel look like it spins instead of flickering.
+func _blur_tyre_details(item: Dictionary, roll_rate: float) -> void:
+	var blur: float = clampf((absf(roll_rate) - 22.0) / 95.0, 0.0, 1.0)
+	var rim: StandardMaterial3D = item.get("rim_mat")
+	if rim:
+		rim.albedo_color = Color(0.46, 0.47, 0.50).lerp(Color(0.055, 0.055, 0.062), blur)
+		rim.roughness = lerpf(0.45, 0.95, blur)
+		rim.metallic = lerpf(0.70, 0.10, blur)
+	var decal: StandardMaterial3D = item.get("decal_mat")
+	if decal:
+		decal.albedo_color = Color(0.86, 0.87, 0.88).lerp(Color(0.09, 0.09, 0.10), blur)
+
+
+## Steering angle carried by a VehicleWheel3D node, in radians.
+func _wheel_yaw(wheel: Node3D) -> float:
+	var x: Vector3 = wheel.transform.basis.x
+	return atan2(-x.z, x.x)
+
+
+## Rolling angle Godot applies to the wheel node itself, in radians. Used by the
+## tests to prove the visual carrier is not fighting the physics node.
+func wheel_node_roll(wheel: Node3D) -> float:
+	var b: Basis = wheel.transform.basis
+	var yaw: float = atan2(-b.x.z, b.x.x)
+	var r: Basis = Basis(Vector3.UP, -yaw) * b
+	return atan2(r.y.z, r.y.y)
 
 
 func _find_token(node: Node, token: String) -> Node3D:

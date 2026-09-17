@@ -92,35 +92,51 @@ func _run() -> void:
 		_check(w2 != null and w2.use_as_traction and not w2.use_as_steering, "rear_wheel_drives_%s" % key)
 
 	# --- 4. rims sit on the axle --------------------------------------------
+	#
+	# The visible rim rides on its own carrier beside the physics wheel, NOT
+	# under it. Godot turns the VehicleWheel3D node itself, and a mesh parented
+	# to that node cancelled the rotation out: measured on the running game at
+	# 150 km/h, the tyre's world orientation did not move at all while the node
+	# and the mesh turned 73 deg per tick in opposite directions - and the same
+	# cancellation swung the rim's centre around the suspension mount by
+	# +/-0.15 m, a wobble no wheel ever makes.
 	for key in ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]:
 		var wheel := car.get_node_or_null(key)
-		if wheel == null or wheel.get_child_count() == 0:
-			_check(false, "rim_child_%s" % key)
+		var vis := car.get_node_or_null("Vis_" + key)
+		_check(wheel != null and vis != null, "visual_carrier_%s" % key)
+		if wheel == null or vis == null:
 			continue
-		var rim: Node3D = wheel.get_child(0)
-		_check(absf(rim.position.y + REST) < 0.001, "rim_at_axle_height_%s" % key,
-			"dy=%.3f" % (rim.position.y + REST))
+		_check(vis.get_parent() == car, "rim_is_not_under_the_physics_wheel_%s" % key)
+		_check(not _has_mesh(wheel), "nothing_draws_under_the_physics_wheel_%s" % key)
+		var dy: float = vis.position.y - (wheel.position.y - REST)
+		_check(absf(dy) < 0.001, "rim_at_axle_height_%s" % key, "dy=%.3f" % dy)
 
 	# --- 5. the visible rims steer and roll ---------------------------------
-	car.steering = 0.40
-	car._animate_wheels(0.05, 20.0)
-	var rim_rear: Node3D = null
-	for key in ["Wheel_FL", "Wheel_FR"]:
-		var wf := car.get_node_or_null(key)
-		var rim_f: Node3D = wf.get_child(0) if wf and wf.get_child_count() > 0 else null
-		# The steering yaw lives on the VehicleWheel3D node itself (Godot
-		# applies it there), and the rim hangs underneath it. The rim must not
-		# add an opposite yaw of its own - that cancelled the steering and left
-		# the visible front wheels pointing straight ahead.
-		_check(rim_f != null and absf(rim_f.rotation.y) < 0.001,
-			"front_rim_does_not_cancel_the_steer_%s" % key,
-			"rim yaw=%.3f" % (rim_f.rotation.y if rim_f else 0.0))
-	for key in ["Wheel_RL", "Wheel_RR"]:
-		var wr := car.get_node_or_null(key)
-		var rim_r: Node3D = wr.get_child(0) if wr and wr.get_child_count() > 0 else null
-		rim_rear = rim_r
-		_check(rim_r != null and absf(rim_r.rotation.y) < 0.001, "rear_rim_does_not_steer_%s" % key)
-	_check(rim_rear != null and absf(rim_rear.rotation.x) > 0.01, "rims_roll_with_speed")
+	# Hand the physics node the rotations Godot applies at runtime - a steering
+	# yaw and a rolling angle - and require the visible rim to carry the yaw
+	# exactly once and the rolling angle from the speed, nothing else.
+	var front := car.get_node_or_null("Wheel_FL")
+	var vis_front := car.get_node_or_null("Vis_Wheel_FL")
+	if front and vis_front:
+		front.rotation = Vector3(0.9, 0.40, 0.0)
+		car._animate_wheels(0.05, 20.0)
+		_check(absf(_vis_yaw(vis_front) - 0.40) < 0.002, "front_rim_steers_like_the_physics_node",
+			"yaw=%.3f" % _vis_yaw(vis_front))
+		_check(absf(car.wheel_node_roll(front) - 0.9) < 0.01,
+			"godot_still_turns_the_physics_node", "roll=%.3f" % car.wheel_node_roll(front))
+	var rear := car.get_node_or_null("Wheel_RR")
+	var vis_rear := car.get_node_or_null("Vis_Wheel_RR")
+	if rear and vis_rear:
+		rear.rotation = Vector3(0.9, 0.0, 0.0)
+		var before: float = car._wheel_roll
+		car._animate_wheels(0.05, 20.0)
+		var want: float = fposmod(before + 20.0 * 0.05 / car._wheel_radius_avg, TAU)
+		_check(_angle_gap(_vis_roll(vis_rear), want) < 0.002, "rear_rim_rolls_with_speed",
+			"roll=%.4f want=%.4f" % [_vis_roll(vis_rear), want])
+		_check(absf(_vis_yaw(vis_rear)) < 0.001, "rear_rim_does_not_steer")
+		# A wheel mesh parented to the physics node would have been cancelled by
+		# exactly this rotation, which is why the rim no longer lives there.
+		_check(absf(car.wheel_node_roll(rear)) > 0.5, "physics_node_carries_its_own_roll")
 
 	# --- cockpit camera lives in the cockpit, not over the rear wing ---------
 	_check(Poses.HELMET.z > Poses.REAR_AXLE_Z and Poses.HELMET.z < Poses.FRONT_AXLE_Z,
@@ -134,6 +150,37 @@ func _run() -> void:
 	else:
 		print("CAR_ORIENTATION PASS")
 		quit(0)
+
+
+## Yaw of a visual wheel carrier. Its basis is Y(yaw) * X(roll), and an X
+## rotation leaves the x axis alone, so the yaw falls straight out of it.
+func _vis_yaw(vis: Node3D) -> float:
+	var x: Vector3 = vis.transform.basis.x
+	return atan2(-x.z, x.x)
+
+
+## Rolling angle of a visual wheel carrier, in radians.
+func _vis_roll(vis: Node3D) -> float:
+	var b: Basis = vis.transform.basis
+	var r: Basis = Basis(Vector3.UP, -_vis_yaw(vis)) * b
+	return atan2(r.y.z, r.y.y)
+
+
+## Smallest absolute difference between two angles, in radians.
+func _angle_gap(a: float, b: float) -> float:
+	var d: float = fposmod(a - b + PI, TAU) - PI
+	return absf(d)
+
+
+## Does anything under `node` draw? A rim mesh parented to a VehicleWheel3D node
+## is cancelled by the rotation Godot applies to that node.
+func _has_mesh(node: Node) -> bool:
+	if node is MeshInstance3D:
+		return true
+	for c in node.get_children():
+		if _has_mesh(c):
+			return true
+	return false
 
 
 func _glb_wheel_positions() -> Dictionary:
