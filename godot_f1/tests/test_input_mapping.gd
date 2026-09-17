@@ -38,6 +38,9 @@ func _run() -> void:
 	_guided_pedal_calibration()
 	_guided_steer_calibration()
 	_silent_start_then_real_data()
+	_partial_calibration_keeps_learning()
+	_repairs_a_broken_profile_rest()
+	_profile_waits_for_data()
 	_profile_round_trip()
 	_manual_pedal_assignment()
 	_silent_device_detector()
@@ -73,6 +76,10 @@ func _uncalibrated() -> void:
 	g._auto_rest.clear()
 	g._auto_press.clear()
 	g._have_data = false
+	# start from a clean bus: a leftover non-zero axis would count as "data has
+	# arrived" and anchor the rest position too early
+	for i in 12:
+		g.sim_set(i, 0.0)
 	g.throttle_axis = 1
 	g.brake_axis = 2
 	g.clutch_axis = 3
@@ -129,6 +136,111 @@ func _silent_start_then_real_data() -> void:
 	g.step(0.05)
 	_check(_near(g.brake, 0.0) and _near(g.throttle, 0.0), "released_again_reads_idle",
 		"gas=%.2f brake=%.2f" % [g.throttle, g.brake])
+
+
+func _partial_calibration_keeps_learning() -> void:
+	## Measured on this machine: the driver pressed the pedals only about 57 %
+	## of the way during calibration, which would make the game reach 100 % far
+	## too early. Pressing further during the race has to extend the range.
+	_uncalibrated()
+	g._have_data = true
+	g.throttle_axis = 2
+	g._pedal_rest["throttle"] = 1.0
+	g._pedal_press["throttle"] = 0.43      # partial press recorded by calibration
+	g.sim_set(2, 0.43)
+	g.step(0.02)
+	_check(_near(g.throttle, 1.0), "partial_calibration_reads_full_at_its_end",
+		"gas=%.2f" % g.throttle)
+	g.sim_set(2, 0.0)
+	g.step(0.02)
+	_check(_near(g.throttle, 1.0), "fuller_press_still_reads_full", "gas=%.2f" % g.throttle)
+	_check(_near(float(g._pedal_press["throttle"]), 0.0), "range_grew_to_the_real_end",
+		"press=%.2f" % float(g._pedal_press["throttle"]))
+	g.sim_set(2, 0.5)
+	g.step(0.02)
+	_check(g.throttle > 0.4 and g.throttle < 0.6, "halfway_is_halfway_again",
+		"gas=%.2f" % g.throttle)
+	g.sim_set(2, 1.0)
+	g.step(0.02)
+	_check(_near(g.throttle, 0.0) and _near(float(g._pedal_press["throttle"]), 0.0),
+		"release_does_not_break_the_range")
+
+	# same idea for the steering: a partial right turn must not mean full lock
+	g._steer_rest = 0.0
+	g._steer_span = 0.55
+	g.steer_invert = false
+	g.sim_set(0, 0.55)
+	g.step(0.02)
+	_check(_near(g.steer, 1.0, 0.06), "partial_steer_calibration_reaches_full_lock",
+		"steer=%.2f" % g.steer)
+	g.sim_set(0, 1.0)
+	g.step(0.02)
+	_check(_near(g._steer_span, 1.0), "steer_range_grew", "span=%.2f" % g._steer_span)
+	g.sim_set(0, 0.55)
+	g.step(0.02)
+	_check(g.steer < 0.75, "steering_is_no_longer_twitchy", "steer=%.2f" % g.steer)
+
+
+func _repairs_a_broken_profile_rest() -> void:
+	## An older build could save a rest of 0.0 although the pedals sit at 1.0
+	## when released. The live device decides, the calibrated range is kept.
+	_uncalibrated()
+	g._profile_loaded = true
+	g._pedal_rest = {"throttle": 0.0, "brake": 0.0, "clutch": 0.0}
+	g._pedal_press = {"throttle": -1.0, "brake": -1.0, "clutch": -1.0}
+	for i in 12:
+		g.sim_set(i, 0.0)
+	g.sim_set(1, 1.0)
+	g.step(0.05)
+	_check(_near(float(g._pedal_rest["throttle"]), 1.0), "broken_rest_is_repaired",
+		"rest=%.2f" % float(g._pedal_rest["throttle"]))
+	_check(_near(g.throttle, 0.0), "repaired_profile_reads_idle", "gas=%.2f" % g.throttle)
+	g.sim_set(1, 0.0)
+	g.step(0.05)
+	_check(_near(g.throttle, 1.0), "repaired_profile_still_reaches_full", "gas=%.2f" % g.throttle)
+
+	# a calibration with an impossibly short range is ignored altogether
+	_uncalibrated()
+	g._profile_loaded = true
+	g.throttle_axis = 1
+	g._pedal_rest["throttle"] = 0.5
+	g._pedal_press["throttle"] = 0.53
+	g.sim_set(1, 0.5)
+	g.step(0.05)
+	_check(_near(g.throttle, 0.0) and not g._pedal_press.has("throttle"),
+		"implausible_calibration_is_discarded", "gas=%.2f" % g.throttle)
+
+
+func _profile_waits_for_data() -> void:
+	## Regression: a loaded profile was evaluated against the flat zeros the
+	## device reports before its first HID report, so the game started with all
+	## three pedals at 100 %.
+	_uncalibrated()
+	g._profile_loaded = true
+	g.throttle_axis = 2
+	g._pedal_rest["throttle"] = 1.0
+	g._pedal_press["throttle"] = 0.43
+	g.sim_set(2, 0.0)
+	for i in 30:
+		g.step(0.02)
+	_check(_near(g.throttle, 0.0), "stored_profile_is_ignored_before_data",
+		"gas=%.2f have_data=%s" % [g.throttle, g._have_data])
+	g.sim_set(2, 1.0)
+	g.step(0.02)
+	_check(_near(g.throttle, 0.0), "stored_profile_reads_idle_once_data_arrives",
+		"gas=%.2f" % g.throttle)
+	g.sim_set(2, 0.43)
+	g.step(0.02)
+	_check(_near(g.throttle, 1.0), "stored_profile_still_maps_the_press",
+		"gas=%.2f phase=%d raw2=%.2f rest=%.2f press=%.2f" % [
+			g.throttle, g.cal_phase, g._raw[2],
+			float(g._pedal_rest.get("throttle", -9.0)), float(g._pedal_press.get("throttle", -9.0))])
+	# nothing changed, so there is nothing to write
+	g._profile_dirty = false
+	g.sim_set(2, 1.0)
+	for i in 20:
+		g.step(0.02)
+	_check(not g._profile_dirty, "no_endless_profile_writes")
 
 
 func _pedal_polarities() -> void:

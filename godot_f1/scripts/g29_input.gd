@@ -104,6 +104,10 @@ var _profile_loaded: bool = false
 var _have_data: bool = false
 var _auto_rest: Dictionary = {}    ## pedal -> sampled rest position
 var _auto_press: Dictionary = {}   ## pedal -> extreme reached while pressing
+## Set when the mapping learned something new (a longer pedal travel or a
+## corrected rest position); written to disk a few seconds later.
+var _profile_dirty: bool = false
+var _save_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -156,6 +160,12 @@ func step(delta: float) -> void:
 	else:
 		_apply_mapping()
 	_read_paddles()
+	if _profile_dirty:
+		_save_timer += delta
+		if _save_timer > 3.0:
+			save_profile()
+			_profile_dirty = false
+			_save_timer = 0.0
 
 
 func has_driver_input() -> bool:
@@ -201,6 +211,22 @@ func _anchor_auto_rest() -> void:
 		_auto_rest[name] = _raw[_axis_of(name)]
 	if not steer_locked:
 		_steer_rest = _raw[steer_axis]
+	# A profile written by an older, broken build can claim a rest of 0.0 where
+	# the pedal really sits at 1.0. Trust the live device for the rest position
+	# (the pedals are released when the game starts) and keep the calibrated
+	# range, shifted along with it.
+	if _profile_loaded:
+		for name in ["throttle", "brake", "clutch"]:
+			if not (_pedal_rest.has(name) and _pedal_press.has(name)):
+				continue
+			var stored_rest: float = float(_pedal_rest[name])
+			var stored_press: float = float(_pedal_press[name])
+			var now: float = _raw[_axis_of(name)]
+			if absf(now - stored_rest) > 0.5:
+				_pedal_rest[name] = now
+				_pedal_press[name] = now + (stored_press - stored_rest)
+				_profile_dirty = true
+				print("G29 profile rest for %s corrected: %.2f -> %.2f" % [name, stored_rest, now])
 	print("G29 data arrived: rest gas=%.2f brake=%.2f clutch=%.2f steer=%.2f" % [
 		_auto_rest.get("throttle", 0.0), _auto_rest.get("brake", 0.0),
 		_auto_rest.get("clutch", 0.0), _steer_rest])
@@ -238,6 +264,16 @@ func _any_axis_moved() -> bool:
 ## ---- mapping --------------------------------------------------------------
 
 func _apply_mapping() -> void:
+	# The device reports a flat 0.0 on every axis until its first HID report
+	# arrives. Feeding those zeros into a stored calibration computes nonsense
+	# (with rest = 1.0 and press = 0.43 a raw 0.0 means "fully pressed"), which
+	# is what made all three pedals read 100 % during the first seconds.
+	if not _have_data:
+		throttle = 0.0
+		brake = 0.0
+		clutch = 0.0
+		steer = 0.0
+		return
 	last_axis_moved = -1
 	var best := 0.02
 	for i in AXES:
@@ -263,9 +299,20 @@ func _pedal_value(name: String, axis: int) -> float:
 		var c_rest: float = float(_pedal_rest[name])
 		var c_press: float = float(_pedal_press[name])
 		var c_span: float = c_press - c_rest
-		if absf(c_span) < 0.05:
-			return 0.0
-		return clampf((v - c_rest) / c_span, 0.0, 1.0)
+		if absf(c_span) < 0.15:
+			# Implausible calibration (a pedal travels much further than that):
+			# fall through to the automatic mapping instead of believing it.
+			_pedal_press.erase(name)
+		else:
+			# Learn a longer travel: the driver often presses harder during the
+			# race than during calibration, and a mapped range that is too short
+			# makes the pedal reach 100 % far too early.
+			var c_dev: float = v - c_rest
+			if absf(c_dev) > absf(c_span) and signf(c_dev) == signf(c_span):
+				_pedal_press[name] = v
+				c_span = c_dev
+				_profile_dirty = true
+			return clampf(c_dev / c_span, 0.0, 1.0)
 	# Before calibration: anchor on the first believable sample (pedals
 	# released) and extend towards the far end while the driver presses.
 	if not _auto_rest.has(name):
@@ -291,10 +338,11 @@ func _pedal_value(name: String, axis: int) -> float:
 func _apply_steer() -> void:
 	var v: float = _raw[steer_axis]
 	var dev: float = v - _steer_rest
-	if absf(_steer_span) < 0.05:
-		# Learn only the range while driving; the direction stays whatever the
-		# driver set (calibration detects it, or the menu toggles it).
-		_steer_span = maxf(absf(_steer_span), absf(dev))
+	# Learn a bigger lock: the driver may turn the wheel much further than he did
+	# during calibration, and a short range makes the steering twitchy.
+	if absf(dev) > _steer_span * 1.02 and absf(dev) > 0.05:
+		_steer_span = absf(dev)
+		_profile_dirty = true
 	var s: float = 0.0
 	if absf(_steer_span) > 0.05:
 		s = clampf(dev / _steer_span, -1.0, 1.0)
