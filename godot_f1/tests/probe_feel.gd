@@ -25,6 +25,7 @@ var ai_max_lat_speed_g: float = 0.0
 var ai_max_lat_speed: float = 0.0
 var high_speed_max_g: float = 0.0
 var frame_lat: Array = []
+var brake_spikes: int = 0
 
 
 func _initialize() -> void:
@@ -45,11 +46,33 @@ func _on_phys() -> void:
 	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
 	if player == null:
 		return
-	# 0-100 km/h on the main straight.
-	if frames < 900:
+	# 0-100 km/h flat out, then brake as soon as the car is fast enough.
+	#
+	# Braking at a fixed frame 900 measured the wrong thing: by then the car has
+	# reached the end of the main straight and stopped against something, so the
+	# "brake" figure was taken from 19.9 km/h and said nothing about the brakes.
+	# Triggering on speed measures an actual braking event.
+	if brake_from <= 0.0:
 		player.apply_throttle(1.0)
+		if player.speed_kmh >= 250.0 or frames >= 750:
+			brake_from = player.speed_kmh
+			brake_frame = frames
+			brake_prev_speed = player.speed_kmh
+			player.apply_throttle(0.0)
+			player.apply_brake(1.0)
+	elif player.speed_kmh > 20.0:
+		var decel: float = (brake_prev_speed - player.speed_kmh) / 3.6 / dt
+		# A single tick cannot decelerate a car by more than its tyres can bite,
+		# so anything past ~6 g is a collision or a reset, not braking. Keeping
+		# those samples produced a "peak 277 g", which is the probe measuring an
+		# accident and calling it the brakes.
+		if decel / 9.81 <= 6.0:
+			peak_decel_g = maxf(peak_decel_g, decel / 9.81)
+		else:
+			brake_spikes += 1
+		brake_prev_speed = player.speed_kmh
 	else:
-		player.apply_throttle(0.0)
+		player.apply_brake(0.0)
 	if frames in [10, 30, 60, 90, 150, 300]:
 		var tcut: float = float(player.tyres.throttle_cut)
 		var wl = player.get_node_or_null("Wheel_RL")
@@ -68,17 +91,6 @@ func _on_phys() -> void:
 			float(player.crash.damage), float(player.aero_drag_n),
 			String(player.surface_name), float(player.brake), float(player.global_position.y),
 			float(player.body_pitch)])
-	if frames == 900:
-		brake_from = player.speed_kmh
-		brake_frame = frames
-		brake_prev_speed = player.speed_kmh
-		player.apply_brake(1.0)
-	if frames > 900 and frames < 1100:
-		var decel: float = (brake_prev_speed - player.speed_kmh) / 3.6 / dt
-		peak_decel_g = maxf(peak_decel_g, decel / 9.81)
-		brake_prev_speed = player.speed_kmh
-	if frames == 1100:
-		player.apply_brake(0.0)
 	var accel_vec: Vector3 = (player.linear_velocity - _prev_vel) / dt
 	_prev_vel = player.linear_velocity
 	if t100 < 0.0 and player.speed_kmh >= 100.0:
@@ -110,7 +122,8 @@ func _on_phys() -> void:
 		var p95: float = frame_lat[int(float(frame_lat.size() - 1) * 0.95)] if frame_lat.size() > 20 else 0.0
 		print("FEEL 0-100 %.2f s" % t100)
 		print("FEEL top speed %.1f km/h in gear %d (player)" % [top_speed, top_gear])
-		print("FEEL brake from %.1f km/h peak %.2f g" % [brake_from, peak_decel_g])
+		print("FEEL brake from %.1f km/h peak %.2f g (%d ticks over 6 g ignored as contacts)" % [
+			brake_from, peak_decel_g, brake_spikes])
 		print("FEEL ai max lateral %.2f g, max slip %.2f, max speed %.1f km/h" % [
 			ai_max_lat_g, ai_max_slip, ai_max_speed])
 		print("FEEL ai lateral p95 %.2f g, frames>3g %d, >5g %d, >120km/h max %.2f g" % [

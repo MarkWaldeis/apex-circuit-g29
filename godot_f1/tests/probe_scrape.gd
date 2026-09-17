@@ -41,7 +41,11 @@ func _boot() -> void:
 	player.linear_velocity = tangent * 25.0
 	player.angular_velocity = Vector3.ZERO
 	player.apply_throttle(0.0)
-	start_speed = player.speed_kmh
+	# `car.speed_kmh` is refreshed by the car's own physics tick, so reading it
+	# right after the transform still returns the stationary value and the
+	# summary printed "0 -> 56 km/h" for a run that started at 90 km/h. Take the
+	# entry speed from the velocity that was actually set.
+	start_speed = player.linear_velocity.length() * 3.6
 	physics_frame.connect(_on_phys)
 
 

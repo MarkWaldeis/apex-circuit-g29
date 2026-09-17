@@ -104,14 +104,17 @@ func update(delta: float, _surface: Dictionary, forward_speed: float) -> void:
 ## measured - only read. The roller term is what is left: with the brake pedal
 ## down the car decelerates on its own (measured in the real scene: about
 ## 10 m/s^2), without it only the limiter and the driveline slow the car down.
-func _expected_loss(braking: bool) -> float:
+## `touching` is the honest name for the second term: the roller part of the
+## deceleration drops as soon as the tub is in contact with something (the wall
+## is doing the work), not when the driver presses the brake pedal.
+func _expected_loss(touching: bool) -> float:
 	if car == null:
 		return 0.0
 	var mass: float = maxf(float(car.mass), 1.0)
 	var decel: float = float(car.aero_drag_n) / mass
 	if surfaces and not surfaces._last.is_empty():
 		decel += float(surfaces._last.get("drag", 0.0))
-	var roller: float = 4.5 if braking else 10.0
+	var roller: float = 4.5 if touching else 10.0
 	return (decel + roller) * WINDOW
 
 
