@@ -430,7 +430,27 @@ func _build_wheel(parent: Node3D) -> void:
 		rim.mesh = torus
 		rim.material_override = _mat(Color(0.07, 0.07, 0.08), 0.6, 0.05)
 		pivot.add_child(rim)
+	_build_column_and_paddles(pivot)
 	_build_hands(pivot, parent)
+
+
+func _build_column_and_paddles(pivot: Node3D) -> void:
+	## A steering column so the wheel is mounted rather than floating, plus the
+	## two shift paddles that sit behind the rim on a real car.
+	var carbon := _mat(Color(0.040, 0.042, 0.050), 0.55, 0.10)
+	var metal := _mat(Color(0.42, 0.44, 0.47), 0.35, 0.85)
+	var column := _box(pivot, Vector3(0.085, 0.085, 0.16), Vector3(0.0, -0.006, -0.085),
+		Vector3.ZERO, carbon, "SteeringColumn")
+	column.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for side in [-1.0, 1.0]:
+		var paddle := _box(pivot, Vector3(0.022, 0.082, 0.050),
+			Vector3(side * Poses.WHEEL_WIDTH * 0.44, -0.014, -0.052),
+			Vector3(-20.0, side * 12.0, 0.0), carbon, "Paddle_%s" % ("L" if side < 0.0 else "R"))
+		paddle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var edge := _box(pivot, Vector3(0.024, 0.010, 0.052),
+			Vector3(side * Poses.WHEEL_WIDTH * 0.44, -0.052, -0.050),
+			Vector3(-20.0, side * 12.0, 0.0), metal, "PaddleEdge_%s" % ("L" if side < 0.0 else "R"))
+		edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func _build_wheel_leds(pivot: Node3D, half_h: float) -> void:
