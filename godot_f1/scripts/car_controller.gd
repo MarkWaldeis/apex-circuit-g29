@@ -253,6 +253,11 @@ func apply_throttle(amount: float) -> void:
 	set_meta("script_throttle", clampf(amount, 0.0, 1.0))
 
 
+func apply_brake(amount: float) -> void:
+	## Scripted brake input, used by the headless tests.
+	set_meta("script_brake", clampf(amount, 0.0, 1.0))
+
+
 func _on_shift_up() -> void:
 	if gear < MAX_GEAR and _shift_cd <= 0.0:
 		gear += 1
@@ -318,6 +323,8 @@ func _physics_process(delta: float) -> void:
 			throttle_in = 0.85
 			clutch_in = 0.0
 			clutch_assist = true
+		if has_meta("script_brake"):
+			brake_in = float(get_meta("script_brake"))
 
 	# Speed-sensitive steering: F1 lock-to-lock tightens at speed.
 	var spd: float = abs(forward_vel)
