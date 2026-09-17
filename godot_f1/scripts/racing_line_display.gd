@@ -6,11 +6,14 @@ extends Node3D
 
 const IdealLine = preload("res://scripts/ideal_line.gd")
 
-const HEIGHT := 0.06
-const WIDTH := 0.55
-const COLOR_THROTTLE := Color(0.16, 0.95, 0.28, 0.72)
-const COLOR_LIFT := Color(0.98, 0.85, 0.16, 0.78)
-const COLOR_BRAKE := Color(0.95, 0.16, 0.13, 0.85)
+const HEIGHT := 0.07
+## Breit genug, dass die Linie aus dem Cockpit (Kamera 1,1 m hoch, FOV ~70)
+## schon 30 m vor dem Auto klar zu lesen ist - eine 0,55 m schmale Linie ging
+## dort im Asphalt unter.
+const WIDTH := 0.9
+const COLOR_THROTTLE := Color(0.22, 1.0, 0.32, 0.92)
+const COLOR_LIFT := Color(1.0, 0.86, 0.16, 0.94)
+const COLOR_BRAKE := Color(1.0, 0.15, 0.12, 0.96)
 
 var visible_segments: int = 0
 var _mesh: MeshInstance3D
