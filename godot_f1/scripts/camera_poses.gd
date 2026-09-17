@@ -20,7 +20,7 @@ const REAR_AXLE_Z := -2.005
 const HELMET := Vector3(0.0, 1.29, 0.05)
 const LOOK := Vector3(0.0, 0.42, 16.0)
 ## Cockpit props, in camera space: in front of the lens (negative Z).
-const WHEEL_LOCAL := Vector3(0.0, -0.16, -0.58)
+const WHEEL_LOCAL := Vector3(0.0, -0.13, -0.40)
 const DASH_LOCAL := Vector3(0.0, -0.46, -0.80)
 ## How far the visible steering wheel turns for full lock (radians).
 const WHEEL_TURN := 2.4

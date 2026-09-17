@@ -15,7 +15,8 @@ const PROPS := {
 }
 
 const ROAD_HALF_WIDTH := 9.5
-const MIN_CLEARANCE := 10.5
+const MIN_CLEARANCE := 12.0
+const CORNER_CLEARANCE := 9.8   ## footprint corners must stay off the 9.5 m road
 
 var _cache: Dictionary = {}
 var placed: int = 0
@@ -177,18 +178,40 @@ func _spawn(kind: String, pos: Vector3, face_dir: Vector3, scale_mul: float = 1.
 	var inst: Node3D = packed.instantiate()
 	inst.name = "Prop_%s_%d" % [kind, placed]
 	add_child(inst)
-	# Scale the model so its height matches the real-world size we want.
-	var aabb: AABB = _aabb(inst)
+	# Scale the model so its height matches the real-world size we want. Every
+	# prop GLB carries the position it had in the Blender scene (12, 24, ... 120 m
+	# off centre), so the box has to be measured through the transform chain and
+	# the instance moved back by its own offset - otherwise the prop stands tens
+	# of metres away from where the circuit wants it.
+	var aabb: AABB = _local_bounds(inst)
 	var target: float = float(spec["height"]) * scale_mul
 	var h: float = maxf(aabb.size.y, 0.01)
 	var s: float = target / h
 	inst.scale = Vector3(s, s, s)
-	# Drop the model's own bounding box onto the ground, whatever its origin is.
-	inst.position = Vector3(pos.x, pos.y - aabb.position.y * s - sink, pos.z)
 	# Face the track.
 	var flat := Vector3(face_dir.x, 0.0, face_dir.z)
 	if flat.length() > 0.01:
 		inst.rotation.y = atan2(-flat.x, -flat.z)
+	# Now that the instance is rotated, move it so the artwork's bounding box
+	# (which sits far off centre in every prop file) lands on `pos` with its base
+	# on the ground. The offset has to be rotated with the instance, otherwise a
+	# rotated prop ends up hundreds of metres away.
+	var rot := Basis(Vector3.UP, inst.rotation.y)
+	var offset: Vector3 = rot * (Vector3(aabb.get_center().x, 0.0, aabb.get_center().z) * s)
+	inst.position = Vector3(pos.x, pos.y - aabb.position.y * s - sink, pos.z) - offset
+	# The whole footprint has to stay clear of the track, not just its centre -
+	# a wide prop (or one whose parts are spread out in the file) can otherwise
+	# reach onto the racing surface.
+	var yaw: float = inst.rotation.y
+	var hx: float = aabb.size.x * s * 0.5
+	var hz: float = aabb.size.z * s * 0.5
+	for cx in [hx, -hx]:
+		for cz in [hz, -hz]:
+			var corner := Vector3(cx * cos(yaw) + cz * sin(yaw), 0.0, -cx * sin(yaw) + cz * cos(yaw))
+			if _clearance(pos + corner) < CORNER_CLEARANCE:
+				skipped += 1
+				inst.queue_free()
+				return
 	placed += 1
 
 
@@ -198,17 +221,25 @@ func _load(path: String) -> PackedScene:
 	return _cache[path]
 
 
-func _aabb(node: Node) -> AABB:
+func _local_bounds(node: Node3D) -> AABB:
+	## AABB of a whole subtree in `node`'s own coordinate system.
 	var out := AABB()
 	var first := true
-	for child in _walk(node):
-		var mi := child as MeshInstance3D
-		if mi == null or mi.mesh == null:
-			continue
-		var box: AABB = mi.get_aabb()
-		if first:
-			out = box
-			first = false
-		else:
-			out = out.merge(box)
+	var stack: Array = [{"node": node, "xf": Transform3D.IDENTITY}]
+	while not stack.is_empty():
+		var item: Dictionary = stack.pop_back()
+		var n: Node3D = item["node"]
+		var xf: Transform3D = item["xf"]
+		var mi := n as MeshInstance3D
+		if mi and mi.mesh:
+			var box: AABB = xf * mi.get_aabb()
+			if first:
+				out = box
+				first = false
+			else:
+				out = out.merge(box)
+		for c in n.get_children():
+			var c3 := c as Node3D
+			if c3:
+				stack.append({"node": c3, "xf": xf * c3.transform})
 	return out

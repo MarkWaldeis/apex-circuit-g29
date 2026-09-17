@@ -28,6 +28,7 @@ common/physics_ticks_per_second=90
 
 lights_and_shadows/directional_shadow/size=8192
 anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/use_taa=true
 environment/defaults/default_clear_color=Color(0.45, 0.58, 0.72, 1)
 
 [input]
