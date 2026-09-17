@@ -86,7 +86,7 @@ func _process(delta: float) -> void:
 		var kmh = target.get("speed_kmh")
 		if gear != null and kmh != null:
 			_gear_label.text = "%d" % int(gear)
-			_speed_label.text = "%d\nKM/H" % int(round(float(kmh)))
+			_speed_label.text = "%d KM/H" % int(round(float(kmh)))
 
 
 func _snap(delta: float = 0.0) -> void:
@@ -454,6 +454,7 @@ func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 	var logo := _mat(Color(0.80, 0.81, 0.83), 0.55, 0.03)
 	var accent := _mat(Color(0.70, 0.09, 0.10), 0.62, 0.03)
 	var suit := _mat(Color(0.070, 0.073, 0.081), 0.74, 0.02)
+	var seam := _mat(Color(0.34, 0.35, 0.37), 0.55, 0.10)
 	# The rim tube of the wheel model sits at roughly 41 % of the wheel width.
 	var rim_x: float = Poses.WHEEL_WIDTH * 0.41
 	for side in [-1.0, 1.0]:
@@ -506,6 +507,23 @@ func _build_hands(pivot: Node3D, parent: Node3D) -> void:
 				0.0076, glove, "Finger%d" % f)
 			_limb(hand, Vector3(side * -0.030, y, 0.008), Vector3(side * -0.042, y - 0.004, -0.002),
 				0.0068, glove_dark, "FingerTip%d" % f)
+			# A knuckle bump on the back of the hand and a light seam between the
+			# fingers: without them a gloved fist renders as one dark lump.
+			var knuckle := MeshInstance3D.new()
+			knuckle.name = "Knuckle%d" % f
+			var bump := SphereMesh.new()
+			bump.radius = 0.0058
+			bump.height = 0.0116
+			bump.radial_segments = 12
+			bump.rings = 6
+			knuckle.mesh = bump
+			knuckle.material_override = glove_top
+			knuckle.position = Vector3(side * -0.004, y + 0.006, 0.022)
+			knuckle.scale = Vector3(1.0, 0.9, 0.45)
+			knuckle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			hand.add_child(knuckle)
+			_box(hand, Vector3(0.024, 0.0016, 0.022), Vector3(side * -0.020, y - 0.011, 0.010),
+				Vector3(0.0, 0.0, side * 16.0), seam, "Seam%d" % f)
 		# thumb along the inside of the rim
 		_limb(hand, Vector3(side * 0.000, 0.046, 0.020), Vector3(side * -0.024, 0.060, 0.010),
 			0.0105, glove, "Thumb")
@@ -566,22 +584,21 @@ func _build_dash(parent: Node3D) -> void:
 	_gear_label.outline_modulate = Color(0.01, 0.02, 0.04)
 	_gear_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gear_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_gear_label.position = Vector3(w * 0.20, -0.002, 0.020)
+	_gear_label.position = Vector3(w * 0.22, 0.004, 0.020)
 	_gear_label.no_depth_test = false
 	dash.add_child(_gear_label)
 
 	_speed_label = Label3D.new()
 	_speed_label.name = "SpeedReadout"
-	_speed_label.text = "0\nKM/H"
-	_speed_label.font_size = 44
-	_speed_label.pixel_size = 0.00055
+	_speed_label.text = "0 KM/H"
+	_speed_label.font_size = 40
+	_speed_label.pixel_size = 0.00052
 	_speed_label.outline_size = 10
 	_speed_label.modulate = Color(0.90, 0.94, 1.0)
 	_speed_label.outline_modulate = Color(0.01, 0.02, 0.04)
 	_speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_speed_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_speed_label.line_spacing = -0.15
-	_speed_label.position = Vector3(-w * 0.24, -0.002, 0.020)
+	_speed_label.position = Vector3(-w * 0.26, 0.004, 0.020)
 	dash.add_child(_speed_label)
 
 	# Shift lights along the top edge of the dash panel.
