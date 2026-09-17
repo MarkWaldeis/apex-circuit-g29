@@ -45,6 +45,7 @@ func _run() -> void:
 	_profile_round_trip()
 	_manual_pedal_assignment()
 	_manual_pedal_assignment_before_first_report()
+	_simulated_run_cannot_touch_the_real_profile()
 	_silent_device_detector()
 
 	if failed > 0:
@@ -450,6 +451,27 @@ func _manual_pedal_assignment() -> void:
 	g.sim_set(4, 0.0)
 	g.step(0.02)
 	_check(_near(g.brake, 0.0), "manual_release_reads_zero_again", "brake=%.2f" % g.brake)
+
+
+## A test, a diagnostic probe or somebody's scratch script drives the module
+## with invented axis values. Such a run must never be able to overwrite the
+## profile the driver calibrated by hand - a fabricated full-press value would
+## silently ruin his pedal travel.
+func _simulated_run_cannot_touch_the_real_profile() -> void:
+	var real_path := "user://g29_profile.json"
+	var existed: bool = FileAccess.file_exists(real_path)
+	var before: String = FileAccess.get_file_as_string(real_path) if existed else ""
+	var s = G29.new()          # default profile_path == the driver's real profile
+	s.enable_sim()
+	root.add_child(s)
+	s.sim_set(s.throttle_axis, -1.0)
+	s.sim_set(s.brake_axis, -1.0)
+	s.step(1.0 / 60.0)
+	s.save_profile()
+	var after: String = FileAccess.get_file_as_string(real_path) if FileAccess.file_exists(real_path) else ""
+	_check(after == before, "a_simulated_run_cannot_overwrite_the_driver_profile",
+		"existed=%s before=%d chars after=%d chars" % [str(existed), before.length(), after.length()])
+	s.queue_free()
 
 
 func _manual_pedal_assignment_before_first_report() -> void:

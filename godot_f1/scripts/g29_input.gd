@@ -597,6 +597,12 @@ func _set_axis_of(name: String, axis: int) -> void:
 ## ---- persistence ----------------------------------------------------------
 
 func save_profile() -> void:
+	## A simulated run (headless test, diagnostic probe, scratch script) must
+	## never overwrite the driver's real profile: every value it produces is
+	## invented, and a fabricated pedal travel silently ruins the mapping the
+	## driver calibrated by hand.
+	if sim_enabled and profile_path == PROFILE_PATH:
+		return
 	var data := {
 		"version": PROFILE_VERSION,
 		"device": device_name,

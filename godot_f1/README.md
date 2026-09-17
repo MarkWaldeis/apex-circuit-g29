@@ -45,6 +45,8 @@ Die Lenkrichtung ist im ganzen Spiel einheitlich: **positiv = rechts**. Das G29 
 
 Das Ergebnis landet in `user://g29_profile.json` (`%APPDATA%\Godot\app_userdata\Apex Circuit\`) und wird beim nächsten Start automatisch geladen. Vor der ersten Kalibrierung arbeitet das Spiel mit einer automatischen Schätzung, damit man sofort fahren kann.
 
+In dieses Profil schreibt nur das echte Spiel mit echtem Lenkrad: Testläufe, Diagnose-Skripte und alles, was mit simulierten Achswerten arbeitet, werden am Speichern gehindert (`save_profile()` weigert sich im Simulationsmodus), damit erfundene Werte die von Hand kalibrierte Zuordnung nicht kaputtmachen können.
+
 Wichtig: Das G29 braucht sein **Netzteil**. Hängt nur USB dran, meldet sich das Lenkrad zwar am PC an, sendet aber **keinen einzigen Eingabe-Report** — es kommen also keine Achsendaten an. Das Spiel zeigt das ehrlich an: In den Einstellungen steht dann „G29 verbunden (…), aber noch keine Achsendaten — Lenkrad oder Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen“, die Achsenbalken und Pedal-Zeilen zeigen `—` statt erfundener Nullwerte, und das HUD meldet „G29 ohne Achsendaten“.
 
 Das lässt sich unabhängig nachmessen, ohne Godot zu starten:
