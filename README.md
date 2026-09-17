@@ -10,7 +10,8 @@ GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
 * **Pedale selbst anlernen**: unter *Einstellungen* Gas, Bremse und Kupplung einzeln kalibrieren — Taste drücken, Pedal durchtreten, das Spiel erkennt die Achse und merkt sie sich (`user://g29_profile.json`).
 * **Lenkrad-Kalibrierung** inklusive Drehrichtung.
 * **Cockpit-Ansicht**, in der sich das Lenkrad im Spiel mit dem echten G29 mitdreht, mit Schaltblitzen und Pedalanzeige im HUD.
-* Der Wagen fährt vorwärts in die richtige Richtung (Nase = Fahrtrichtung), Vorderräder lenken, Hinterräder treiben an.
+* Der Wagen fährt vorwärts in die richtige Richtung (Nase = Fahrtrichtung), Vorderräder lenken sichtbar mit, Hinterräder treiben an.
+* **Lenkrichtung stimmt**: rechts am Lenkrad ist rechts im Spiel — Cockpit-Lenkrad, sichtbare Vorderräder und die Fahrphysik drehen alle in dieselbe Richtung (`godot_f1/tests/test_cockpit_wheel.gd`).
 
 ## Schnellstart
 

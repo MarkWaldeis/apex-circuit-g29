@@ -221,8 +221,12 @@ func _animate_wheels(delta: float, forward_speed: float) -> void:
 		var mesh: Node3D = item["mesh"]
 		if mesh == null or not is_instance_valid(mesh):
 			continue
-		var yaw: float = -steering if item["front"] else 0.0
-		mesh.rotation = Vector3(_wheel_roll, yaw, 0.0)
+		# Godot already yaws the VehicleWheel3D node itself by the steering
+		# angle, and the rim is a child of that node. Adding the steering yaw
+		# again here (with the opposite sign, as this used to) cancelled the
+		# parent's yaw, which pinned the visible front wheels straight ahead no
+		# matter how hard the driver turned. Only the rolling angle belongs here.
+		mesh.rotation = Vector3(_wheel_roll, 0.0, 0.0)
 
 
 func _find_token(node: Node, token: String) -> Node3D:
@@ -318,8 +322,16 @@ func _physics_process(delta: float) -> void:
 	# Speed-sensitive steering: F1 lock-to-lock tightens at speed.
 	var spd: float = abs(forward_vel)
 	var steer_limit: float = max_steer * lerp(1.0, 0.22, clampf(spd / 70.0, 0.0, 1.0))
-	steering = lerp(steering, clampf(steer_in, -1.0, 1.0) * steer_limit, clampf(delta * 10.0, 0.0, 1.0))
-	last_steer = steering
+	# The driver side of the game is "positive = right": the G29 calibration
+	# measures full lock to the right as +1, D / Right Arrow map to +1 and the
+	# rim in the cockpit turns clockwise for +1. This hull, however, drives
+	# along +Z - the opposite of Godot's own -Z vehicle forward - so a POSITIVE
+	# VehicleWheel3D.steering pushes the nose towards +X, which is the driver's
+	# LEFT. Mirror the command exactly once, here, so that turning the wheel to
+	# the right really turns the car to the right.
+	var steer_cmd: float = clampf(steer_in, -1.0, 1.0)
+	steering = lerp(steering, -steer_cmd * steer_limit, clampf(delta * 10.0, 0.0, 1.0))
+	last_steer = steer_cmd
 	_animate_wheels(delta, forward_vel)
 
 	var engage := 1.0 - clampf(clutch_in, 0.0, 1.0)
@@ -409,7 +421,10 @@ func _auto_inputs() -> Dictionary:
 	var target: Vector3 = racing_line.point_ahead(global_position, look)
 	var local: Vector3 = to_local(target)
 	var angle: float = atan2(local.x, local.z)
-	result.steer = clampf(angle / max_steer, -1.0, 1.0)
+	# Driver convention: positive = right. A target sitting on the car's local
+	# +X is on the driver's LEFT (the nose is +Z), so it needs a negative
+	# command. Without the minus the AI steers away from the racing line.
+	result.steer = clampf(-angle / max_steer, -1.0, 1.0)
 	var curve: float = racing_line.curvature_ahead(global_position, look)
 	var throttle: float = 0.95
 	throttle -= clampf(abs(angle) * 1.35, 0.0, 0.8)

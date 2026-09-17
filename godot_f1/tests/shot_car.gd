@@ -15,8 +15,33 @@ var plan := [
 	{"frame": 150, "mode": 1, "file": "shot_chase.png"},
 	{"frame": 200, "mode": 2, "file": "shot_heli.png"},
 	{"frame": 260, "mode": 3, "file": "shot_side.png"},
+	# Steering pair: same camera, wheels straight vs. full lock to the right.
+	# The front rims used to be pinned straight ahead, so this is the picture
+	# that proves the visible wheels really turn with the input.
+	{"frame": 290, "mode": 3, "file": "shot_steer_straight.png", "steer": 0.0},
+	# Ask for full right lock, then let the car slew its steering (~0.3 s)
+	# before the second picture so the two are actually comparable.
+	{"frame": 296, "steer": 1.0},
+	{"frame": 350, "mode": 3, "file": "shot_steer_right.png", "steer": 1.0},
 ]
 var _side_cam: Camera3D
+
+
+class StubWheel:
+	## car_controller connects these in setup(); the shots only need the axes.
+	signal shift_up
+	signal shift_down
+	var steer: float = 0.0
+	var throttle: float = 0.0
+	var brake: float = 0.0
+	var clutch: float = 0.0
+	var connected: bool = true
+	var cal_phase: int = 0
+	func has_driver_input() -> bool:
+		return connected and (absf(steer) > 0.12 or throttle > 0.08 or brake > 0.08)
+
+
+var stub: StubWheel
 
 
 func _initialize() -> void:
@@ -111,16 +136,23 @@ func _on_frame() -> void:
 	frames += 1
 	for step in plan:
 		if frames == int(step["frame"]):
-			if int(step["mode"]) == 3:
+			if step.has("steer"):
+				# Hand the car a stub wheel so it steers itself at full lock:
+				# at a standstill the speed-sensitive limiter allows all of it.
+				if stub == null:
+					stub = StubWheel.new()
+					car.g29 = stub
+				stub.steer = float(step["steer"])
+			if step.has("mode") and int(step["mode"]) == 3:
 				_make_side_camera()
-			else:
+			elif step.has("mode"):
 				if _side_cam:
 					_side_cam.queue_free()
 					_side_cam = null
 				cam.current = true
 				cam.mode = int(step["mode"])
 			# give the new pose one frame before grabbing it
-		elif frames == int(step["frame"]) + 2:
+		elif frames == int(step["frame"]) + 2 and step.has("file"):
 			_shot(String(step["file"]))
 	if frames > int(plan[plan.size() - 1]["frame"]) + 5:
 		quit(0)

@@ -108,8 +108,13 @@ func _run() -> void:
 	for key in ["Wheel_FL", "Wheel_FR"]:
 		var wf := car.get_node_or_null(key)
 		var rim_f: Node3D = wf.get_child(0) if wf and wf.get_child_count() > 0 else null
-		_check(rim_f != null and absf(rim_f.rotation.y + 0.40) < 0.01,
-			"front_rim_steers_%s" % key, "yaw=%.3f" % (rim_f.rotation.y if rim_f else 0.0))
+		# The steering yaw lives on the VehicleWheel3D node itself (Godot
+		# applies it there), and the rim hangs underneath it. The rim must not
+		# add an opposite yaw of its own - that cancelled the steering and left
+		# the visible front wheels pointing straight ahead.
+		_check(rim_f != null and absf(rim_f.rotation.y) < 0.001,
+			"front_rim_does_not_cancel_the_steer_%s" % key,
+			"rim yaw=%.3f" % (rim_f.rotation.y if rim_f else 0.0))
 	for key in ["Wheel_RL", "Wheel_RR"]:
 		var wr := car.get_node_or_null(key)
 		var rim_r: Node3D = wr.get_child(0) if wr and wr.get_child_count() > 0 else null
