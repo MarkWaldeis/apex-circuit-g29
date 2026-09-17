@@ -38,15 +38,46 @@ const WHEEL_TILT := deg_to_rad(-24.0)
 const WHEEL_TURN := 2.1
 
 const DASH_LOCAL := Vector3(0.0, 0.020, -0.55)
-const DASH_SIZE := Vector2(0.27, 0.076)
+const DASH_SIZE := Vector2(0.235, 0.068)
 const DASH_TILT := deg_to_rad(-16.0)
 
-const HALO_LOCAL := Vector3(0.0, 0.175, -0.50)
-const HALO_WIDTH := 0.924
-const HALO_THICK := 0.034
+## The halo bar is a real sweep, not a slab. HALO_FRONT is the centre of the bar
+## in camera space; the ends lift by HALO_END_LIFT and come back towards the
+## driver by HALO_END_BACK, which is what makes the bar arc the way the
+## reference picture shows it (dip in the middle, rise at the shoulders).
+##
+## Solving the projection for a 54 deg lens: a point at height h and distance d
+## sits at  50% - 50*atan(h/d)/27%  of the frame height, so
+##   * centre  h=0.180 d=0.561 -> 17.0 %  (reference: the bar's centre line)
+##   * ends    rise to 20.4 deg  -> 12.2 % at the frame edge (reference: 12 %).
+const HALO_FRONT := Vector3(0.0, 0.180, -0.561)
+const HALO_HALF_SPAN := 0.72
+const HALO_END_LIFT := 0.030
+const HALO_END_BACK := 0.075
+const HALO_TUBE_R := 0.0265
+## Bottom of the thin pillar that drops from the bar to the chassis, the
+## vertical detail the reference shows between the bar and the dashboard.
+const HALO_PILLAR_BOTTOM := Vector3(0.0, 0.046, -0.556)
 
-const MIRROR_LOCAL := Vector3(0.368, 0.026, -0.46)
-const MIRROR_SIZE := Vector2(0.118, 0.064)
+## Cockpit surround: a U-shaped rail sweeping around the driver. It marks where
+## the carbon tub enters the frame - the dark blue-grey shape down the left and
+## right edges - and it runs behind the wheel, never across it.
+const TUB_RAIL := [
+	Vector3(-0.500, -0.140, -0.620),
+	Vector3(-0.470, -0.220, -0.380),
+	Vector3(-0.380, -0.320, -0.120),
+	Vector3(-0.200, -0.420, 0.120),
+	Vector3(0.000, -0.460, 0.220),
+	Vector3(0.200, -0.420, 0.120),
+	Vector3(0.380, -0.320, -0.120),
+	Vector3(0.470, -0.220, -0.380),
+	Vector3(0.500, -0.140, -0.620),
+]
+const TUB_RAIL_R := 0.055
+const TUB_RAIL_SQUASH := 1.45
+
+const MIRROR_LOCAL := Vector3(0.368, 0.019, -0.46)
+const MIRROR_SIZE := Vector2(0.112, 0.058)
 
 const CHASE_LOCAL := Vector3(0.0, 2.50, -7.60)
 const CHASE_LOOK_LOCAL := Vector3(0.0, 0.45, 12.0)

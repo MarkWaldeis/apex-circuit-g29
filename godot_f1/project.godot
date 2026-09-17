@@ -27,7 +27,9 @@ common/physics_ticks_per_second=90
 [rendering]
 
 lights_and_shadows/directional_shadow/size=8192
-anti_aliasing/quality/msaa_3d=2
+; 8x MSAA: the rims and the tyre compound bands are thin, fast-moving geometry,
+; and this is what keeps their edges from crawling while driving.
+anti_aliasing/quality/msaa_3d=3
 ; TAA was enabled in an earlier attempt and made the fast-spinning wheels smear
 ; and shimmer frame to frame. Two-sample MSAA plus the wheel shader is cleaner
 ; for this scene: measured with tests/capture_cockpit.gd (cp_20/cp_21 diff).

@@ -15,7 +15,10 @@ extends Camera3D
 const Poses = preload("res://scripts/camera_poses.gd")
 const CockpitMirror = preload("res://scripts/cockpit_mirror.gd")
 
-const WHEEL_MODEL := "res://assets/props/steering_wheel.glb"
+## The driver's own model, loaded straight from the file it came in as. The
+## older steering_wheel.glb was the same mesh re-exported through Blender, which
+## only added a 12 m offset to the node; nothing was gained by the detour.
+const WHEEL_MODEL := "res://assets/props/cockpit_wheel.glb"
 const LED_COUNT := 14
 const DASH_LED_COUNT := 12
 

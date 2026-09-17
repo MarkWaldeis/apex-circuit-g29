@@ -206,7 +206,7 @@ func _mesh_radius(node: Node3D, fallback: float) -> float:
 	return r
 
 
-func _add_wheel_details(mesh: Node3D, hub_x: float, radius: float) -> void:
+func _add_wheel_details(mesh: Node3D, _hub_x: float, radius: float) -> void:
 	## F1 wheels are bare slicks, so a plain tyre looks like it does not turn.
 	## A coloured sidewall band (the compound marking), a small decal and a star
 	## of rim spokes make the rotation visible - and they are what a real wheel
@@ -216,65 +216,63 @@ func _add_wheel_details(mesh: Node3D, hub_x: float, radius: float) -> void:
 		return
 	var aabb: AABB = mi.mesh.get_aabb()
 	var half_width: float = maxf(aabb.size.x * 0.5, 0.12)
-	var outward: float = 1.0 if hub_x > 0.0 else -1.0
-	var face_x: float = outward * (half_width + 0.004)
 	var compound: Color = Color(0.85, 0.12, 0.14) if livery != "crimson" else Color(0.92, 0.78, 0.12)
 	var band_mat := StandardMaterial3D.new()
 	band_mat.albedo_color = compound
 	band_mat.roughness = 0.65
 	var rim_mat := StandardMaterial3D.new()
-	rim_mat.albedo_color = Color(0.30, 0.31, 0.33)
-	rim_mat.metallic = 0.85
-	rim_mat.roughness = 0.28
+	rim_mat.albedo_color = Color(0.46, 0.47, 0.50)
+	# A mirror-smooth rim sparkles frame to frame at speed: the highlight jumps
+	# between pixels. Roughness 0.45 keeps the metal look without the flicker.
+	rim_mat.metallic = 0.70
+	rim_mat.roughness = 0.45
 	var decal := StandardMaterial3D.new()
 	decal.albedo_color = Color(0.86, 0.87, 0.88)
 	decal.roughness = 0.5
-	# sidewall band
-	var ring := MeshInstance3D.new()
-	ring.name = "CompoundBand"
-	var torus := TorusMesh.new()
-	torus.inner_radius = radius * 0.70
-	torus.outer_radius = radius * 0.82
-	torus.rings = 20
-	torus.ring_segments = 8
-	ring.mesh = torus
-	ring.material_override = band_mat
-	ring.rotation_degrees = Vector3(0.0, 0.0, 90.0)
-	ring.position = Vector3(face_x, 0.0, 0.0)
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh.add_child(ring)
-	# rim spokes
-	for i in 6:
-		var a: float = TAU * float(i) / 6.0
-		var spoke := MeshInstance3D.new()
-		spoke.name = "Spoke%d" % i
-		var box := BoxMesh.new()
-		box.size = Vector3(0.012, radius * 0.92, 0.030)
-		spoke.mesh = box
-		spoke.material_override = rim_mat
-		spoke.position = Vector3(face_x * 0.99, cos(a) * radius * 0.44, sin(a) * radius * 0.44)
-		spoke.rotation = Vector3(-a, 0.0, 0.0)
-		spoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mesh.add_child(spoke)
-	# one bright decal so even a slow turn is unmistakable
-	var badge := MeshInstance3D.new()
-	badge.name = "TyreDecal"
-	var decal_box := BoxMesh.new()
-	decal_box.size = Vector3(0.005, 0.045, 0.11)
-	badge.mesh = decal_box
-	badge.material_override = decal
-	badge.position = Vector3(face_x, radius * 0.55, 0.0)
-	badge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh.add_child(badge)
-	var badge2 := MeshInstance3D.new()
-	badge2.name = "TyreDecal2"
-	var decal_box2 := BoxMesh.new()
-	decal_box2.size = Vector3(0.005, 0.030, 0.075)
-	badge2.mesh = decal_box2
-	badge2.material_override = decal
-	badge2.position = Vector3(face_x, -radius * 0.58, radius * 0.10)
-	badge2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh.add_child(badge2)
+	# Both faces get the details: from the cockpit the driver looks at the INNER
+	# sidewall of the front wheels, while a chase or side camera sees the outer
+	# one. Putting them on only one side made the wheels look featureless from
+	# the cockpit - and a featureless slick looks like it never turns.
+	for outward in [1.0, -1.0]:
+		var face_x: float = outward * (half_width + 0.006)
+		var side_name: String = "Out" if outward > 0.0 else "In"
+		# sidewall band
+		var ring := MeshInstance3D.new()
+		ring.name = "CompoundBand" + side_name
+		var torus := TorusMesh.new()
+		torus.inner_radius = radius * 0.66
+		torus.outer_radius = radius * 0.82
+		torus.rings = 20
+		torus.ring_segments = 8
+		ring.mesh = torus
+		ring.material_override = band_mat
+		ring.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+		ring.position = Vector3(face_x, 0.0, 0.0)
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mesh.add_child(ring)
+		# rim spokes
+		for i in 6:
+			var a: float = TAU * float(i) / 6.0
+			var spoke := MeshInstance3D.new()
+			spoke.name = "Spoke%s%d" % [side_name, i]
+			var box := BoxMesh.new()
+			box.size = Vector3(0.012, radius * 0.92, 0.030)
+			spoke.mesh = box
+			spoke.material_override = rim_mat
+			spoke.position = Vector3(face_x, cos(a) * radius * 0.44, sin(a) * radius * 0.44)
+			spoke.rotation = Vector3(-a, 0.0, 0.0)
+			spoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mesh.add_child(spoke)
+		# a bright decal so even a slow turn is unmistakable
+		var badge := MeshInstance3D.new()
+		badge.name = "TyreDecal" + side_name
+		var decal_box := BoxMesh.new()
+		decal_box.size = Vector3(0.005, 0.045, 0.11)
+		badge.mesh = decal_box
+		badge.material_override = decal
+		badge.position = Vector3(face_x, radius * 0.55, 0.0)
+		badge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mesh.add_child(badge)
 
 
 func wheel_roles() -> Dictionary:
