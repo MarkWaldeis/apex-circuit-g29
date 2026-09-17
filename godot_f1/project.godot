@@ -28,7 +28,11 @@ common/physics_ticks_per_second=90
 
 lights_and_shadows/directional_shadow/size=8192
 anti_aliasing/quality/msaa_3d=2
-anti_aliasing/quality/use_taa=true
+; TAA was enabled in an earlier attempt and made the fast-spinning wheels smear
+; and shimmer frame to frame. Two-sample MSAA plus the wheel shader is cleaner
+; for this scene: measured with tests/capture_cockpit.gd (cp_20/cp_21 diff).
+anti_aliasing/quality/use_taa=false
+anti_aliasing/quality/screen_space_aa=0
 environment/defaults/default_clear_color=Color(0.45, 0.58, 0.72, 1)
 
 [input]

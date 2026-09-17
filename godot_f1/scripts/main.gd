@@ -57,6 +57,7 @@ func _ready() -> void:
 	add_child(hud)
 	hud.car = player
 	hud.g29 = g29
+	hud.cam = cam
 
 	menu = MenuUI.new()
 	menu.name = "Menu"

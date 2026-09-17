@@ -4,6 +4,9 @@ extends CanvasLayer
 
 var car
 var g29
+## The cockpit camera, so the HUD can step aside while the driver looks at the
+## dashboard: the centre cluster would sit right on top of the steering wheel.
+var cam
 var _gear: Label
 var _speed: Label
 var _rpm: Label
@@ -158,6 +161,13 @@ func _process(_delta: float) -> void:
 	_speed.text = "%d km/h" % int(round(car.speed_kmh))
 	_rpm.text = "%d rpm" % int(round(car.rpm))
 	_paint_leds(car.rpm)
+	# In the cockpit view the dashboard shows gear, speed and shift lights, so
+	# the floating centre cluster is hidden - the reference shot has the HUD at
+	# the edges of the frame only.
+	var cockpit_view: bool = cam != null and int(cam.get("mode")) == 0
+	_gear.visible = not cockpit_view
+	_speed.visible = not cockpit_view
+	_leds.visible = not cockpit_view
 	_update_pedals()
 
 

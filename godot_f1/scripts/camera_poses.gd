@@ -14,16 +14,39 @@ const HULL_MAX := Vector3(1.16, 1.21, 2.75)
 const FRONT_AXLE_Z := 1.434
 const REAR_AXLE_Z := -2.005
 
-## Helmet cam: just above the airbox, behind the driver's head, looking down the
-## nose at the asphalt. The car's cockpit sits between the axles, so the camera
-## must live there too - never at the tail behind the rear wing.
+## Helmet cam: in the cockpit opening at the driver's eye height, looking down
+## the nose at the asphalt.
+##
+## The numbers below are not eyeballed. tests/probe_framing.gd projects every
+## landmark through a real Camera3D and solves them so the view lands on the
+## same frame position as the F1 cockpit reference picture:
+##   horizon y = 30 %, wheel x = 29.5..70.5 % / top y = 55.5 %,
+##   halo bar y = 15.8 %, mirror glass y = 44.5 %, dash panel y = 40..53 %.
+## tests/test_cockpit_framing.gd keeps them there.
+## The lens has to clear the airbox: the body's own silhouette is 1.21 m high
+## just behind the driver (measured on car_crimson.glb), so anything lower
+## puts the camera inside the bodywork and fills the frame with red shell.
 const HELMET := Vector3(0.0, 1.29, 0.05)
-const LOOK := Vector3(0.0, 0.42, 16.0)
+const LOOK := Vector3(0.0, -1.971, 16.0)
+const FOV_COCKPIT := 54.0
+
 ## Cockpit props, in camera space: in front of the lens (negative Z).
-const WHEEL_LOCAL := Vector3(0.0, -0.13, -0.40)
-const DASH_LOCAL := Vector3(0.0, -0.46, -0.80)
+const WHEEL_LOCAL := Vector3(0.0, -0.118, -0.404)
+const WHEEL_WIDTH := 0.30          ## a real Formula wheel is about 0.30 m wide
+const WHEEL_TILT := deg_to_rad(-24.0)
 ## How far the visible steering wheel turns for full lock (radians).
-const WHEEL_TURN := 2.4
+const WHEEL_TURN := 2.1
+
+const DASH_LOCAL := Vector3(0.0, 0.020, -0.55)
+const DASH_SIZE := Vector2(0.27, 0.076)
+const DASH_TILT := deg_to_rad(-16.0)
+
+const HALO_LOCAL := Vector3(0.0, 0.175, -0.50)
+const HALO_WIDTH := 0.924
+const HALO_THICK := 0.034
+
+const MIRROR_LOCAL := Vector3(0.368, 0.026, -0.46)
+const MIRROR_SIZE := Vector2(0.118, 0.064)
 
 const CHASE_LOCAL := Vector3(0.0, 2.50, -7.60)
 const CHASE_LOOK_LOCAL := Vector3(0.0, 0.45, 12.0)
@@ -40,6 +63,21 @@ static func is_outside_hull(local_origin: Vector3) -> bool:
 
 static func cockpit_look_delta() -> Vector3:
 	return LOOK - HELMET
+
+
+static func cockpit_basis() -> Basis:
+	## The lens looks along its own -Z and the cockpit props are built in that
+	## space, so this basis is what points the view down the nose.
+	return Basis.looking_at((LOOK - HELMET).normalized(), Vector3.UP)
+
+
+static func cockpit_transform() -> Transform3D:
+	return Transform3D(cockpit_basis(), HELMET)
+
+
+static func cockpit_pitch_deg() -> float:
+	## Downward tilt of the lens in degrees, positive when looking at the road.
+	return rad_to_deg(asin(clampf(-cockpit_basis().z.y, -1.0, 1.0)))
 
 
 static func wheel_is_in_front_of_lens() -> bool:
