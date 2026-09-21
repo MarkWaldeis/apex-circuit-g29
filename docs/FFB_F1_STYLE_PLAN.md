@@ -9,6 +9,40 @@ Dieses Dokument ist zuerst die Recherche, dann der verbindliche Plan.
 Der Stand der Umsetzung steht am Ende in „Umsetzung“ und in
 `docs/reviews/ffb_f1_style.md`.
 
+## Kurzfassung für den Fahrer (Stand 21.09.2026)
+
+```cmd
+"Apex Circuit FFB starten.cmd"           :: startet erst das Spiel, dann die Kraft
+"Apex Circuit FFB starten.cmd" --demo    :: nur das Rad: alle Fahrsituationen nacheinander
+"Apex Circuit FFB starten.cmd" --sign    :: Kraftrichtung nachmessen
+"Lenkrad pruefen.cmd"                    :: rotes Rad mit Kraft drehen, beide Wege lesen
+```
+
+G HUB: **Betriebsbereich 900°, Zentrierfeder AUS**, Dämpfung so niedrig wie
+möglich. Im Spiel unter `Esc` → *Einstellungen* → *Force Feedback*: Stärke,
+Dämpfung, die drei Rüttel-Bänder (On Track / Rumble Strip / Off Track),
+Lenkbereich (Standard 400°) und Kraftrichtung.
+
+Die Reihenfolge Spiel → Kraft ist inzwischen **egal**: der Helfer wartet von
+selbst auf das erste Paket des Spiels und gibt das Lenkrad nach 30 s ohne
+Spiel wieder frei (gemessen: `docs/reviews/ffb_wave8_restart.md`).
+
+Was schon am echten G29 gemessen ist:
+
+| Frage | Messung |
+|---|---|
+| Kommt überhaupt Kraft an? | Kraftrichtung im Spiel gemessen: positive Kraft dreht nach **links** → `invert = true` ist richtig |
+| Wird das Rad schwer? | Bogen Spitze 0,58; Dämpfung 0,09 (< 60 km/h) → 0,30 (> 200 km/h) |
+| Wird es leicht, wenn die Vorderachse aufgibt? | Untersteuern −76 %, blockierendes Vorderrad 18 % + Rattern 0,70 @ 34 Hz |
+| Rüttelt es richtig? | Kerb 0,62 @ 30 Hz, Kies 0,29 @ 12–30 Hz, Asphalt-Textur 0,11 @ 37 Hz |
+| Kommen Schaltstoß und Einschlag an? | ja, seit dem Fix für Stöße **ohne Vorzeichen** (vorher 0,000 am Rad) |
+| Blendet die Radfreigabe das Spiel? | nein: nach dem Zurückholen 0 Ticks ohne Achsdaten |
+
+Offen ist allein die **Bewertung am eigenen Rad** — zu schwer, zu leicht, zu
+ruckelig, Anschlag zu früh? Die Werte dafür stehen konzentriert in
+`godot_f1/scripts/ffb_model.gd` (Grundkraft, Einbrüche, Rüttelbänder, Unwucht,
+Anschlag) und in `tools/g29_ffb.py` (Rampe, Puls, Freigabe).
+
 ---
 
 ## 1. Recherche: was das offizielle Spiel am Lenkrad macht
