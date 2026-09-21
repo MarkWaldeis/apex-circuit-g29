@@ -34,6 +34,31 @@ $repoPck = Join-Path $repoOut 'ApexCircuit.pck'
 $destExe = Join-Path $Delivered 'Apex Circuit.exe'
 $destPck = Join-Path $Delivered 'Apex Circuit.pck'
 
+# SHA256 ohne Cmdlet: `Get-FileHash` gehoert zum Modul
+# Microsoft.PowerShell.Utility, und das laedt in Windows PowerShell 5.1 nicht,
+# wenn der Aufrufer seine Modulpfade mitbringt. Gemessen am 21.09.2026: aus
+# einem PowerShell-7-Fenster heraus startete export_windows.cmd ein
+# powershell.exe 5.1, das die Module von PowerShell 7 im PSModulePath hatte -
+# der Export lief durch, aber die Auslieferung brach mit
+# "Get-FileHash wurde nicht als Name eines Cmdlet erkannt" ab, und die
+# Desktop-Kopie blieb auf dem alten Stand. Genau der Fehler, den dieses Skript
+# verhindern soll. .NET hat keine solche Abhaengigkeit.
+function Get-Sha256Hex {
+    param([string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $bytes = $sha.ComputeHash($stream)
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
+    return ([System.BitConverter]::ToString($bytes)).Replace('-', '')
+}
+
 $godot = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\Godot_v4.7.2-stable_win64.exe"
 if (-not (Test-Path -LiteralPath $godot)) {
     $godot = (Get-Command godot -ErrorAction SilentlyContinue).Source
@@ -75,11 +100,11 @@ if (-not $SkipDelivery) {
     Copy-Item -LiteralPath $repoPck -Destination $destPck -Force
 }
 
-$hashRepo = (Get-FileHash -LiteralPath $repoPck -Algorithm SHA256).Hash
+$hashRepo = Get-Sha256Hex -Path $repoPck
 $ok = $true
 
 if (Test-Path -LiteralPath $destPck) {
-    $hashDest = (Get-FileHash -LiteralPath $destPck -Algorithm SHA256).Hash
+    $hashDest = Get-Sha256Hex -Path $destPck
     if ($hashDest -ne $hashRepo) {
         Write-Host "[export] FAIL: ausgelieferte .pck unterscheidet sich vom Export ($destPck)"
         $ok = $false

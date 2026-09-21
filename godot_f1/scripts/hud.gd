@@ -217,10 +217,15 @@ func _update_force() -> void:
 		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
 		return
 	# Helfer laeuft und hat das Rad uebernommen, aber das Rad selbst meldet
-	# keine Achse: der klassische "Netzteil fehlt"-Fall. Ohne diese Zeile sieht
-	# der Fahrer nur "Kraft 0 %" und weiss nicht, wo er suchen soll.
+	# keine Achse. Erste Ursache ist NICHT die Hardware: uebernimmt der Helfer
+	# das Lenkrad vor dem Spiel, bekommt das Spiel keine Achsendaten mehr
+	# (gemessen, docs/reviews/ffb_wave7_ownership.md). Seit dem Warteschritt in
+	# tools/g29_ffb.py kann das nur noch passieren, wenn ein alter Helfer laeuft
+	# oder das Spiel vor dem Helfer gestartet wurde und der Helfer noch wartet.
 	if link.has_method("wheel_silent") and bool(link.call("wheel_silent")):
-		_force.text = "LENKRAD MELDET NICHTS — Netzteil, Pedalkabel, USB-Port prüfen („Lenkrad pruefen.cmd“)"
+		_force.text = ("LENKRAD MELDET NICHTS — Spiel neu starten, dann "
+			+ "„Apex Circuit FFB starten.cmd“; erst danach Netzteil und "
+			+ "Kabel prüfen („Lenkrad pruefen.cmd“)")
 		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
 		return
 	var st: Dictionary = link.last_state
@@ -282,7 +287,8 @@ func _update_pedals() -> void:
 		_warn.text = ""
 		return
 	if not live:
-		_warn.text = "G29 ohne Achsendaten — Netzteil und Pedalkabel prüfen"
+		_warn.text = ("G29 ohne Achsendaten — Spiel neu starten, wenn der "
+			+ "Kraft-Helfer zuerst lief; sonst Netzteil und Kabel prüfen")
 	else:
 		_warn.text = ""
 	_mapping.text = "Gas a%d%s · Bremse a%d%s · Kupplung a%d%s · Lenkrad a%d%s" % [

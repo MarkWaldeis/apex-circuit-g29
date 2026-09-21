@@ -146,7 +146,7 @@ Kerb/Kies/Gras; `crash.gd` liefert Einschläge; `gearbox.gd` die Schaltvorgänge
 | Über eine Bodenwelle/Kuppe | Kuppe: kurzes **Leichtwerden**; Bodenwelle: kurzer, dumpfer Stoß | `torque` runter (`vertical_g` < 0,80), `rumble` 14–26 Hz „Bodenwelle“, `pulse` klein |
 | Schalten | kurzer, harter Anschlag („die Schaltstange“) | `pulse` 0,3–0,5 |
 | Wand-/Autokontakt | harter Schlag, proportional zur Härte | `pulse` bis 1,0 |
-| Schaden (Platter nach dem Blockieren, verbogenes Rad nach dem Einschlag) | das Lenkrad **rüttelt weiter**, statt nur einmal zu stoßen; mit dem Tempo wird die Unwucht schneller (Frequenz = Radumdrehung) | `rumble` 0,2–0,6, 11–30 Hz, Quelle „Unwucht“ |
+| Schaden (Platter nach dem Blockieren, verbogenes Rad nach dem Einschlag) | das Lenkrad **rüttelt weiter**, statt nur einmal zu stoßen; mit dem Tempo wird die Unwucht schneller (Frequenz = Radumdrehung) | `rumble` 0,19 (Streifer) · 0,38 (mittel) · 0,64 (schwer) · 0,75 (Wrack), Quelle „Unwucht“, 16–28 Hz |
 | Am Lenkanschlag (Soft Lock) | die Wand ist zu spüren: Kraft steigt steil an, hält, lässt nicht weiter drehen | `torque` steigt mit `lock_pressure` |
 | Stillstand, Motor aus/im Menü | Kraft fällt auf null (kein „festgenageltes“ Lenkrad) | Fail-sicher im Helfer |
 
@@ -350,6 +350,8 @@ der Root nach und startet die nächste Welle — so lange, bis eine Welle
 | 4 | Kette/Hardware **am echten G29** (Root-Audit) | `docs/reviews/ffb_wave4_hardware.md` | Erstmals lag echte Hardware vor: **Motor dreht das Rad** (dreimal gemessen: +0,5 Kraft → Achse 32767→26), aber **nur zeitweise** (später dieselbe Messung ohne Bewegung). Zwei Mängel in den Diagnosewerkzeugen gefunden und behoben: der Richtungstest **startete den Helfer nie** (Pfad mit Leerzeichen) und **schrieb das Lenkrad-Profil des Fahrers neu**. Dazu drei neue Werkzeuge (`tools/ffb_hw_probe.py`, `tests/probe_axis_read.gd`, `tests/test_g29_profile_path.gd`) |
 | 5 | Kette/Hardware (Agent `w5_direction`) | `docs/reviews/ffb_direction_selfcheck.md` | Die Kraftrichtung wird jetzt **gemessen statt angenommen**: der Helfer schickt seine DirectInput-Achse im Lebenszeichen mit, `ffb_link.gd` vergleicht sie mit der SDL-Achse des Spiels. 19 Prüfungen, `--check` 14/14. Details in §9 |
 | 5 | Messkette/Auslieferung (Root-Audit) | §10 dieses Dokuments | Drei Mängel, alle behoben: ein **Kollisionslauf zählte als grün** (`LAP_DRIVE PASS` aus einer Welt ohne Auto), ein **hängender Godot blieb als Waise stehen** und vergiftete jede weitere Messung, und die **ausgelieferte Kopie konnte still veralten** (Desktop-Start 18:58, Export 19:06). Neu: `tools/run_all_tests.ps1`, gehärteter `tools/run_godot.ps1`, `tools/export_and_deliver.ps1` |
+| 6 | Modell/Realismus, Kette (Root-Audit) | `docs/reviews/ffb_direction_selfcheck.md` | 13 Gegenproben der neuen Richtungsautomatik plus eine Dauerprobe: ein einzelner Streifer gab dem Rad **dauerhaft zu viel Unwucht** (0,38 nach Schaden 0,22, gesättigt bei 0,62). Neu bemessen (0,11 / 0,19 / 0,38 / 0,64 / 0,75) |
+| 7 | **Besitz/Reihenfolge am echten G29** (Root-Audit) | `docs/reviews/ffb_wave7_ownership.md` | **Der wichtigste Fund der ganzen Reihe:** die seit Welle 4 behauptete „unzuverlässige Hardware“ war die **Startreihenfolge**. Helfer zuerst → Spiel liest keine Achse, Rad steht still (auch für den Helfer). Spiel zuerst → beides läuft (1 920 HID-Reports, Spanne 2,0 im Spiel). Behoben mit Warteschritt im Helfer, neuem Startskript, ehrlichen Hinweisen und 16 Kettentests inkl. Gegenprobe. Der Richtungstest liefert **erstmals** ein Ergebnis am echten Rad: positive Kraft dreht nach links → `invert = true` bestätigt |
 
 ## 6. Risiken
 
@@ -810,3 +812,50 @@ Der **Fühltest am Lenkrad**. Alle Zahlen oben belegen Richtung, Stärke,
 Frequenz und Kette — nicht, ob sich das Ergebnis für den Fahrer richtig anfühlt.
 Der Helfer liefert dafür weiterhin `--demo` (alle Fahrsituationen einmal am Rad)
 und `tools/ffb_direction_check.ps1` (dreht das Rad mit Kraft, Hände weg).
+
+---
+
+# 11. Welle 7: das Lenkrad war nie kaputt — es war die Startreihenfolge
+
+Vollständiger Bericht mit allen Messwerten: `docs/reviews/ffb_wave7_ownership.md`.
+
+Seit Welle 4 stand in diesem Dokument und im README, das G29 sei
+„unzuverlässig“ und melde sich ohne Netzteil zwar an, liefere aber keine
+Achsen. Das war **falsch**. Am 21.09.2026 lag das Rad durchgehend
+arbeitsbereit vor, und die Messung zeigt die echte Ursache:
+
+| Messung | Ergebnis |
+|---|---|
+| `tools/hid_vs_dinput.py` (neu): HID **und** DirectInput gleichzeitig, Rad unter Kraft | **1 920 HID-Reports**, DirectInput-Achse 32 767 → 1 → 65 535 → 59. Der Rohpfad lebt |
+| `tools/hid_probe.py` allein (Rad steht) | `report timeout … (no data)` auf allen Schnittstellen — bei einem **gesunden** Rad. Ein Timeout dort beweist nichts: das G29 sendet nur bei Änderung |
+| Spiel zuerst, dann Helfer | Rad fährt unter Kraft durch den ganzen Weg, und das Spiel liest live mit: `AXIS_TRACK t=12 a0=+0.996 span=1.996 data=true` |
+| Helfer zuerst, dann Spiel | In der Sekunde, in der das Spiel das Rad öffnet, friert alles ein: keine HID-Reports, Achse steht auf 32 607, Spiel sieht `a0=-0.005 data=false` |
+| `tools/ffb_direction_check.ps1` (nach dem Fix) | **Erstmals ein Ergebnis am echten Rad**: `positive Kraft dreht nach LINKS` → `invert = true` ist richtig, genau der seit Welle 5 ausgelieferte Wert |
+
+**Ursache:** Das G29 verträgt nur eine Reihenfolge. Übernimmt der Helfer das
+Rad zuerst (exklusiv über DirectInput), bekommt das Spiel beim Start keine
+Achsendaten mehr — und das Rad steht auch für den Helfer still. Die Anleitung
+des Spiels gab bis dahin genau diese Reihenfolge vor („Helfer läuft. Spiel
+starten und fahren.“).
+
+**Behoben:**
+
+* `tools/g29_ffb.py` wartet auf das erste Paket des Spiels, bevor es das
+  Lenkrad überhaupt öffnet (`wait_for_game`, `--wait-game`, Standard: warten).
+  Das Spiel öffnet das Rad beim Start über SDL, lange vor dem ersten Paket —
+  wer wartet, kann also nicht der Erste sein. Damit ist die Reihenfolge
+  beliebig: ein zu früh gestarteter Helfer wartet einfach.
+* `Apex Circuit FFB starten.cmd` startet erst das Spiel, dann die Kraft
+  (`--nur-helfer`, wenn das Spiel schon läuft) und nennt die Reihenfolge als
+  erste Fehlerursache.
+* `Lenkrad pruefen.cmd` dreht das Rad jetzt mit Kraft und liest beide Wege
+  statt nur zu warten.
+* Die Hinweise in `g29_input.gd`, `hud.gd`, `menu.gd` und `ffb_link.gd` nennen
+  zuerst „Spiel neu starten“ und erst danach Netzteil und Kabel.
+* `python tools/g29_ffb.py --check` prüft die Reihenfolge selbst — **16
+  Prüfungen**, inklusive Gegenprobe (`--wait-game 0` muss das Rad *vor* dem
+  ersten Paket öffnen, sonst wäre die Prüfung nicht falsifizierbar).
+
+Offen bleibt weiterhin nur der **Fühltest am Lenkrad** (schwerer Bogen, leichtes
+Untersteuern, Kerb, Anschlag): Software kann messen, dass Kraft in der richtigen
+Stärke in die richtige Richtung geht — nicht, ob sie sich richtig anfühlt.

@@ -4,6 +4,19 @@ This separates "the wheel really sends nothing" from "the engine reads it
 wrong": Windows' HID stack is queried directly through hid.dll/setupapi.dll,
 without SDL, DirectInput or Godot in the way.
 
+**A timeout here is not proof of a defect.** The G29 only sends a report when
+something changes - whoever runs this without turning the wheel reads an idle
+device and sees "report timeout ... (no data)" on a perfectly working wheel.
+Measured on 21.09.2026: this script timed out on all three interfaces while
+`python tools/hid_vs_dinput.py` (which drives the wheel with force first)
+counted 1 920 reports on the *same* interface at the same time. The old
+conclusion "no reports, so the power supply is missing" was therefore wrong;
+what that day's silence really was is documented in
+`docs/reviews/ffb_wave7_ownership.md`.
+
+For a test that means something, use `tools/hid_vs_dinput.py`: it moves the
+wheel and reads both paths - HID and DirectInput - at once.
+
 Usage: python tools/hid_probe.py [vid_pid] [reports] [timeout_ms]
        python tools/hid_probe.py 046d:c24f
 """

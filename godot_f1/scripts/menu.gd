@@ -1126,7 +1126,9 @@ func _update_status_label(connected: bool) -> void:
 		_status_label.add_theme_color_override("font_color", UI.WARN)
 	elif not _g29_axis_data():
 		_status_label.text = ("G29 verbunden (%s), aber noch keine Achsendaten — "
-			+ "Lenkrad oder Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen.") % str(
+			+ "Lenkrad oder Pedal einmal bewegen. Läuft der Kraft-Helfer schon, "
+			+ "Spiel neu starten: das Spiel muss das Lenkrad zuerst öffnen. "
+			+ "Sonst Netzteil und Pedalkabel prüfen.") % str(
 				_g29_get("device_name", "G29"))
 		_status_label.add_theme_color_override("font_color", UI.WARN)
 	elif hint != "":

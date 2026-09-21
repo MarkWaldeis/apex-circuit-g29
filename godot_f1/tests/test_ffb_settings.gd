@@ -332,6 +332,13 @@ func _run() -> void:
 					and not loud_text.contains("MELDET NICHTS"),
 					"hud_meldet_ein_schweigendes_lenkrad",
 					"schweigend: %s | meldend: %s" % [silent_text, loud_text])
+				# Und die erste Empfehlung ist der Neustart des Spiels, nicht
+				# die Hardware: gemessen am 21.09.2026 war genau die
+				# Startreihenfolge die Ursache (Helfer vor dem Spiel ->
+				# keine Achsendaten mehr, docs/reviews/ffb_wave7_ownership.md).
+				_check(silent_text.contains("Spiel neu starten"),
+					"der_stille_lenkrad_hinweis_nennt_zuerst_den_neustart",
+					"schweigend: %s" % silent_text)
 
 		# --- Das HUD nennt den Grund, wenn keine Kraft ankommt -------------
 		# Der schlimmste Fall ist ein stilles Lenkrad: das Spiel laeuft, das

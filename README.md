@@ -20,11 +20,14 @@ GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
   mit Quellen und Messwerten steht in `docs/FFB_F1_STYLE_PLAN.md`.
   Gemessen auf einer Runde: Kraft Mittel 10 %, Spitze 59 % der
   Lenkradstärke, auf der Geraden bei Tempo praktisch ruhig (Sprung pro Tick
-  0,0005), 0 % der Ticks im Anschlag. Was noch **nicht** gemessen ist: die
-  Kraft am eigenen Lenkrad — das G29 meldet sich ohne Netzteil am PC an,
-  liefert aber keine Achsendaten und keine Kraft. Der ehrliche Stand steht
-  am Ende von `docs/FFB_F1_STYLE_PLAN.md` und in
-  `docs/reviews/ffb_f1_style.md`.
+  0,0005), 0 % der Ticks im Anschlag. Am **echten Rad** gemessen: die Kraft
+  dreht das G29, das Spiel liest dieselbe Achse live mit, und eine positive
+  Kraft kommt links an (`invert = true`, `tools/ffb_direction_check.ps1`).
+  Wichtig ist die Reihenfolge — **erst das Spiel, dann die Kraft**; dabei hilft
+  `Apex Circuit FFB starten.cmd`. Was nur der Fahrer beurteilen kann: ob sich
+  schwerer Bogen, leichtes Untersteuern, Kerb und Anschlag richtig anfühlen
+  (`--demo`). Der Stand steht in `docs/FFB_F1_STYLE_PLAN.md` und in
+  `docs/reviews/ffb_wave7_ownership.md`.
 * Der Wagen fährt vorwärts in die richtige Richtung (Nase = Fahrtrichtung), Vorderräder lenken sichtbar mit, Hinterräder treiben an.
 * **Lenkrichtung stimmt**: rechts am Lenkrad ist rechts im Spiel — Cockpit-Lenkrad, sichtbare Vorderräder und die Fahrphysik drehen alle in dieselbe Richtung (`godot_f1/tests/test_cockpit_wheel.gd`).
 
@@ -33,9 +36,13 @@ GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
 Doppelklick auf **Apex Circuit** auf dem Desktop, oder auf `Apex Circuit starten.lnk` im Projektordner.
 
 Für die Kraft am Lenkrad zusätzlich **`Apex Circuit FFB starten.cmd`**
-doppelklicken (Fenster offen lassen). Ohne dieses Fenster läuft das Spiel
-unverändert, nur eben ohne Kraft — Godot selbst kann am G29 kein
-Force Feedback erzeugen.
+doppelklicken (Fenster offen lassen) — das startet **erst das Spiel und dann
+die Kraft**. Diese Reihenfolge ist gemessen wichtig: übernimmt der Helfer das
+Lenkrad zuerst, bekommt das Spiel keine Achsendaten mehr und das Rad steht
+still (`docs/reviews/ffb_wave7_ownership.md`). Läuft das Spiel schon, nimmt
+`"Apex Circuit FFB starten.cmd" --nur-helfer` nur die Kraft. Ohne dieses Fenster
+läuft das Spiel unverändert, nur eben ohne Kraft — Godot selbst kann am G29
+kein Force Feedback erzeugen.
 
 Unterstützt werden **G29, G920 und G923** — der Helfer sucht die ganze
 Logitech-Familie (ein anderes Rad: `python tools/g29_ffb.py --name <Name>`).
@@ -104,7 +111,8 @@ godot --path godot_f1
 | `blender/exports/cars/` | 6 Low-Poly-Lackierungen, Reifen getrennt |
 | `blender/exports/track/` | Apex Circuit + Racing Line |
 | `tools/glb_probe.py` | Diagnose: schneidet ein GLB entlang Z (welches Ende ist die Nase?) |
-| `tools/hid_probe.py` | Diagnose: liest rohe HID-Reports des G29 (Netzteil-/Kabel-Check ohne Godot) |
+| `tools/hid_vs_dinput.py` | Diagnose: dreht das Rad mit Kraft und liest **beide** Wege gleichzeitig (HID + DirectInput) |
+| `tools/hid_probe.py` | Diagnose: liest rohe HID-Reports des G29 — ein Timeout ohne Bewegung beweist nichts |
 | `docs/` | Inventar (Excel) |
 
 ## Wenn das Lenkrad nicht reagiert
@@ -130,11 +138,14 @@ statt still zu bleiben:
   jedem Paket zurück (`{"ack":1}`), deshalb kann das Spiel das überhaupt
   erkennen. (Die Warnung erscheint erst nach rund zwei Sekunden Fahrt, damit
   sie beim Laden der Szene nicht fälschlich aufleuchtet.)
-* **„LENKRAD MELDET NICHTS — Netzteil, Pedalkabel, USB-Port prüfen“** — der
-  Helfer läuft und hat das Rad übernommen, aber das G29 sendet **keine
-  Achsdaten**. Genau der Fall, den `Lenkrad pruefen.cmd` prüft: ohne Netzteil
-  gibt es weder Achsen noch Kraft. Erst wenn dieses Band verschwindet, kann
-  das Spiel die Kraftrichtung selbst messen (dafür braucht es Achsdaten).
+* **„LENKRAD MELDET NICHTS — Spiel neu starten, dann ‚Apex Circuit FFB
+  starten.cmd‘“** — der Helfer läuft, aber das G29 liefert **keine
+  Achsdaten**. Die häufigste Ursache ist die Reihenfolge: hat der Helfer das
+  Rad vor dem Spiel übernommen, sieht das Spiel es nicht mehr (gemessen,
+  `docs/reviews/ffb_wave7_ownership.md`). Also zuerst das Spiel neu starten;
+  erst wenn das nicht hilft, Netzteil, Kabel und USB-Port prüfen
+  (`Lenkrad pruefen.cmd`). Sobald das Band verschwindet, misst das Spiel die
+  Kraftrichtung selbst — dafür braucht es Achsdaten.
 
 Prüfen lässt sich die Kette ohne Spiel und ohne Lenkrad:
 
@@ -169,15 +180,35 @@ Testfälle, die es in alten Ständen nicht gab (Vollgas trotz kaputter
 Pedal-Kalibrierung, Selbstmessung der Kraftrichtung). Damit ist „der Build ist
 aktuell“ gemessen und nicht aus einem Zeitstempel geschlossen.
 
-Windows erkennt das G29 auch dann, wenn es **keine** Daten liefert — typisch, wenn das Netzteil nicht angeschlossen ist. Prüfen:
+**Zuerst die Reihenfolge prüfen, dann die Hardware.** Gemessen am 21.09.2026
+am echten G29 (`docs/reviews/ffb_wave7_ownership.md`): übernimmt der
+Kraft-Helfer das Lenkrad **vor** dem Spiel, dann bekommt das Spiel keine
+Achsendaten mehr und das Rad steht still — auch für den Helfer selbst. Das
+Spiel muss das Lenkrad zuerst öffnen.
+
+* `"Apex Circuit FFB starten.cmd"` macht das jetzt von allein: es startet zuerst
+  das Spiel und wartet dann auf dessen Pakete.
+* Läuft der Helfer schon und das Spiel zeigt „G29 ohne Achsendaten“: **Spiel
+  neu starten**, Helfer weiterlaufen lassen.
+* Ein `report timeout` im Einzelprüfer beweist **nichts** — das G29 sendet nur,
+  wenn sich etwas ändert. Ohne Drehen liest auch ein gesundes Rad nur Stille.
+
+Erst danach kommt die Hardware in Frage. Prüfen heisst hier: das Rad wird kurz
+mit Kraft gedreht und **beide** Wege werden gleichzeitig gelesen (HID für die
+Lenkung, DirectInput für die Kraft):
 
 ```
-python tools/hid_probe.py 046d:c24f
+python tools/hid_vs_dinput.py --seconds 1.5 --force 0.3
 ```
 
-Kommt nur `report timeout ... (no data)`, obwohl die Joystick-Schnittstelle mit sieben Achsen beschrieben wird, dann sendet das Lenkrad selbst nichts: Netzteil prüfen, Pedalkabel am Lenkrad festziehen, anderes USB-Port (möglichst direkt hinten am PC, kein Hub) probieren, Modusschalter am Lenkrad auf **PC** stellen. Danach im Spiel `Esc` → *Einstellungen* → *Gas kalibrieren*.
+Steht das Rad bei „plus“/„minus“ still, dann: Netzteil prüfen, Pedalkabel am
+Lenkrad festziehen, anderes USB-Port (möglichst direkt hinten am PC, kein Hub)
+probieren, Modusschalter am Lenkrad auf **PC** stellen. Danach im Spiel `Esc` →
+*Einstellungen* → *Gas kalibrieren*.
 
-Einfacher geht es per Doppelklick im Projektordner: **`Lenkrad pruefen.cmd`** startet dieselbe Prüfung und zeigt die Checkliste an.
+Einfacher geht es per Doppelklick im Projektordner: **`Lenkrad pruefen.cmd`**
+startet dieselbe Prüfung (Hände weg, das Rad dreht sich kurz) und zeigt die
+Checkliste an.
 
 ## Steuerung
 

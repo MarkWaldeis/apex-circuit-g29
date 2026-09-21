@@ -328,8 +328,16 @@ func _scan_axes(delta: float) -> void:
 	_live_checked = true
 	if not _any_axis_moved():
 		axes_live = false
+		# Zwei Ursachen, und die wahrscheinlichere steht zuerst: gemessen am
+		# 21.09.2026 bekommt das Spiel **keine Achsendaten mehr**, wenn der
+		# Kraft-Helfer das Lenkrad vor dem Spiel uebernommen hat
+		# (docs/reviews/ffb_wave7_ownership.md). Erst danach kommt die
+		# Hardware in Frage - "Netzteil" war bisher die einzige genannte
+		# Ursache und damit in den meisten Faellen die falsche.
 		hardware_hint = ("G29 erkannt, aber noch keine Achsendaten — "
-			+ "Lenkrad/Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen.")
+			+ "Lenkrad/Pedal einmal bewegen. Läuft der Kraft-Helfer schon, "
+			+ "Spiel neu starten (das Spiel muss das Lenkrad zuerst öffnen). "
+			+ "Sonst Netzteil und Pedalkabel prüfen.")
 
 
 func _any_axis_moved() -> bool:

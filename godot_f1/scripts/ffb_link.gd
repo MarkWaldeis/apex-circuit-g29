@@ -316,10 +316,17 @@ func helper_alive() -> bool:
 
 
 ## Der Helfer laeuft und hat das Lenkrad uebernommen - aber das Rad selbst
-## meldet keine Achse (typisch: Netzteil nicht angeschlossen, Kabel/Port).
-## Dann gibt es weder Kraft noch Lenkgefuehl, und der Fahrer soll das sehen,
-## statt sich zu fragen, warum nichts ankommt. Das Feld `axis` fehlt im
-## Lebenszeichen genau dann (gemessen: `--check`, `ohne_rad_keine_erfundene_achse`).
+## meldet keine Achse. Dann gibt es weder Kraft noch Lenkgefuehl, und der
+## Fahrer soll das sehen, statt sich zu fragen, warum nichts ankommt. Das Feld
+## `axis` fehlt im Lebenszeichen genau dann (gemessen: `--check`,
+## `ohne_rad_keine_erfundene_achse`).
+##
+## Die haeufigste Ursache ist **nicht** die Hardware: hat der Helfer das
+## Lenkrad vor dem Spiel uebernommen, liefert das Spiel danach keine
+## Achsendaten mehr (gemessen am 21.09.2026, `docs/reviews/ffb_wave7_ownership.md`).
+## Seit `tools/g29_ffb.py` auf das erste Paket des Spiels wartet, kann das nur
+## noch mit einem alten Helfer passieren - deshalb nennt der HUD-Text zuerst
+## den Neustart des Spiels und erst danach Netzteil und Kabel.
 func wheel_silent() -> bool:
 	if not helper_alive() or String(helper_mode) != "wheel":
 		return false

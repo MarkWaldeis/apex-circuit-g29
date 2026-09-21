@@ -51,15 +51,17 @@ In dieses Profil schreibt nur das echte Spiel mit echtem Lenkrad: Testläufe, Di
 
 Das gilt auch für die Messläufe, die **nicht headless** sein können (headless zählt Godot keine Joysticks auf): `tests/probe_ffb_steer.gd`, `tests/probe_axis_read.gd` und `tools/ffb_direction_check.ps1` setzen `APEX_G29_PROFILE` und schreiben damit in eine Diagnosedatei statt in `user://g29_profile.json`. Gemessen am 21.09.2026 schrieb der Richtungstest sonst das echte Profil neu (im Godot-Log: `G29 profile saved: … "throttle_press": -1.88 …`), samt neu gelernter Pedal-Ruheposition. `tests/test_g29_profile_path.gd` (6 Prüfungen) hält fest, dass das echte Profil dabei inhaltlich **und im Zeitstempel** unberührt bleibt.
 
-Wichtig: Das G29 braucht sein **Netzteil**. Hängt nur USB dran, meldet sich das Lenkrad zwar am PC an, sendet aber **keinen einzigen Eingabe-Report** — es kommen also keine Achsendaten an. Das Spiel zeigt das ehrlich an: In den Einstellungen steht dann „G29 verbunden (…), aber noch keine Achsendaten — Lenkrad oder Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen“, die Achsenbalken und Pedal-Zeilen zeigen `—` statt erfundener Nullwerte, und das HUD meldet „G29 ohne Achsendaten“.
+Wichtig ist zuerst die **Reihenfolge**, nicht das Netzteil. Gemessen am 21.09.2026 am echten G29 (`../docs/reviews/ffb_wave7_ownership.md`): übernimmt der Kraft-Helfer das Lenkrad **vor** dem Spiel (exklusiv über DirectInput), dann bekommt Godot/SDL beim Start **keine Achsendaten** mehr, und das Rad steht auch für den Helfer still — beide Seiten sterben an derselben Ursache. Öffnet das Spiel zuerst, laufen beide gleichzeitig (gemessen: Rad fährt unter Kraft von −1,0 nach +1,0, `data=true`, Spanne 2,0). Deshalb wartet `tools/g29_ffb.py` auf das erste Paket des Spiels, bevor es das Lenkrad überhaupt öffnet, und `Apex Circuit FFB starten.cmd` startet erst das Spiel.
 
-Das lässt sich unabhängig nachmessen, ohne Godot zu starten:
+Das Spiel zeigt den Zustand ehrlich an: In den Einstellungen steht dann „G29 verbunden (…), aber noch keine Achsendaten — Lenkrad oder Pedal einmal bewegen. Läuft der Kraft-Helfer schon, Spiel neu starten (das Spiel muss das Lenkrad zuerst öffnen). Sonst Netzteil und Pedalkabel prüfen.“, die Achsenbalken und Pedal-Zeilen zeigen `—` statt erfundener Nullwerte, und das HUD meldet „G29 ohne Achsendaten“.
+
+Nachmessen lässt sich beides nur mit Bewegung. Dieses Werkzeug dreht das Rad kurz mit Kraft und liest **beide** Wege gleichzeitig — HID (was das Spiel braucht) und DirectInput (was die Kraft braucht):
 
 ```
-python tools/hid_probe.py 046d:c24f
+python tools/hid_vs_dinput.py --seconds 1.5 --force 0.3
 ```
 
-Das Skript liest die rohen HID-Reports direkt über die Windows-HID-Schnittstelle (ohne SDL, DirectInput oder Godot dazwischen). Bei einem betriebsbereiten G29 kommen laufend Reports an; ohne Netzteil läuft jede Abfrage in einen Timeout. Erwartete Ausgabe im Fehlerfall: `report timeout ... (no data)` auf allen drei Schnittstellen, obwohl `usage_page=0x0001 usage=0x0004 input_len=13 values=7` genau die Joystick-Schnittstelle mit sieben Achsen beschreibt.
+Wichtig: `python tools/hid_probe.py 046d:c24f` allein beweist **nichts**. Es liest die rohen HID-Reports, aber das G29 sendet nur bei Änderung — ohne Drehen läuft auch bei einem gesunden Rad jede Abfrage in einen Timeout (`report timeout … (no data)` auf allen drei Schnittstellen). Genau daraus entstand die frühere Fehlannahme „kein Netzteil“: derselbe Einzelprüfer meldete Stille, während `tools/hid_vs_dinput.py` auf derselben Schnittstelle **1 920 Reports** zählte.
 
 ## Tests (headless)
 
@@ -167,19 +169,23 @@ Der Helfer antwortet außerdem auf jedes Paket mit einem Lebenszeichen
 zuhört. Ein totes Lenkrad bleibt damit nicht stumm: das HUD schreibt
 „LENKRADKRAFT AUS“ (Schalter im Menü), „LENKRADKANAL AUS (APEX_FFB=0)“,
 „KEIN HELFER — Apex Circuit FFB starten.cmd“ oder „LENKRAD MELDET NICHTS —
-Netzteil, Pedalkabel, USB-Port prüfen“ statt einfach 0 %.
+Spiel neu starten, dann ‚Apex Circuit FFB starten.cmd‘“ statt einfach 0 %.
 Alles zusammen steht in `../docs/FFB_F1_STYLE_PLAN.md`, die Einzelprüfungen in
 `tests/test_ffb_model.gd` (34 Checks), die Gegenproben in
 `tests/probe_review_root.gd` (18 Checks) und die Messung auf der Strecke in
 `tests/probe_ffb.gd`.
 
 Der Kanal hängt an der Hardware: ohne **Netzteil** kann das G29 keine Kraft
-erzeugen **und liefert auch keine Achsendaten**, und Godot selbst hat keine
-Force-Feedback-Schnittstelle. Die Kette selbst ist ohne Hardware prüfbar:
+erzeugen, und Godot selbst hat keine Force-Feedback-Schnittstelle. Am
+21.09.2026 gemessen: die Ursache für „keine Achsendaten“ war die
+Startreihenfolge (Helfer vor dem Spiel, siehe oben), nicht das Netzteil —
+DirectInput las die Achse, während HID und SDL nichts bekamen. Die Kette selbst
+ist ohne Hardware prüfbar:
 `tests/test_ffb_link.gd` (14 s echte Fahrt: v2-Pakete, 60 Hz, Kraft im Bogen,
 Stoß, Wertebereiche, Lebenszeichen des Helfers), `python tools/g29_ffb.py --check`
-(12 Prüfungen ohne Lenkrad: Stärke genau einmal, Rampe, Stoß, Loslassen,
-Ereignis/Tempo, Antwort an das Spiel) und
+(16 Prüfungen ohne Lenkrad: Stärke genau einmal, Rampe, Stoß, Loslassen,
+Ereignis/Tempo, Antwort an das Spiel, **der Helfer wartet auf das Spiel** samt
+Gegenprobe) und
 `python tools/g29_ffb.py --dry-run` (Rampe, Wertebereiche am Rad).
 
 Am **echten** Rad ist die Kraft inzwischen ebenfalls gemessen — nur nicht

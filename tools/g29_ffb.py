@@ -1063,12 +1063,71 @@ def selftest(seconds: float, invert: bool, verbose: bool,
     return 0
 
 
+def wait_for_game(sock: socket.socket, timeout: float,
+                  quiet: bool = False) -> bytes | None:
+    """Warte, bis das Spiel das erste Paket schickt. Gibt es zurueck (oder None).
+
+    **Warum das noetig ist - gemessen am 21.09.2026** (Bericht:
+    `docs/reviews/ffb_wave7_ownership.md`). Das G29 vertraegt nur eine
+    Reihenfolge:
+
+      * Oeffnet der Helfer das Lenkrad zuerst (exklusiv ueber DirectInput),
+        dann bekommt das Spiel beim Start **keine Achsendaten** mehr, und das
+        Lenkrad bewegt sich auch fuer den Helfer nicht mehr. Die Achse bleibt
+        bei ihrem letzten Wert stehen, die HID-Reports hoeren auf.
+        Gemessen: Helfer ab t=0, Spiel ab t=6 s -> ab t=9 s stand die Achse
+        bei 32607 und 2 620 HID-Reports bewegten sich nicht mehr.
+      * Oeffnet das Spiel zuerst, laufen beide gleichzeitig: gemessen fuhr das
+        Rad unter Kraft von -1,0 nach +1,0 (DirectInput 99 -> 65 535 -> 59),
+        waehrend das Spiel dieselbe Achse live mitlas (`data=true`,
+        Spanne 2,0).
+
+    Das Spiel oeffnet das Lenkrad lange vor dem ersten Paket (SDL beim Start,
+    die ersten Pakete kommen aus dem fahrenden Auto). "Warte auf das erste
+    Paket" ist deshalb eine sichere Sperre: wer wartet, kann nicht der Erste
+    sein. Ohne diesen Warteschritt war die Reihenfolge eine Falle - und die
+    Anleitung des Spiels ("Helfer starten, dann fahren") hat sie genau
+    verkehrt herum vorgegeben.
+    """
+    deadline = None if timeout < 0 else time.time() + timeout
+    if not quiet:
+        print("[ffb] warte auf das Spiel, bevor das Lenkrad uebernommen wird "
+              "(das Spiel muss das Rad zuerst oeffnen)")
+    warned = 0.0
+    warned_at = time.time()
+    while True:
+        try:
+            data, _peer = sock.recvfrom(4096)
+        except (BlockingIOError, OSError):
+            data = None
+        if data:
+            if not quiet:
+                print("[ffb] das Spiel sendet - jetzt uebernimmt der Helfer "
+                      "das Lenkrad")
+            return data
+        if deadline is not None and time.time() >= deadline:
+            if not quiet:
+                print("[ffb] kein Paket vom Spiel innerhalb von "
+                      f"{timeout:.0f} s (--wait-game 0 schaltet das Warten aus). "
+                      "Laeuft das Spiel wirklich? Ohne das Spiel bewegt "
+                      "`--demo` das Lenkrad.")
+            return None
+        if not quiet and time.time() - warned_at > 10.0:
+            warned += 1
+            warned_at = time.time()
+            print("[ffb] ... warte weiter auf das Spiel "
+                  f"({warned * 10:.0f} s). Spiel starten und ins Rennen gehen; "
+                  "danach ist die Kraft sofort da.")
+        time.sleep(0.02)
+
+
 def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                idle_release: float, exclusive: bool = True,
                spring: float = 0.0, gain: float = 1.0,
                dry_run: bool = False, run_seconds: float = 0.0,
                report: dict = None, quiet: bool = False,
-               wheel_override=None, name_filter=None) -> int:
+               wheel_override=None, name_filter=None,
+               wait_game: float = -1.0) -> int:
     """Pakete lesen und Kraft ans Lenkrad geben.
 
     `report` (optional) wird mit den Messwerten des Laufs gefuellt, damit
@@ -1079,30 +1138,14 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
     `wheel_override` setzt einen Ersatz fuer das G29 ein (siehe
     `_MagnitudeProbe`). Damit laeuft der echte Loop samt Rampe und Puls, nur
     ohne Hardware - das ist die Messung, die `--check` benutzt.
+
+    `wait_game`: so lange (Sekunden) auf das erste Paket des Spiels warten,
+    bevor das Lenkrad uebernommen wird. `-1` (Standard) wartet unbegrenzt,
+    `0` schaltet das Warten ab. Siehe `wait_for_game()`.
     """
     wheel = None
     if wheel_override is not None:
         wheel = wheel_override
-    elif not dry_run:
-        try:
-            wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
-                                     exclusive=exclusive)
-        except WheelError as exc:
-            print(f"[ffb] kein Lenkrad: {exc}")
-            return 1
-        if not quiet:
-            print(f"[ffb] {wheel.name} bereit, Effekte: "
-                  f"{', '.join(wheel.effects_created) or '(keine)'}")
-        if wheel.effects_failed:
-            print(f"[ffb] nicht verfuegbar: {'; '.join(wheel.effects_failed)}")
-        if not wheel.effects_created:
-            print("[ffb] ohne Effekte beendet sich der Helfer")
-            wheel.close()
-            return 1
-    else:
-        if not quiet:
-            print("[ffb] Trockenlauf: kein Lenkrad, nur die Rechnung "
-                  "(zum Pruefen der Kette ohne Hardware)")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     # Zwei Helfer am selben Port wuerden sich die Pakete teilen: Windows gibt
@@ -1125,6 +1168,33 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
               f"Anderer Port mit --port oder APEX_FFB_PORT.")
         return 1
     sock.setblocking(False)
+
+    # Erst das Spiel, dann das Lenkrad: siehe `wait_for_game()`. Das Warten
+    # steht **vor** dem Oeffnen des Lenkrads - genau darum geht es.
+    carry = None
+    if wheel_override is None and not dry_run and wait_game != 0.0:
+        carry = wait_for_game(sock, wait_game, quiet)
+
+    if wheel is None and not dry_run:
+        try:
+            wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
+                                     exclusive=exclusive)
+        except WheelError as exc:
+            print(f"[ffb] kein Lenkrad: {exc}")
+            sock.close()
+            return 1
+        if not quiet:
+            print(f"[ffb] {wheel.name} bereit, Effekte: "
+                  f"{', '.join(wheel.effects_created) or '(keine)'}")
+        if wheel.effects_failed:
+            print(f"[ffb] nicht verfuegbar: {'; '.join(wheel.effects_failed)}")
+        if not wheel.effects_created:
+            print("[ffb] ohne Effekte beendet sich der Helfer")
+            wheel.close()
+            return 1
+    elif wheel is None and dry_run and not quiet:
+        print("[ffb] Trockenlauf: kein Lenkrad, nur die Rechnung "
+              "(zum Pruefen der Kette ohne Hardware)")
 
     period = 1.0 / max(rate, 20.0)
     # Ziel (was das Spiel will) und Ist (was gleich am Lenkrad liegt). Zwischen
@@ -1205,7 +1275,10 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
             live["pulse"] = max(live["pulse"] - period / PULSE_DECAY, 0.0)
             if live["pulse"] <= 0.0:
                 live["pulse_dir"] = 0.0
-            got = None
+            # Das Paket, das den Helfer aus dem Warten geholt hat, darf nicht
+            # verloren gehen (sonst fehlt der erste Kraftwert des Laufs).
+            got = carry
+            carry = None
             peer = None
             while True:
                 try:
@@ -1535,6 +1608,67 @@ def _ack_probe(rate: float = 200.0, wait: float = 2.5, wheel=None) -> tuple:
         sock.close()
 
 
+class _OrderWheel:
+    """Ersatz-Lenkrad, das nur mitschreibt, *wann* es gebaut wurde."""
+
+    opened_at: list = []
+
+    def __init__(self, name_filter=None, verbose: bool = False,
+                 exclusive: bool = True) -> None:
+        _OrderWheel.opened_at.append(time.time())
+        self.name = "ORDER-STUB"
+        self.effects_created = ["const"]
+        self.effects_failed = []
+
+    def apply(self, *args, **kwargs) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def _bridge_order_probe(wait_game: float = 5.0) -> tuple[bool, bool]:
+    """Prueft, ob der Helfer auf das erste Paket des Spiels wartet.
+
+    Ablauf: der echte Bruecken-Loop startet mit `wait_game=5`, aber ohne
+    Paket. Nach 0,6 s darf noch **kein** Lenkrad geoeffnet worden sein. Dann
+    schickt ein Sender ein Paket, und kurz darauf muss das Ersatz-Rad da sein.
+    Ohne diesen Warteschritt war die Reihenfolge eine Falle: der Helfer
+    uebernahm das Rad, und das Spiel bekam danach keine Achsendaten mehr.
+
+    `wait_game=0` ist die Gegenprobe: ohne Warten muss das Rad *vor* dem
+    ersten Paket offen sein. Nur so kann diese Pruefung ueberhaupt fehlschlagen.
+    """
+    port = _free_port(5621)
+    saved = globals()["G29ForceFeedback"]
+    globals()["G29ForceFeedback"] = _OrderWheel
+    _OrderWheel.opened_at = []
+    try:
+        bridge = threading.Thread(
+            target=lambda: run_bridge(port, 200.0, False, False, 0.5,
+                                      report={}, quiet=True, wait_game=wait_game,
+                                      run_seconds=1.2),
+            daemon=True)
+        bridge.start()
+        time.sleep(0.6)
+        opened_early = bool(_OrderWheel.opened_at)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            payload = _packet(v=2, torque=0.1, damper=0.0, friction=0.0,
+                              rumble=0.0, rumble_hz=24.0, pulse=0.0,
+                              pulse_dir=0.0, spring=0.0, gain=1.0,
+                              source="Test")
+            for _ in range(20):
+                sock.sendto(payload, ("127.0.0.1", port))
+                time.sleep(0.05)
+        finally:
+            sock.close()
+        bridge.join(timeout=5.0)
+        return opened_early, bool(_OrderWheel.opened_at)
+    finally:
+        globals()["G29ForceFeedback"] = saved
+
+
 def check_chain(rate: float = 200.0) -> int:
     """Die Kette Paket -> Kraft ohne Lenkrad pruefen (0 = alles gut)."""
     failed = 0
@@ -1682,7 +1816,27 @@ def check_chain(rate: float = 200.0) -> int:
     # Und die Gegenprobe: ohne Rad steht kein erfundener Wert im Paket.
     _dry_ok, _dry_mode, _dry_detail, dry_msg = _ack_probe(rate)
     check("axis" not in dry_msg, "ohne_rad_keine_erfundene_achse",
-          f"Felder ohne Rad: {sorted(dry_msg.keys())}")
+         f"Felder ohne Rad: {sorted(dry_msg.keys())}")
+
+    # 10) **Die Reihenfolge.** Das Spiel muss das Lenkrad zuerst oeffnen.
+    #     Gemessen am 21.09.2026: uebernimmt der Helfer das G29 zuerst
+    #     (exklusiv), dann liefert das Spiel beim Start keine Achsendaten mehr
+    #     und das Rad steht auch fuer den Helfer still; oeffnet das Spiel
+    #     zuerst, laufen beide gleichzeitig. Deshalb wartet der Helfer auf das
+    #     erste Paket, bevor er `G29ForceFeedback` ueberhaupt baut. Geprueft
+    #     wird das mit einem Ersatz-Rad, das mitschreibt, *wann* es entsteht:
+    #     vor dem ersten Paket darf es nicht existieren.
+    opened_early, opened_late = _bridge_order_probe()
+    early_control, late_control = _bridge_order_probe(wait_game=0.0)
+    check(not opened_early and opened_late,
+          "der_helfer_wartet_auf_das_spiel",
+          f"Rad vor dem ersten Paket geoeffnet: {opened_early} "
+          f"(muss False sein), nach dem Paket: {opened_late} (muss True sein)")
+    check(early_control, "die_reihenfolgepruefung_kann_fehlschlagen",
+          f"Gegenprobe mit --wait-game 0: Rad vor dem Paket offen = "
+          f"{early_control} (muss True sein; ohne Warten oeffnet der Helfer "
+          f"sofort, genau der Fall, der das Spiel blind machte; nach dem "
+          f"Paket: {late_control})")
 
     print(f"FFB_CHECK {'PASS' if failed == 0 else 'FAIL'} {checks} Pruefungen, "
           f"{failed} Mangel")
@@ -1856,6 +2010,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selftest-seconds", type=float, default=1.2)
     parser.add_argument("--idle-release", type=float, default=0.5,
                         help="Sekunden ohne Paket, bis die Kraft faellt")
+    parser.add_argument("--wait-game", type=float, default=-1.0,
+                        help="so lange auf das erste Paket des Spiels warten, "
+                             "bevor das Lenkrad uebernommen wird (-1 = bis das "
+                             "Spiel sendet, 0 = sofort uebernehmen). Das Spiel "
+                             "muss das Rad zuerst oeffnen, sonst liefert es "
+                             "keine Achsendaten (gemessen, siehe "
+                             "docs/reviews/ffb_wave7_ownership.md)")
     parser.add_argument("--spring", type=float, default=0.0,
                         help="Zentrierfeder 0..1 (Standard 0: das Zentrieren "
                              "macht der Nachlauf des Spiels)")
@@ -1906,7 +2067,7 @@ def main(argv: list[str] | None = None) -> int:
     return run_bridge(args.port, args.rate, args.invert, args.verbose,
                       args.idle_release, args.exclusive, args.spring, args.gain,
                       args.dry_run, args.dry_run_seconds if args.dry_run else 0.0,
-                      name_filter=args.name)
+                      name_filter=args.name, wait_game=args.wait_game)
 
 
 if __name__ == "__main__":

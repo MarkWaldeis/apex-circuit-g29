@@ -515,6 +515,16 @@ func _silent_device_detector() -> void:
 		h.step(0.04)
 	_check(not h.axes_live and h.hardware_hint != "", "silent_device_is_detected",
 		"live=%s hint=%s" % [h.axes_live, h.hardware_hint])
+	# Der Hinweis muss die **wahrscheinlichste** Ursache zuerst nennen.
+	# Gemessen am 21.09.2026 ist das nicht die Hardware, sondern die
+	# Startreihenfolge: hat der Kraft-Helfer das Lenkrad vor dem Spiel
+	# uebernommen, bekommt das Spiel keine Achsendaten mehr
+	# (docs/reviews/ffb_wave7_ownership.md). Der Hinweis nennt deshalb zuerst
+	# den Neustart des Spiels und erst danach Netzteil und Kabel.
+	_check(h.hardware_hint.contains("Spiel neu starten")
+		and h.hardware_hint.contains("Netzteil"),
+		"der_stille_lenkrad_hinweis_nennt_zuerst_die_startreihenfolge",
+		h.hardware_hint)
 	h.sim_set(2, 0.5)
 	h.step(0.04)
 	_check(h.axes_live, "moving_an_axis_clears_the_warning")
