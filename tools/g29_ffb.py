@@ -58,9 +58,16 @@ Aufrufe
     python tools/g29_ffb.py --demo          # alle Fahrsituationen am echten Rad fuehlen
     python tools/g29_ffb.py --sign-check    # messen, wohin eine positive Kraft dreht
 
-Das G29/G920/G923 braucht sein Netzteil: ohne Netzteil meldet es sich an,
-liefert aber keine Achsendaten und kann auch keine Kraft erzeugen. `--selftest`
-sagt das ausdruecklich, statt Erfolg vorzutaeuschen.
+Das G29/G920/G923 braucht sein Netzteil fuer die Kraft: ohne Netzteil meldet es
+sich an, kann aber keinen Motor antreiben. `--selftest` sagt das ausdruecklich,
+statt Erfolg vorzutaeuschen.
+
+**Nicht** die Ursache fehlender Achsdaten ist das Netzteil - das war eine
+Fehlannahme dieses Projekts (Welle 4 bis 6). Gemessen am 21.09.2026: DirectInput
+las die Achse einwandfrei, waehrend das Spiel keine bekam, weil der Helfer das
+Lenkrad **vor** dem Spiel uebernommen hatte. Deshalb wartet `run_bridge` jetzt
+auf das erste Paket des Spiels (`wait_for_game`); Einzelheiten in
+`docs/reviews/ffb_wave7_ownership.md`.
 """
 
 from __future__ import annotations
@@ -1052,8 +1059,9 @@ def selftest(seconds: float, invert: bool, verbose: bool,
         return 1
     if before is None or after is None:
         print("SELFTEST TEILWEISE: Effekte geladen und gestartet, aber die Achse "
-              "liess sich nicht auslesen (keine Achsendaten). Ohne Netzteil kann "
-              "der Motor keine Kraft erzeugen.")
+              "liess sich nicht auslesen (keine Achsendaten). Das G29 sendet nur "
+              "bei Aenderung - das Rad muss sich also bewegen. Ohne Netzteil "
+              "kann der Motor keine Kraft erzeugen.")
         return 2
     if before == after:
         print("SELFTEST TEILWEISE: Effekte laufen, die Achse hat sich in der kurzen "

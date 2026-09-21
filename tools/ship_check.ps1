@@ -54,6 +54,13 @@ if (-not (Test-Path -LiteralPath $userDir)) {
 ## Anlaufphase), und ein Lauf mit weniger als 300 Paketen wird wiederholt,
 ## bevor er als Ergebnis gilt.
 $MinPackets = 300
+## Der Helfer hat ein **Ruhegewicht** (Daempfung 0,10, Reibung 0,05), damit
+## das Lenkrad zwischen zwei Laeufen nicht tot in der Hand liegt
+## (`tools/g29_ffb.py`, der `stale`-Zweig). Sobald das Spiel sendet, klingt es
+## auf dessen Werte ab - gemessen am 21.09.2026 (20:13) stand in der Zeile bei
+## 6 Paketen noch `damp=0.06 fric=0.03`, obwohl der Build in diesem Lauf
+## korrekt 0,00 sandte. Die ersten Pakete sind also Uebergang, nicht Ergebnis.
+$SettlePackets = 120
 $script:strayGames = 0
 
 ## Ein Spiel, das den Lauf ueberlebt, ist kein kleiner Schoenheitsfehler:
@@ -166,7 +173,7 @@ function Run-Shipped([bool]$enabled, [int]$runPort) {
             # Fehlalarm, der wie ein alter Build aussah. Vorher stand hier nur
             # `$seen -eq 0` - das faengt die Zeile *vor* dem Spielstart ab,
             # aber nicht die nach dem Ende des Spiels.
-            if ($seen -eq 0 -or $l -match '\[idle\]') { continue }
+            if ($seen -lt $SettlePackets -or $l -match '\[idle\]') { continue }
             $packets = $seen
             if ($l -match 'torque=([+-][\d.]+)') {
                 $t = [math]::Abs([double]$Matches[1])

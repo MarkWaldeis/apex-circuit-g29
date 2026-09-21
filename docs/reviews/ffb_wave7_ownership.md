@@ -145,3 +145,49 @@ Nicht geprüft (kein Zugriff): ob sich das Einfrieren aus §3 auch mit einem
 anderen Rad (G920/G923) oder einem anderen DirectInput-Client reproduzieren
 lässt. Der Warteschritt verhindert es unabhängig davon, weil der Helfer das Rad
 nie zuerst öffnet.
+
+## 7. Nachtrag: die Prüfwerkzeuge selbst hatten drei Mängel
+
+Aufgefallen beim Nachfahren der Auslieferung — jeder einzelne hätte eine
+**falsche** Aussage über das Spiel erzeugt bzw. die Auslieferung verhindert:
+
+**7.1 `export_windows.cmd` brach mit einem kryptischen Fehler ab.**
+Gemessen: `EXIT=1`, `Get-FileHash : Die Benennung "Get-FileHash" wurde nicht
+als Name eines Cmdlet erkannt`. Ursache: das Skript startet Windows PowerShell
+5.1, und der Aufrufer (hier ein PowerShell-7-Fenster) vererbt seinen
+`PSModulePath`. In dem liegt der Modulordner der Codex-Laufzeit mit
+`Microsoft.PowerShell.Utility` für .NET 7 — 5.1 scheitert daran und hat danach
+kein `Get-FileHash` mehr. Der Export lief durch, die Auslieferung starb, und
+zurück blieb eine **alte Desktop-Kopie**. Behoben: `export_windows.cmd` setzt
+einen sauberen Modulpfad, `export_and_deliver.ps1` rechnet den SHA256 mit .NET
+(keine Modulabhängigkeit) und meldet ein **laufendes Spiel** ausdrücklich als
+Grund, statt eines nackten `Copy-Item: IOException`.
+
+**7.2 Die Prüfung des ausgelieferten Builds konnte grundlos rot werden.**
+Zweimal gemessen: `FAIL der Build kennt APEX_FFB_SETTINGS`, angeblich Reibung
+0,050 bzw. 0,030 — bei einem Build, der in Wahrheit korrekt `Quelle=aus` mit
+0,00/0,00 sandte. Zwei Ursachen, beide aus dem Protokoll belegt:
+
+* Die **Ruhezeile** des Helfers trägt den *letzten* Paketzähler und dazu sein
+  Ruhegewicht (`[idle] … damp=0.10 fric=0.05`). Die Prüfung las das als
+  Messung. Gemessen am 21.09.2026, 20:22: `458 Pakete … damp=0.10 fric=0.05
+  [idle]` → Fehlalarm.
+* Die ersten Pakete sind **Übergang**: das Ruhegewicht klingt auf die Werte des
+  Spiels ab. Gemessen, 20:13: bei 6 Paketen noch `damp=0.06 fric=0.03`, ab 127
+  Paketen 0,00/0,00.
+
+Behoben: Ruhezeilen zählen nicht, Zeilen unter 120 Paketen zählen nicht, ein
+Lauf unter 300 Paketen wird wiederholt — und die Prüfung verlangt jetzt
+zusätzlich `pakete ≥ 300`, damit ein Lauf, der nicht stattgefunden hat, nicht
+als „0 = aus“ durchgeht. Zwei aufeinanderfolgende Läufe: **PASS 7 Prüfungen**.
+
+**7.3 Zwei Läufe ließen Prozesse als Waisen zurück.** Gemessen: ein headless
+`Apex Circuit.exe` (PID 17704, Elternprozess weg, gestartet 20:10:01) und ein
+Helfer (`--port 5632`, gestartet 20:12:21). Folgen: die laufende `.exe` sperrt
+ihre eigene Datei (→ 7.1), der alte Helfer hält das Lenkrad und seine Logdatei
+(→ `Remove-Item: … wird von einem anderen Prozess verwendet`, bevor überhaupt
+gemessen wurde). Behoben: beide Prüfskripte **räumen vor dem Messen auf**,
+beenden Prozesse mit Nachkontrolle (`Wait-Process`, zweiter Versuch, laute
+Meldung) und benutzen je Versuch einen **eigenen Logdateinamen**; `ship_check`
+prüft am Ende ausdrücklich, dass kein Spielprozess stehen bleibt (7.
+Prüfung).

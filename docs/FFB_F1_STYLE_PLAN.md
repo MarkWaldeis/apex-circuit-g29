@@ -357,10 +357,19 @@ der Root nach und startet die nächste Welle — so lange, bis eine Welle
 
 * **G29 ohne Netzteil** kann keine Kraft erzeugen — dann ist die Kette
   korrekt und trotzdem fühlt man nichts. `--selftest` sagt das ausdrücklich.
+  **Nicht** die Ursache fehlender *Achsdaten*: das war die Fehlannahme bis
+  Welle 6. Gemessen (Welle 7, `docs/reviews/ffb_wave7_ownership.md`): DirectInput
+  las die Achse, während das Spiel nichts bekam, weil der Helfer das Lenkrad
+  vor dem Spiel übernommen hatte.
 * **Treiber-Dämpfung** in G HUB zerstört die feinen Signale. Steht in der
   Anleitung, ist nicht vom Spiel aus änderbar.
-* **Zwei Programme am Lenkrad**: Der Helfer übernimmt das G29 exklusiv;
-  Godot liest weiter (das ist gemessen, siehe `tools/ffb_live_check.ps1`).
+* **Zwei Programme am Lenkrad**: Der Helfer übernimmt das G29 exklusiv. Er
+  darf es nur **nicht als Erster** tun — sonst bekommt das Spiel keine
+  Achsdaten mehr und das Rad steht auch für den Helfer still. Gemessen und
+  behoben in Welle 7: `run_bridge` wartet auf das erste Paket des Spiels.
+  (Die frühere Behauptung „Godot liest weiter, gemessen mit
+  `tools/ffb_live_check.ps1`“ war **nicht** belegt: dieser Lauf startet Godot
+  headless, und headless zählt Godot keine Joysticks auf.)
 * **Zu starkes Modell** = Clipping = taubes Lenkrad. Deshalb Kriterium 10.
 
 ---

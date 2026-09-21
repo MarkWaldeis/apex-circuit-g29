@@ -43,6 +43,25 @@ $errPath = Join-Path $project "tools\ffb_e2e.err"
 # Datei liegen, die der Lauf ueber APEX_FFB_SETTINGS mitbringt.
 $userDir = Join-Path $env:APPDATA "Godot\app_userdata\Apex Circuit"
 $settingsQuoted = "user://ffb_e2e_settings.json"
+
+## Alte Helfer und Spiele aufraeumen, bevor gemessen wird. Gemessen am
+## 21.09.2026 blieben aus frueheren Laeufen sowohl ein headless Spiel als auch
+## ein Helfer als Waise stehen; der Helfer hielt dabei seine Logdatei und das
+## Lenkrad, das Spiel sperrte die ausgelieferte .exe (der naechste Export
+## scheiterte mit einem nackten IOException). Eine Messung neben einem alten
+## Prozess ist keine Messung.
+$staleGames = @(Get-Process -Name 'Apex Circuit', 'ApexCircuit' -ErrorAction SilentlyContinue)
+foreach ($g in $staleGames) {
+    Write-Host ("[e2e] Beende altes Spiel: PID {0}" -f $g.Id)
+    Stop-Process -Id $g.Id -Force -ErrorAction SilentlyContinue
+}
+$staleHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
+foreach ($h in $staleHelpers) {
+    Write-Host ("[e2e] Beende alten Helfer: PID {0}" -f $h.ProcessId)
+    Stop-Process -Id $h.ProcessId -Force -ErrorAction SilentlyContinue
+}
+if ($staleGames.Count -gt 0 -or $staleHelpers.Count -gt 0) { Start-Sleep -Milliseconds 800 }
 $settingsPath = Join-Path $userDir "ffb_e2e_settings.json"
 
 function Write-Settings([bool]$enabled) {
