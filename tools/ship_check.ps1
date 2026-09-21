@@ -108,8 +108,23 @@ function Stop-RecordedProcess($proc, [string]$label) {
 ## wird deshalb aufgeraeumt, und zwar sichtbar.
 $leftoverHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
+## Aber nicht blind: laeuft gerade ein anderer Prueflauf, gehoert der Helfer
+## zu IHM. Wird er hier erschlagen, messen beide Laeufe nichts (gemessen am
+## 21.09.2026: zwei parallele Laeufe nahmen sich gegenseitig Helfer und Spiel
+## weg). Ein Helfer, der vor weniger als 5 Minuten gestartet wurde, gehoert zu
+## einem laufenden Lauf - dann bricht dieser Aufruf ab, statt zu toeten. Alte
+## Waisen (aelter als 5 Minuten) werden weiterhin aufgeraeumt.
+$youngHelpers = @($leftoverHelpers | Where-Object {
+        $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+if ($youngHelpers.Count -gt 0) {
+    $ids = ($youngHelpers | ForEach-Object { "$($_.ProcessId)" }) -join ', '
+    Write-Host (("[ship] ABBRUCH: es laeuft schon ein Prueflauf (Helfer PID {0}, " +
+        "gestartet vor weniger als 5 Minuten). Parallele Laeufe messen sich " +
+        "gegenseitig kaputt - bitte warten oder diesen Aufruf spaeter starten.") -f $ids)
+    exit 125
+}
 foreach ($h in $leftoverHelpers) {
-    Write-Host ("[ship] Raeume alten Helfer auf: PID {0}" -f $h.ProcessId)
+    Write-Host ("[ship] Raeume alten Helfer auf (Waise): PID {0}" -f $h.ProcessId)
     Stop-Process -Id $h.ProcessId -Force -ErrorAction SilentlyContinue
 }
 if ($leftoverHelpers.Count -gt 0) { Start-Sleep -Milliseconds 700 }
