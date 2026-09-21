@@ -457,7 +457,12 @@ func _build_ffb() -> Control:
 		+ "für sich: den Kerb leiser stellen lässt das Kies-Mahlen stehen. "
 		+ "Das Spiel bildet diesen "
 		+ "Bereich auf die 900° des G29 ab und baut den Anschlag selbst "
-		+ "(Soft Lock) — man spürt die Wand.")
+		+ "(Soft Lock) — man spürt die Wand.\n\n"
+		+ "Am Lenkrad gemessen (eine volle Runde, 3–4 g Kurvenlast): mit "
+		+ "Stärke 75 % liegt der schnelle Bogen bei 0,45 der größten Kraft, "
+		+ "mit 90 % bei 0,54. 90 % trifft die Vorgabe und lässt trotzdem "
+		+ "Luft für Einschläge; abgeschnitten („Clipping“) wurde in keinem "
+		+ "Fall etwas. Fühlt sich das Lenkrad zu leicht an: eine Stufe höher.")
 	UI.label(hint, 16, UI.TEXT_DIM)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(hint)

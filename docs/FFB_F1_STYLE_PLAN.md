@@ -1127,14 +1127,16 @@ Standard `Stärke 75 %`):
 | Soft Lock | 0 Ticks — braucht den Lenkdruck des Fahrers (`lock_pressure` aus dem G29) | headless nicht messbar, nur im Fühltest |
 
 **Der Stärke-Regler ist die ehrliche Antwort auf „zu leicht"** — dieselbe
-Strecke, derselbe Fahrer, nur die Stärke geändert (85 % trifft die Soll-Tabelle
-mit der Spitze genau und lässt Kopfraum für Einschläge; 100 % füllt den Deckel
-aus):
+Strecke, derselbe Fahrer, nur die Stärke geändert. **Empfehlung: 90 %** — das
+ist die kleinste im Menü wählbare Stufe (`GAINS` = 30/45/60/75/90/100 %), die
+den Bogen an die Soll-Tabelle bringt (Mittel 0,543), und bis zum Deckel (0,90)
+bleibt Luft für Einschläge. 100 % füllt den Deckel aus:
 
 ```text
-Stärke  75 % (Werk): Bogen ab 3 g  Mittel 0,452  max 0,673   Clipping 0
-Stärke  85 %       : Bogen ab 3 g  Mittel 0,512  max 0,763   Clipping 0
-Stärke 100 %       : Bogen ab 3 g  Mittel 0,603  max 0,898   Clipping 0
+Stärke  75 % (Werk): Bogen ab 3 g  Mittel 0,452  max 0,673  Gesamt max 0,673  Clipping 0
+Stärke  85 %       : Bogen ab 3 g  Mittel 0,512  max 0,763  Gesamt max 0,763  Clipping 0
+Stärke  90 %       : Bogen ab 3 g  Mittel 0,543  max 0,808  Gesamt max 0,808  Clipping 0
+Stärke 100 %       : Bogen ab 3 g  Mittel 0,603  max 0,898  Gesamt max 0,898  Clipping 0
 ```
 
 **Was diese Messung gefunden hat:** KI-Auto **und** Autopilot des Spielerautos

@@ -134,15 +134,20 @@ Mit der Werkseinstellung **75 %** liegt der schnelle Bogen bei 0,452 (Mittel) /
 Abschnitte):
 
 ```text
-Staerke  75 % (Werk): Bogen ab 3 g  Mittel 0,452  max 0,673   Clipping 0
-Staerke  85 %       : Bogen ab 3 g  Mittel 0,512  max 0,763   Clipping 0
-Staerke 100 %       : Bogen ab 3 g  Mittel 0,603  max 0,898   Clipping 0
+Staerke  75 % (Werk): Bogen ab 3 g  Mittel 0,452  max 0,673   Gesamt max 0,673  Clipping 0
+Staerke  85 %       : Bogen ab 3 g  Mittel 0,512  max 0,763   Gesamt max 0,763  Clipping 0
+Staerke  90 %       : Bogen ab 3 g  Mittel 0,543  max 0,808   Gesamt max 0,808  Clipping 0
+Staerke 100 %       : Bogen ab 3 g  Mittel 0,603  max 0,898   Gesamt max 0,898  Clipping 0
 ```
 
 Damit ist der Regler keine Gefuehlsfrage mehr, sondern gemessen:
 
-* **85 %** trifft die Soll-Tabelle (0,55-0,75) mit der Spitze genau und laesst
-  noch Kopfraum bis zum Deckel (0,90) fuer Einschlaege.
+* **90 %** ist die kleinste **waehlbare** Stufe (`GAINS` in
+  `ffb_settings.gd`: 30/45/60/75/90/100 %), die den Bogen an die Soll-Tabelle
+  bringt: Mittel 0,543 (Soll 0,55-0,75), Spitze 0,808, und bis zum Deckel
+  (SOFT_CEIL 0,90) bleibt Luft fuer Einschlaege.
+* **85 %** waere der genauere Treffer (Spitze 0,763), ist im Menue aber nicht
+  einstellbar - der Regler springt von 75 auf 90 %.
 * **100 %** fuellt den Deckel aus (0,898 von 0,90). Der Bogen ist dann am
   schwersten, aber ein Einschlag hat kaum noch Platz, obwohl er weiterhin nicht
   gekappt wird (0 Clipping-Ticks).
@@ -151,8 +156,8 @@ Damit ist der Regler keine Gefuehlsfrage mehr, sondern gemessen:
 
 Das ist die Entscheidung aus Welle 2 ("Kopfraum fuer Einschlaege": Grundkraft
 0,93 liess den Einschlag verschwinden). **Wenn sich der Bogen zu leicht
-anfuehlt: `Staerke` im Menue auf 100 % - gemessen 0,603 statt 0,452 im Mittel,
-ohne Clipping.**
+anfuehlt: `Staerke` im Menue auf 90 % - gemessen 0,543 statt 0,452 im Mittel,
+ohne Clipping. Noch mehr Kraft gibt 100 % (0,603), dann aber ohne Kopfraum.**
 
 ## Was diese Welle nicht beweist
 
