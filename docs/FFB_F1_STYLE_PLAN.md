@@ -1120,13 +1120,13 @@ Standard `Stärke 75 %`):
 | Geradeaus ab 198 km/h | Kraft max **0,031**, Dämpfung min **0,242** | ruhig, Grundgewicht ✅ |
 | Bogen ab 3 g (469 Ticks, Spitze 3,97 g) | **2390 von 2508** Ticks drücken gegen den Lenkbefehl (95 %), Kraft Mittel **0,452** / max **0,673** | schwer, gegen den Lenkbefehl: Richtung ✅, Härte am unteren Rand |
 | Enger Bogen, Vorderachse am Limit | **Untersteuern** in 152 Ticks: Kraft Mittel **0,075** statt 0,452 im Bogen = **83 % leichter** | bricht ein ✅ (Soll 30–60 % leichter) |
-| Heck bricht aus | **Übersteuern** in 282 Ticks: Vorderachse durch die Null → **64 von 67** Ticks drehen die Kraft mit (96 %); vorher **213 von 215** gegen den Lenkbefehl (99 %). Durchdrehende Räder: 213 Ticks, Rütteln max **0,833** | dreht in die Gegenlenkrichtung ✅ — genau im Moment, den die Soll-Tabelle nennt |
+| Heck bricht aus | **Übersteuern** in 290 Ticks: die ungeglättete Grundkraft `sat` zieht in **36** Ticks mit dem Lenkbefehl (längste Phase **0,28 s**), in 135 dagegen; durchdrehende Räder 213 Ticks, Rütteln max **0,833** | dreht in die Gegenlenkrichtung ✅ — aber die Glättung (45 ms) läuft der Umkehr in 20 Ticks nach. **Wichtige Korrektur:** mein erster Wert („96 %") war ein Artefakt einer falsch gepolten Zuordnung und ist zurückgezogen (`ffb_wave11_lap.md`, Fund 3) |
 | Asphalt | Rütteln max **0,131** @ 22–42 Hz | 0,05–0,12 ✅ |
 | Kerb | **0,795** @ 27–37 Hz | hart und schnell ✅ |
 | Kies | **0,399** @ 8–15 Hz | grobes Mahlen ✅ |
 | Blockierende Vorderräder | Kraft max **0,215**, Rattern **0,700 @ 29–34 Hz** (177 Ticks als lauteste Quelle) | leicht/tot + Rattern ✅ |
 | Clipping | **0 von 6990** Ticks über 0,97 (Kraft max 0,673) | kein Clipping ✅ |
-| Soft Lock | 0 Ticks — braucht den Lenkdruck des Fahrers (`lock_pressure` aus dem G29) | headless nicht messbar, nur im Fühltest |
+| Soft Lock | **in der Szene gemessen** (gestelltem Lenkdruck, 15 m/s): Druck 0,2 → Kraft Mittel **0,173** … 1,0 → **0,537** (Spitze 0,782), keine Rückfälle über 0,02 | die Wand wird mit dem Druck monoton stärker ✅ |
 
 **Der Stärke-Regler ist die ehrliche Antwort auf „zu leicht"** — dieselbe
 Strecke, derselbe Fahrer, nur die Stärke geändert. **Empfehlung: 90 %** — das

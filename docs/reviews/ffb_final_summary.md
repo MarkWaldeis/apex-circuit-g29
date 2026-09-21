@@ -37,7 +37,7 @@ als „offen" steht, ist es ausdrücklich.
 | 10 | Die Stufe „Geradeaus 250 km/h“ trug 0,097 aus einem synthetischen Schräglauf und schob das frei gelassene Rad an den Anschlag | ✅ echte Gerade: 0,000 (Runde Mittel 0,003), neue Prüfung `der_fuehltest_laesst_die_gerade_ruhen` |
 | 11 | **KI-Auto und Autopilot blieben 45 s bei 0 km/h im Kies liegen** (13,9 m Querabstand, Nase zur Bande) — der Rundentest sah es nie, weil er nach 40 s endet | ✅ `_watch_stuck()` in `car_controller.gd` (2,5 s Stillstand bzw. 8 s draußen → zurück auf die Linie; **der Fahrer wird nie angefasst**), geprüft von `test_stuck_rejoin.gd` (8 Prüfungen); Standphase 45,0 s → 2,6 s, vollständige Runde |
 | 11 | Drei **Messfehler in meiner eigenen Sonde**: falscher Schlüssel (`lat_g` statt `lateral_g` → jede Querlast 0), Wandkontakt in der Gerade-Zahl, Kerb-Rattern in der Blockier-Zahl | ✅ alle drei getrennt und nachgemessen (`docs/reviews/ffb_wave11_lap.md`, Fund 2) |
-| 11 | Mein **Übersteuer-Test war pauschal falsch angesetzt**: er forderte die Kraftumkehr für *jeden* Übersteuer-Tick (66 von 282) | ✅ getrennt gezählt: Vorderachse durch die Null 64 von 67 (96 %) gedreht, vorher 213 von 215 (99 %) gegen den Lenkbefehl |
+| 11 | Mein **Übersteuer-Test lag zweimal daneben**: erst pauschal für *jeden* Tick gefordert (66 von 282), dann falsch gepolt („96 %") — der Lenkbefehl ist nicht der Lenkwinkel | ✅ zurückgezogen und neu gemessen an der ungeglätteten Grundkraft `sat`: 36 von 290 Ticks ziehen in die Gegenlenkrichtung (längste Phase 0,28 s), 135 dagegen, Glättung läuft in 20 Ticks nach |
 
 ## Gemessene Antworten auf die Fragen aus dem Auftrag
 
@@ -46,7 +46,7 @@ als „offen" steht, ist es ausdrücklich.
 | Wie schwer ist das Lenkrad zu drehen? | **In echter Fahrt** (volle Runde, 1439/1440 Punkte, Spitze 283 km/h): Bogen ab 3 g Kraft Mittel **0,452**, Spitze **0,673**; Dämpfung min **0,244** auf der Geraden, Rütteln dort max **0,131**; Kurvenlast bis **3,95 g**. Stärke 90 % → Mittel 0,543/Spitze 0,808; 100 % → 0,603/0,898 — **in allen Fällen 0 Clipping-Ticks** |
 | Wann wird es leicht? | **In echter Fahrt**: Untersteuern 152 Ticks, Kraft fällt auf Mittel **0,077** (83 % leichter als im Bogen); blockierende Vorderräder 0,700 Ratter @ 29–34 Hz bei Kraft max 0,215; über einer Kuppe 0,39 statt 0,64 (Modellmessung) |
 | Wann rüttelt es? | **In echter Fahrt**: Kerb **0,795 @ 27–37 Hz** · Kies **0,399 @ 8–15 Hz** · Asphalt-Textur **0,131 @ 22–42 Hz** · durchdrehende Räder 213 Ticks, Rütteln **0,833** · Unwucht nach Schaden (Modell 0,19/0,38/0,64/0,75) |
-| Zieht es in die Gegenlenkrichtung? | **In echter Fahrt** 2390 von 2508 Bogen-Ticks (95 %) gegen den Lenkbefehl; bei ausbrechendem Heck 64 von 67 (96 %) mit der Vorderachse durch die Null umgedreht |
+| Zieht es in die Gegenlenkrichtung? | **In echter Fahrt** 2390 von 2508 Bogen-Ticks (95 %) gegen den Lenkbefehl; bei ausbrechendem Heck dreht die Grundkraft in 36 von 290 Ticks mit dem Lenkbefehl (längste Phase **0,28 s**), die Glättung läuft der Umkehr in 20 Ticks nach |
 | Spürt man den Anschlag? | Soft Lock bei 400° von 900°, Rangieren am Anschlag 0,37, monoton steigend |
 | Kommen Schaltstoß und Einschlag an? | ja, auch ohne Lenkbefehl (dort als Klopfen) |
 | Ist Clipping ein Thema? | 0 von 1800 Ticks über 0,97 auf einer Runde; weiche Begrenzung bei 0,90 |
@@ -70,10 +70,10 @@ nur die Wirkung: 75 % (Werk) gibt im schnellen Bogen Mittel 0,452 / Spitze
 0,673, 90 % gibt 0,543 / 0,808, 100 % gibt 0,603 / 0,898. Das Menü nennt die
 Empfehlung (90 %) jetzt selbst.
 
-4. **Der Soft Lock ist headless nicht messbar**: `lock_pressure` kommt aus dem
-Lenkdruck des G29. Belegt ist er im Modell (`test_ffb_model.gd`) und im
-Fühltest (`--demo`, Station „Rangieren am Anschlag" 0,37) — nicht in einer
-Rundenmessung.
+4. **Der Soft Lock** ist in der Szene mit **gestelltem** Lenkdruck gemessen
+(`script_lock`, `probe_lap_ffb.gd` Abschnitt F: Druck 0,2 → Kraft 0,173 … 1,0
+→ 0,537, keine Rückfälle). Im Spiel kommt der Druck aus dem G29 — ob sich die
+Wand bei deinem Rad so anfühlt, entscheidet der Fühltest.
 
 5. **Gras** ist nur im Modell und in der Demo gemessen, nicht in der Szene —
 die Barriere steht bei 16 m Querabstand, Gras beginnt bei 16,85 m; erreichbar
