@@ -43,6 +43,62 @@ if (-not (Test-Path -LiteralPath $userDir)) {
     New-Item -ItemType Directory -Path $userDir -Force | Out-Null
 }
 
+## Der erste Messversuch kann ins Leere greifen. Gemessen am 21.09.2026
+## (20:06): ein Lauf meldete "FFB AUS -> Reibung 0,050, Daempfung 0,100" und
+## sah damit aus wie ein alter Build - der AUS-Lauf hatte aber nur **38**
+## Pakete gesehen, also die ersten Sekunden nach dem Start. Dort stehen noch
+## die Vorgabewerte des Modells (Daempfung 0,10, Reibung 0,05), bevor die
+## erste echte Physik-Zeile kommt; der naechste Lauf mit demselben Build lieferte
+## 427 Pakete und 0,000/0,000. Eine Messung, die nicht stattgefunden hat, ist
+## kein Beweis - deshalb: Zeilen unter 120 Paketen zaehlen nicht (das ist die
+## Anlaufphase), und ein Lauf mit weniger als 300 Paketen wird wiederholt,
+## bevor er als Ergebnis gilt.
+$MinPackets = 300
+$script:strayGames = 0
+
+## Ein Spiel, das den Lauf ueberlebt, ist kein kleiner Schoenheitsfehler:
+## gemessen am 21.09.2026 (20:10) blieb ein headless `Apex Circuit.exe` als
+## Waise stehen (Elternprozess weg). Folge: `export_windows.cmd` brach danach
+## mit einem nackten `Copy-Item IOException` ab, weil die laufende .exe ihre
+## eigene Datei sperrt - und jedes weitere Programm, das das Lenkrad oeffnet,
+## misst an einem fremden Spiel vorbei. Deshalb wird nach dem Beenden
+## nachgesehen, ob der Prozess wirklich weg ist, und laut gemeldet, wenn nicht.
+function Stop-RecordedProcess($proc, [string]$label) {
+    if ($null -eq $proc) { return $true }
+    try {
+        if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+        Wait-Process -Id $proc.Id -Timeout 5 -ErrorAction SilentlyContinue
+    } catch {
+        # Prozess war schon weg - genau das ist der Normalfall.
+    }
+    $still = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+    if ($still) {
+        Write-Host ("[ship] WARNUNG: {0} {1} laeuft noch - wird ein zweites Mal beendet" -f $label, $proc.Id)
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 700
+        $still = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+    }
+    if ($still) {
+        Write-Host ("[ship] FAIL: {0} {1} liess sich nicht beenden - weitere " +
+            "Messungen und der Export waeren unbrauchbar") -f $label, $proc.Id
+        return $false
+    }
+    return $true
+}
+
+## Ein alter Helfer ist genauso schaedlich wie ein altes Spiel: er haelt das
+## Lenkrad und die Logdatei und laesst den naechsten Lauf mit "die Datei wird
+## von einem anderen Prozess verwendet" scheitern (gemessen am 21.09.2026,
+## 20:12 und 20:24 - zwei Laeufe blieben als Waisen stehen). Vor dem Messen
+## wird deshalb aufgeraeumt, und zwar sichtbar.
+$leftoverHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
+foreach ($h in $leftoverHelpers) {
+    Write-Host ("[ship] Raeume alten Helfer auf: PID {0}" -f $h.ProcessId)
+    Stop-Process -Id $h.ProcessId -Force -ErrorAction SilentlyContinue
+}
+if ($leftoverHelpers.Count -gt 0) { Start-Sleep -Milliseconds 700 }
+
 function Run-Shipped([bool]$enabled, [int]$runPort) {
     $state = if ($enabled) { 'true' } else { 'false' }
     $json = '{"version":1,"enabled":' + $state + ',"gain":0.75,"damper":0.7,' +
@@ -50,57 +106,85 @@ function Run-Shipped([bool]$enabled, [int]$runPort) {
         '"offtrack_effects":1.0,"invert":false,"rotation_deg":400.0}'
     Set-Content -LiteralPath $settingsFile -Value $json -Encoding ascii -NoNewline
 
-    $log = Join-Path $env:TEMP "apex_ship_$runPort.log"
-    $err = Join-Path $env:TEMP "apex_ship_$runPort.err"
-    foreach ($p in @($log, $err)) {
-        if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }
-    }
-
-    $helperArgs = "-u `"$helper`" --dry-run --dry-run-seconds 0 --verbose --port $runPort"
-    $proc = Start-Process -FilePath $python -ArgumentList $helperArgs -WindowStyle Hidden `
-        -PassThru -RedirectStandardOutput $log -RedirectStandardError $err
-    Start-Sleep -Seconds 3
-
-    $env:APEX_FFB_PORT = "$runPort"
-    $env:APEX_FFB_SETTINGS = $settingsName
-    $game = Start-Process -FilePath $Exe -ArgumentList "--headless" -WindowStyle Hidden -PassThru
-    Start-Sleep -Seconds $Seconds
-    if (-not $game.HasExited) { Stop-Process -Id $game.Id -Force }
-    Start-Sleep -Milliseconds 900
-    if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
-    Remove-Item Env:\APEX_FFB_PORT -ErrorAction SilentlyContinue
-    Remove-Item Env:\APEX_FFB_SETTINGS -ErrorAction SilentlyContinue
-
     $peak = 0.0
     $peakFric = 0.0
     $peakDamp = 0.0
     $packets = 0
     $lines = 0
     $lastSource = "-"
-    foreach ($l in @(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue |
-            Where-Object { $_ -match '^\[ffb\] ' })) {
-        $lines++
-        if ($l -notmatch '^\[ffb\] (\d+) Pakete') { continue }
-        $seen = [int]$Matches[1]
-        # Die Zeilen vor dem Spielstart sind der Leerlauf des Helfers (kein
-        # Paket, Grundgewicht 0,10/0,05). Sie sagen nichts ueber das Spiel und
-        # wuerden die Messung verwaschen - genau das hat den ersten Lauf hier
-        # falsch aussehen lassen.
-        if ($seen -eq 0) { continue }
-        $packets = $seen
-        if ($l -match 'torque=([+-][\d.]+)') {
-            $t = [math]::Abs([double]$Matches[1])
-            if ($t -gt $peak) { $peak = $t }
+
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        # Eigener Dateiname je Versuch: ein liegengelassener Helfer aus einem
+        # frueheren Lauf haelt seine Logdatei offen - mit festem Namen brach
+        # der naechste Lauf dann mit "wird von einem anderen Prozess
+        # verwendet" ab, bevor er ueberhaupt gemessen hatte.
+        $stamp = "{0}_{1}" -f (Get-Date -Format 'HHmmss'), $attempt
+        $log = Join-Path $env:TEMP "apex_ship_$($runPort)_$stamp.log"
+        $err = Join-Path $env:TEMP "apex_ship_$($runPort)_$stamp.err"
+        foreach ($p in @($log, $err)) {
+            if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }
         }
-        if ($l -match 'fric=([\d.]+)') {
-            $v = [double]$Matches[1]
-            if ($v -gt $peakFric) { $peakFric = $v }
+
+        $helperArgs = "-u `"$helper`" --dry-run --dry-run-seconds 0 --verbose --port $runPort"
+        $proc = Start-Process -FilePath $python -ArgumentList $helperArgs -WindowStyle Hidden `
+            -PassThru -RedirectStandardOutput $log -RedirectStandardError $err
+        Start-Sleep -Seconds 3
+
+        $env:APEX_FFB_PORT = "$runPort"
+        $env:APEX_FFB_SETTINGS = $settingsName
+        $game = Start-Process -FilePath $Exe -ArgumentList "--headless" -WindowStyle Hidden -PassThru
+        Start-Sleep -Seconds $Seconds
+        if (-not (Stop-RecordedProcess $game "Spiel-Prozess")) { $script:strayGames++ }
+        Start-Sleep -Milliseconds 900
+        if (-not (Stop-RecordedProcess $proc "Helfer")) { $script:strayGames++ }
+        Remove-Item Env:\APEX_FFB_PORT -ErrorAction SilentlyContinue
+        Remove-Item Env:\APEX_FFB_SETTINGS -ErrorAction SilentlyContinue
+
+        $peak = 0.0
+        $peakFric = 0.0
+        $peakDamp = 0.0
+        $packets = 0
+        $lines = 0
+        $lastSource = "-"
+        foreach ($l in @(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue |
+                Where-Object { $_ -match '^\[ffb\] ' })) {
+            $lines++
+            # Die Leerlaufzeilen des Helfers gehoeren nicht zum Spiel: sobald
+            # kein Paket mehr kommt (Spiel beendet), faellt die Kraft auf die
+            # Vorgabewerte zurueck (Daempfung 0,10 / Reibung 0,05) und die
+            # Zeile traegt trotzdem die Paketzahl des ganzen Laufs. Gemessen am
+            # 21.09.2026 (20:11) sah genau das aus wie "alter Build" - der
+            # AUS-Lauf meldete 0,050/0,100 statt 0,000/0,000.
+            if ($l -match '\[idle\]') { continue }
+            if ($l -notmatch '^\[ffb\] (\d+) Pakete') { continue }
+            $seen = [int]$Matches[1]
+            # **Ruhezeilen sind keine Messung.** Der Helfer druckt, wenn kein
+            # Paket mehr kommt, eine Zeile mit `[idle]`, den *letzten*
+            # Paketzaehler und seinen eigenen Ruhewerten (Daempfung 0,10,
+            # Reibung 0,05). Gemessen am 21.09.2026 (20:22) las die Pruefung
+            # genau diese Zeile und meldete "FFB AUS -> Reibung 0,050": ein
+            # Fehlalarm, der wie ein alter Build aussah. Vorher stand hier nur
+            # `$seen -eq 0` - das faengt die Zeile *vor* dem Spielstart ab,
+            # aber nicht die nach dem Ende des Spiels.
+            if ($seen -eq 0 -or $l -match '\[idle\]') { continue }
+            $packets = $seen
+            if ($l -match 'torque=([+-][\d.]+)') {
+                $t = [math]::Abs([double]$Matches[1])
+                if ($t -gt $peak) { $peak = $t }
+            }
+            if ($l -match 'fric=([\d.]+)') {
+                $v = [double]$Matches[1]
+                if ($v -gt $peakFric) { $peakFric = $v }
+            }
+            if ($l -match 'damp=([\d.]+)') {
+                $v = [double]$Matches[1]
+                if ($v -gt $peakDamp) { $peakDamp = $v }
+            }
+            if ($l -match 'Quelle=(\S+)') { $lastSource = $Matches[1] }
         }
-        if ($l -match 'damp=([\d.]+)') {
-            $v = [double]$Matches[1]
-            if ($v -gt $peakDamp) { $peakDamp = $v }
-        }
-        if ($l -match 'Quelle=(\S+)') { $lastSource = $Matches[1] }
+        if ($packets -ge $MinPackets) { break }
+        Write-Host ("[ship] Lauf {0} (FFB {1}) lieferte nur {2} Pakete - " +
+            "wird wiederholt") -f $attempt, $(if ($enabled) { 'AN' } else { 'AUS' }), $packets
     }
     return [pscustomobject]@{
         enabled = $enabled; lines = $lines; packets = $packets; peak = $peak
@@ -129,10 +213,12 @@ function Check($ok, $label, $detail) {
 Check ($on.packets -ge 300) "der Build sendet FFB-Pakete" "$($on.packets) Pakete"
 Check ($on.fric -ge 0.05 -or $on.peak -ge 0.05) "der Build legt im Stand Reibung an" `
     ("Reibung {0:N3}, Kraft {1:N3}" -f $on.fric, $on.peak)
-Check ($off.fric -le 0.001 -and $off.peak -le 0.001 -and $off.damp -le 0.001) `
+Check ($off.packets -ge $MinPackets -and $off.fric -le 0.001 -and $off.peak -le 0.001 `
+        -and $off.damp -le 0.001) `
     "der Build kennt APEX_FFB_SETTINGS (neuer Stand)" `
-    (("FFB AUS -> Reibung {0:N3}, Kraft {1:N3}, Daempfung {2:N3} " +
-      "(ein alter Build haette hier die Werte des AN-Laufs)") -f $off.fric, $off.peak, $off.damp)
+    (("FFB AUS -> {0} Pakete, Reibung {1:N3}, Kraft {2:N3}, Daempfung {3:N3} " +
+      "(ein alter Build haette hier die Werte des AN-Laufs)") -f `
+        $off.packets, $off.fric, $off.peak, $off.damp)
 
 # Der zweite, unabhaengige Beweis, dass im Pack wirklich der neue Stand liegt:
 # ein Testfall, den es vorher nicht gab, laeuft **im ausgelieferten Build**.
@@ -192,10 +278,18 @@ Check ($deliveredTime -ge $newestSource.LastWriteTime) `
     ("ausgeliefert {0}, neueste Quelle {1} ({2})" -f `
         $deliveredTime.ToString('dd.MM. HH:mm:ss'), $newestSource.LastWriteTime.ToString('dd.MM. HH:mm:ss'), $newestSource.Name)
 
+# Ein liegengebliebener Spielprozess sperrt die ausgelieferte .exe und laesst
+# den naechsten Export mit einem nackten IOException scheitern (gemessen am
+# 21.09.2026). Deshalb ist auch das eine Pruefung, nicht nur eine Warnung.
+$leftovers = @(Get-Process -Name 'Apex Circuit', 'ApexCircuit' -ErrorAction SilentlyContinue)
+Check ($leftovers.Count -eq 0) "kein Spielprozess bleibt stehen" `
+    ($(if ($leftovers.Count -eq 0) { "keiner" } else {
+        ($leftovers | ForEach-Object { "$($_.Id)/$($_.ProcessName)" }) -join ', ' }))
+
 if ($failed -gt 0) {
     Write-Host "[ship] Log: $($on.log)"
     Write-Host "SHIP_RESULT FAIL $failed Mangel"
     exit 1
 }
-Write-Host "SHIP_RESULT PASS 6 Pruefungen, 0 Mangel"
+Write-Host "SHIP_RESULT PASS 7 Pruefungen, 0 Mangel"
 exit 0

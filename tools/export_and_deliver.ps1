@@ -96,8 +96,29 @@ $newest = $sources | Sort-Object LastWriteTime -Descending | Select-Object -Firs
 
 if (-not $SkipDelivery) {
     New-Item -ItemType Directory -Path $Delivered -Force | Out-Null
-    Copy-Item -LiteralPath $repoExe -Destination $destExe -Force
-    Copy-Item -LiteralPath $repoPck -Destination $destPck -Force
+    # Ein laufendes Spiel sperrt seine eigene .exe und .pck. Gemessen am
+    # 21.09.2026 brach die Auslieferung dann mit einem nackten
+    # "Copy-Item: IOException" ab - ohne Hinweis darauf, dass nur das Spiel
+    # noch offen war, und ohne dass der Export selbst ein Problem hatte.
+    $running = @(Get-Process -Name 'Apex Circuit', 'ApexCircuit' -ErrorAction SilentlyContinue)
+    if ($running.Count -gt 0) {
+        # Klammern um den ganzen Ausdruck: ohne sie bindet PowerShell das `-f`
+        # an Write-Host (als Abkuerzung von -ForegroundColor) und bricht mit
+        # "Moegliche Enumerationswerte sind Black;DarkBlue;..." ab - genau in
+        # dem Fall, in dem die Meldung helfen soll. Gemessen am 21.09.2026.
+        $ids = ($running | ForEach-Object { "$($_.Id)" }) -join ', '
+        Write-Host (("[export] FAIL: das Spiel laeuft noch ({0}) - seine Dateien " +
+            "sind gesperrt. Bitte schliessen und erneut ausfuehren.") -f $ids)
+        exit 1
+    }
+    try {
+        Copy-Item -LiteralPath $repoExe -Destination $destExe -Force
+        Copy-Item -LiteralPath $repoPck -Destination $destPck -Force
+    } catch {
+        Write-Host ("[export] FAIL: Kopieren nach {0} nicht moeglich: {1}" -f $Delivered, $_.Exception.Message)
+        Write-Host "[export] Hinweis: laeuft das Spiel (oder ein Virenscanner) noch, sind die Dateien gesperrt."
+        exit 1
+    }
 }
 
 $hashRepo = Get-Sha256Hex -Path $repoPck
