@@ -1105,8 +1105,9 @@ Bis hierher waren fast alle Zahlen der Soll-Tabelle aus **synthetischen**
 Szenarien gemessen (das Modell wird direkt mit einem `ctx` gefüttert). Neu:
 `godot_f1/tests/probe_lap_ffb.gd` fährt das **echte Spielerauto auf der echten
 Strecke** und liest jeden Tick genau die Zahlen, die `ffb_link.gd` an den
-Helfer schickt. Fünf Abschnitte: reale Runde (Autopilot), beschleunigen,
-Untersteuern (Vollgas + voller Lenkeinschlag bei 252 km/h), Blockieren
+Helfer schickt. Sechs Abschnitte: reale Runde (Autopilot), beschleunigen,
+Untersteuern (Vollgas + voller Lenkeinschlag bei 252 km/h), Uebersteuern
+(Vollgas im langsamen Bogen, Traktionskontrolle aus), Blockieren
 (Vollbremsung mit Lenkeinschlag), weit hinaus (Kerb, Kies, Wand). Nur die
 **Ausgangslage** der Testabschnitte ist gestellt — danach ist alles echte
 Physik. Bericht: `docs/reviews/ffb_wave11_lap.md`.
@@ -1119,6 +1120,7 @@ Standard `Stärke 75 %`):
 | Geradeaus ab 198 km/h | Kraft max **0,031**, Dämpfung min **0,242** | ruhig, Grundgewicht ✅ |
 | Bogen ab 3 g (469 Ticks, Spitze 3,97 g) | **2390 von 2508** Ticks drücken gegen den Lenkbefehl (95 %), Kraft Mittel **0,452** / max **0,673** | schwer, gegen den Lenkbefehl: Richtung ✅, Härte am unteren Rand |
 | Enger Bogen, Vorderachse am Limit | **Untersteuern** in 152 Ticks: Kraft Mittel **0,075** statt 0,452 im Bogen = **83 % leichter** | bricht ein ✅ (Soll 30–60 % leichter) |
+| Heck bricht aus | **Übersteuern** in 282 Ticks: Vorderachse durch die Null → **64 von 67** Ticks drehen die Kraft mit (96 %); vorher **213 von 215** gegen den Lenkbefehl (99 %). Durchdrehende Räder: 213 Ticks, Rütteln max **0,833** | dreht in die Gegenlenkrichtung ✅ — genau im Moment, den die Soll-Tabelle nennt |
 | Asphalt | Rütteln max **0,131** @ 22–42 Hz | 0,05–0,12 ✅ |
 | Kerb | **0,795** @ 27–37 Hz | hart und schnell ✅ |
 | Kies | **0,399** @ 8–15 Hz | grobes Mahlen ✅ |

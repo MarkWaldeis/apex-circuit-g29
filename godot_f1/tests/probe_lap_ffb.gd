@@ -17,6 +17,8 @@ extends SceneTree
 ##   A  reale Runde  - das Auto faehrt mit dem Autopiloten die Ideallinie
 ##   D  Untersteuern - Vollgas und voller Lenkeinschlag bei Tempo, die
 ##                     Vorderachse geht ueber ihren Peak
+##   E  Uebersteuern - Vollgas im langsamen Bogen (Traktionskontrolle aus),
+##                     das Heck kommt: dreht die Kraft in die Gegenlenkrichtung?
 ##   B  Bremsprobe   - Vollbremsung aus hoher Geschwindigkeit (blockierende
 ##                     Vorderraeder koennen nur hier auftreten, nicht auf der
 ##                     Ideallinie)
@@ -35,6 +37,7 @@ const RacingLine = preload("res://scripts/racing_line.gd")
 var warmup_frames: int = 6
 var lap_frames: int = 5400
 var under_frames: int = 300
+var over_frames: int = 240
 var brake_gas_frames: int = 420
 var brake_frames: int = 150
 var wide_frames: int = 600
@@ -106,6 +109,21 @@ var invert: bool = true
 var under_n: int = 0
 var under_torque_max: float = 0.0
 var under_torque_sum: float = 0.0
+## Heck bricht aus: die Kraft muss in die Gegenlenkrichtung drehen.
+var over_n: int = 0
+var over_flip: int = 0
+var over_same: int = 0
+## Die Zeile der Soll-Tabelle gilt **nicht** fuer jeden Uebersteuer-Tick,
+## sondern fuer den Moment, in dem der Schlupfwinkel der Vorderraeder durch die
+## Null dreht. Deshalb wird hier getrennt gezaehlt: "durch die Null" (Vorzeichen
+## des Vorder-Schlupfs gegen den Lenkbefehl) und "noch nicht durch".
+var over_cross_n: int = 0
+var over_cross_help: int = 0
+var over_plain_n: int = 0
+var over_plain_against: int = 0
+var over_torque_max: float = 0.0
+var spin_n: int = 0
+var spin_rumble_max: float = 0.0
 
 var lock_n: int = 0
 var lock_torque_max: float = 0.0
@@ -260,7 +278,8 @@ func _switch_phase() -> void:
 	var a_end: int = warmup_frames + lap_frames
 	var b1_end: int = a_end + brake_gas_frames
 	var d_end: int = b1_end + under_frames
-	var b2_end: int = d_end + brake_frames
+	var e_end: int = d_end + over_frames
+	var b2_end: int = e_end + brake_frames
 	var b3_end: int = b2_end + quiet_frames
 	var c_end: int = b3_end + wide_frames
 	var want: String = phase
@@ -270,6 +289,8 @@ func _switch_phase() -> void:
 		want = "B1"
 	elif frames <= d_end:
 		want = "D"
+	elif frames <= e_end:
+		want = "E"
 	elif frames <= b2_end:
 		want = "B2"
 	elif frames <= b3_end:
@@ -296,6 +317,12 @@ func _switch_phase() -> void:
 			# echten Strecke (kein gestelltes `ctx`).
 			player.auto_drive = false
 			_launch(70.0)
+		if want == "E":
+			# Langsamer Bogen, Vollgas, Traktionskontrolle aus: nur dort kann
+			# das Heck ueberhaupt kommen (power_slide braucht Tempo < 26 m/s).
+			player.auto_drive = false
+			player.assists["traction_control"] = false
+			_launch(18.0)
 		if want == "C":
 			_launch(45.0)
 		if want == "B2":
@@ -321,6 +348,11 @@ func _drive() -> void:
 			Input.action_release("brake")
 			Input.action_press("throttle", 1.0)
 			Input.action_press("steer_right", 1.0)
+		"E":
+			player.auto_drive = false
+			Input.action_release("brake")
+			Input.action_press("throttle", 1.0)
+			Input.action_press("steer_right", 0.8)
 		"B2":
 			player.auto_drive = false
 			Input.action_release("throttle")
@@ -338,8 +370,8 @@ func _drive() -> void:
 
 
 func _total_frames() -> int:
-	return warmup_frames + lap_frames + brake_gas_frames + under_frames + brake_frames \
-		+ quiet_frames + wide_frames
+	return warmup_frames + lap_frames + brake_gas_frames + under_frames + over_frames \
+		+ brake_frames + quiet_frames + wide_frames
 
 
 ## Auto auf die Linie setzen und mit `speed` m/s in Fahrtrichtung anstossen.
@@ -366,6 +398,7 @@ func _sample() -> void:
 	var lat: float = float(ctx.get("lateral_g", 0.0))
 	var steer: float = float(ctx.get("steer", 0.0))
 	var understeer: float = float(ctx.get("understeer", 0.0))
+	var slip_front: float = float(ctx.get("slip_front", 0.0))
 	var surface: Dictionary = ctx.get("surface", {})
 	var surface_name: String = String(surface.get("name", "?"))
 	var offset: float = absf(float(surface.get("offset", 0.0)))
@@ -473,6 +506,30 @@ func _sample() -> void:
 		under_torque_max = maxf(under_torque_max, absf(torque))
 		under_torque_sum += absf(torque)
 
+	# --- Heck bricht aus: Kraft dreht in die Gegenlenkrichtung --------------
+	var oversteer: float = float(ctx.get("oversteer", 0.0))
+	if oversteer > 0.3 and speed > 10.0:
+		over_n += 1
+		over_torque_max = maxf(over_torque_max, absf(torque))
+		var pulls_with: bool = phys * signf(steer) > 0.0
+		if pulls_with:
+			over_flip += 1
+		else:
+			over_same += 1
+		# "Durch die Null" heisst: der Vorder-Schlupf zeigt gegen den Lenkbefehl.
+		var crossed: bool = absf(slip_front) > 0.004 and signf(slip_front) == -signf(steer)
+		if crossed:
+			over_cross_n += 1
+			if pulls_with:
+				over_cross_help += 1
+		else:
+			over_plain_n += 1
+			if not pulls_with:
+				over_plain_against += 1
+	if float(model.spin) > 0.3:
+		spin_n += 1
+		spin_rumble_max = maxf(spin_rumble_max, rumble)
+
 	# --- Blockierende Vorderraeder: leicht und tot + Rattern ---------------
 	if float(model.lock) > 0.5 and brake_in > 0.2:
 		lock_n += 1
@@ -554,7 +611,7 @@ func _finish() -> void:
 		ai_slow_n, maxi(frames - 600, 1),
 	])
 	print("LAP_FFB KI-Auto Querabstand max=%.2f m" % ai_off_max)
-	for key in ["A", "B1", "D", "B2", "B3", "C"]:
+	for key in ["A", "B1", "D", "E", "B2", "B3", "C"]:
 		if not phases.has(key):
 			continue
 		var ph: Dictionary = phases[key]
@@ -567,6 +624,10 @@ func _finish() -> void:
 		under_n, under_torque_max,
 		(under_torque_sum / float(under_n)) if under_n > 0 else 0.0,
 	])
+	print("LAP_FFB Uebersteuern n=%d Kraft max=%.3f | Vorderachse durch die Null: n=%d davon dreht mit %d | noch nicht durch: n=%d davon drueckt gegen %d" % [
+		over_n, over_torque_max, over_cross_n, over_cross_help, over_plain_n, over_plain_against,
+	])
+	print("LAP_FFB durchdrehende Raeder n=%d Ruetteln max=%.3f" % [spin_n, spin_rumble_max])
 	print("LAP_FFB Blockieren n=%d Kraft max=%.3f (Quelle 'Blockiert': n=%d Ruetteln %.3f Hz %.0f..%.0f)" % [
 		lock_n, lock_torque_max, lock_src_n, lock_src_rumble_max, lock_src_hz_min, lock_src_hz_max,
 	])
@@ -605,6 +666,35 @@ func _finish() -> void:
 	_check(corner_n == 0 or float(corner_against) / float(corner_n) >= 0.90,
 		"die_kraft_drueckt_gegen_den_lenkbefehl",
 		"%d von %d" % [corner_against, corner_n])
+	if under_n == 0:
+		_note("untersteuern_kam_in_dieser_fahrt_nicht_vor")
+	else:
+		var under_mean: float = under_torque_sum / float(under_n)
+		var corner_mean: float = 0.0
+		if heavy_n > 0:
+			corner_mean = heavy_torque_sum / float(heavy_n)
+		elif corner_n > 0:
+			corner_mean = corner_torque_max
+		_check(corner_mean <= 0.0 or under_mean < corner_mean * 0.6,
+			"untersteuern_macht_das_lenkrad_leicht",
+			"Mittel %.3f gegen %.3f im Bogen" % [under_mean, corner_mean])
+	if over_n == 0:
+		_note("uebersteuern_kam_in_dieser_fahrt_nicht_vor (Traktionskontrolle aus, Vollgas im langsamen Bogen)")
+	else:
+		# Ein Test, der die Umdrehung fuer *jeden* Uebersteuer-Tick fordert, war
+		# falsch angesetzt: die Soll-Tabelle nennt sie fuer den Moment, in dem
+		# der Schlupfwinkel der Vorderraeder durch die Null dreht. Solange das
+		# nicht passiert ist, drueckt das Lenkrad weiter gegen den Lenkbefehl.
+		if over_cross_n >= 5:
+			_check(float(over_cross_help) / float(over_cross_n) >= 0.90,
+				"vorderachse_durch_die_null_dreht_die_kraft_mit",
+				"%d von %d Ticks" % [over_cross_help, over_cross_n])
+		else:
+			_note("vorderachse_ging_in_dieser_fahrt_nie_durch_die_null (%d Ticks)" % over_cross_n)
+		if over_plain_n >= 5:
+			_check(float(over_plain_against) / float(over_plain_n) >= 0.90,
+				"solange_die_vorderachse_noch_traegt_drueckt_das_lenkrad_gegen",
+				"%d von %d Ticks" % [over_plain_against, over_plain_n])
 	_check(clip_ticks == 0, "kein_clipping_im_normalbetrieb",
 		"%d Ticks ueber 0,97 (max %.3f)" % [clip_ticks, clip_max])
 	if lock_n == 0:

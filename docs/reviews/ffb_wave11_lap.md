@@ -23,18 +23,19 @@ powershell -File tools/run_godot.ps1 --fixed-fps 300 --headless ^
 ```
 
 `--fixed-fps` laesst Godot die Physik schneller als in Echtzeit rechnen; der
-Physik-Schritt bleibt 1/60 s. Fuenf Abschnitte:
+Physik-Schritt bleibt 1/60 s. Sechs Abschnitte:
 
 | Abschnitt | Was passiert | Ausgangslage |
 |---|---|---|
 | A | reale Runde mit dem Autopiloten | Startaufstellung |
 | B1 | beschleunigen auf der Linie | nach A |
 | D | **Untersteuern**: Vollgas und voller Lenkeinschlag bei 252 km/h | auf die Linie gesetzt, 70 m/s angestossen |
+| E | **Uebersteuern**: Vollgas im langsamen Bogen, Traktionskontrolle aus | auf die Linie gesetzt, 18 m/s |
 | B2 | **Blockieren**: Vollbremsung mit Lenkeinschlag | auf die Linie gesetzt, 70 m/s |
 | B3 | ausrollen | nach B2 |
 | C | **weit hinaus**: Kerb, Kies, Wandkontakt | auf die Linie gesetzt, 45 m/s |
 
-Nur die **Ausgangslage** der Abschnitte D, B2 und C ist gestellt (zurueck auf
+Nur die **Ausgangslage** der Abschnitte D, E, B2 und C ist gestellt (zurueck auf
 die Linie, angestossen). Was danach gemessen wird, ist echte Physik auf der
 echten Strecke, kein gestelltes `ctx`.
 
@@ -107,6 +108,28 @@ haetten, das sie nicht gemessen haben:
 * "Blockiertes Rad" zaehlte zuerst jedes Ruetteln mit, auch Kerb (0,844 @ 39
   Hz). Jetzt getrennt: Quelle "Blockiert" = **0,700 @ 29-34 Hz**.
 
+## Fund 3: mein Uebersteuer-Test war falsch angesetzt
+
+Nachdem Abschnitt E (Vollgas im langsamen Bogen, Traktionskontrolle aus)
+**282 Uebersteuer-Ticks** lieferte, forderte mein erster Test fuer **jeden**
+dieser Ticks, dass die Kraft in die Gegenlenkrichtung dreht. Ergebnis: 66 von
+282 - und der Test schlug fehl. Der Fehler lag im Test, nicht im Modell: die
+Soll-Tabelle nennt die Umdrehung fuer den Moment, in dem der **Schlupfwinkel
+der Vorderraeder durch die Null** dreht. Solange das nicht passiert ist,
+drueckt die Vorderachse weiter gegen den Lenkbefehl - das ist die Kraft, mit
+der man den Wagen ueberhaupt erst faengt.
+
+Getrennt gezaehlt (dieselbe Messung, dieselben Ticks):
+
+```text
+Uebersteuern n=282  Kraft max 0,604
+  Vorderachse durch die Null: n=67  davon dreht die Kraft mit: 64 (96 %)
+  noch nicht durch         : n=215 davon drueckt sie gegen    : 213 (99 %)
+```
+
+Beide Aussagen sind jetzt einzeln geprueft, und die Zeile der Soll-Tabelle ist
+damit **in echter Fahrt** belegt statt nur synthetisch.
+
 ## Die Soll-Tabelle in echter Fahrt
 
 Vollstaendige Runde (1439/1440 Punkte), Spitze 283 km/h,
@@ -117,6 +140,7 @@ Standardeinstellungen (`Staerke 75 %`, `invert = true`, `400 Grad`):
 | Geradeaus schnell: ruhig, Grundgewicht | n=381 (nur Asphalt): Kraft max **0,031**, Daempfung min **0,244**, Ruetteln max **0,131** @ 22-42 Hz | erfuellt |
 | Bogen 3-4 g: schwer, gegen den Lenkbefehl | n=469 ab 3 g (Spitze 3,97 g): Kraft **Mittel 0,452**, **max 0,673**; **2390 von 2508** Bogen-Ticks druecken gegen den Lenkbefehl (95 %) | Richtung erfuellt, Haerte am unteren Rand (siehe unten) |
 | Enger Bogen, Vorderachse am Limit: bricht ein | **Untersteuern** n=152: Kraft **Mittel 0,075** gegenueber 0,452 im Bogen = **83 % leichter** | erfuellt (Soll: 30-60 % leichter) |
+| Heck bricht aus: Kraft dreht in die Gegenlenkrichtung | **Uebersteuern** n=282: mit Vorderachse durch die Null **64 von 67 (96 %)** gedreht, vorher **213 von 215 (99 %)** gegen den Lenkbefehl; durchdrehende Raeder 213 Ticks, Ruetteln max **0,833** | erfuellt, und zwar genau in dem Moment, den die Soll-Tabelle nennt |
 | Vorderrad blockiert: leicht/tot + Rattern | n=262, Kraft max **0,215**; als lauteste Quelle **0,700 @ 29-34 Hz** (177 Ticks) | erfuellt |
 | Kerb: hart und schnell | **0,795** @ 27-37 Hz (17 Ticks) | erfuellt (Soll 0,6-0,9) |
 | Kies: grobes Mahlen | **0,399** @ 8-15 Hz (815 Ticks) | erfuellt (Soll 0,3-0,5; 9-14 Hz) |
@@ -166,9 +190,12 @@ ohne Clipping. Noch mehr Kraft gibt 100 % (0,603), dann aber ohne Kopfraum.**
 * **Kerb und Kies** wurden in der Runde selbst kaum beruehrt (4 Ticks Kerb in
   5400); die belastbaren Kerb-/Kies-Zahlen stammen aus den Abschnitten B2 und
   C, die absichtlich hinausfahren.
-* **Untersteuern** ist in Abschnitt D gemessen - gestellte Ausgangslage
-  (252 km/h auf der Linie), danach echte Physik. Kein Fahrer hat das Auto
-  absichtlich ins Untersteuern getrieben.
+* **Untersteuern** (Abschnitt D) und **Uebersteuern** (Abschnitt E) sind mit
+  gestellter Ausgangslage gemessen (252 km/h bzw. 18 m/s auf der Linie),
+  danach echte Physik. Kein Fahrer hat das Auto absichtlich dorthin getrieben,
+  und die Traktionskontrolle war in Abschnitt E **aus** - im Spiel ist sie
+  standardmaessig an (`spin` wird dann mit 0,25 gerechnet, das Ausbrechen ist
+  also seltener und leiser).
 * **Soft Lock** und **Stillstand ohne Motor** brauchen den Lenkdruck des
   Fahrers bzw. einen Fensterstart - headless nicht messbar.
 * Ueber das **Gefuehl** sagt keine Zahl etwas. Das bleibt der Fahrtest am
