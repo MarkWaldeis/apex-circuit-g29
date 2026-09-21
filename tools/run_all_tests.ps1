@@ -16,6 +16,10 @@
         Failed to load script, Invalid call), UND
       * mindestens eine PASS-Zeile vorkommt.
 
+    Die gezaehlte Zahl ist die der PASS-Zeilen - sie enthaelt die
+    Abschlusszeile der Datei ("test_x.gd PASS"). In den Berichten sind die
+    einzelnen Pruefungen einer Datei deshalb oft genau eine weniger.
+
     Usage:
         powershell -File tools/run_all_tests.ps1
         powershell -File tools/run_all_tests.ps1 -Filter ffb

@@ -230,7 +230,7 @@ res://scripts/ffb_link.gd“ ab, das Auto wurde nie gebaut — und der Test meld
 `LAP_DRIVE PASS`. Genau deshalb wertet der Runner so einen Lauf als Fehler:
 
 ```
-powershell -File tools/run_all_tests.ps1              # alle 18 headless-Testdateien
+powershell -File tools/run_all_tests.ps1              # alle 19 headless-Testdateien
 powershell -File tools/run_all_tests.ps1 -Filter ffb  # nur die FFB-Dateien
 ```
 
@@ -250,11 +250,11 @@ Messwerte wären schlimmer als ein Abbruch), und beendet seinen Godot nach
 `-Timeout` Sekunden wirklich — vorher blieb ein hängender Lauf als Waise
 stehen und vergiftete jede weitere Messung.
 
-Geprüft werden 18 Dateien: `test_car_orientation`, `test_input_mapping`,
+Geprüft werden 19 Dateien: `test_car_orientation`, `test_input_mapping`,
 `test_drive_unit`, `test_camera_pose`, `test_lap_drive`, `test_cockpit_wheel`,
 `test_gameplay_input`, `test_pedal_ui`, `test_pedal_span`, `test_racing_line`,
 `test_gearbox`, `test_tyre_motion`, `test_crash_surfaces`, `test_ffb_link`,
-`test_ffb_model`, `test_ffb_settings`, `test_ffb_edge`,
+`test_ffb_model`, `test_ffb_settings`, `test_ffb_direction`, `test_ffb_edge`,
 `test_g29_profile_path`.
 
 Zum Nachmessen des Fahrgefühls (schreibt nur Zahlen, keine Dateien):

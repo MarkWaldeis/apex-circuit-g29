@@ -798,7 +798,7 @@ Zahl, während der Export im Hintergrund noch lief. Jetzt `Start-Process -Wait`.
 
 | Prüfung | Ergebnis |
 |---|---|
-| `tools/run_all_tests.ps1` | **19 Dateien, 380 Prüfungen, 186 s, alle grün** — jede Datei Exit 0, ohne Fehlerzeile, mit PASS |
+| `tools/run_all_tests.ps1` | **19 Dateien, 403 Prüfungen, 159 s, alle grün** — jede Datei Exit 0, ohne Fehlerzeile, mit PASS. (Erster Lauf vor dem Zählmuster-Fix: 380 Prüfungen in 186 s; die Zahl zählt die PASS-Zeilen und enthält die Abschlusszeile je Datei.) |
 | `python tools/g29_ffb.py --check` | **14 Prüfungen, 0 Mängel** |
 | `tools/ffb_end_to_end.ps1` (Spiel + echter Helfer) | **10 Prüfungen, 0 Mängel** — Kraftspitze 0,584, Rütteln 0,700 @ 42,2 Hz, Quellen Asphalt/Blockiert/Kerb/Kies/Schalten, Schalter AN/AUS wirkt |
 | `tools/ship_check.ps1` gegen den **neu ausgelieferten** Build | **6 Prüfungen, 0 Mängel** |
