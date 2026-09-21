@@ -32,7 +32,15 @@ Protokoll (vom Spiel gesendet, UTF-8 JSON, ein Objekt pro Paket):
     rumble_hz    5.0 .. 60.0  Frequenz dazu (Kerb schnell, Kies grob)
     pulse        0.0 ..  1.0  einmaliger Stoss (Schalten, Aufprall); er sitzt
                               sofort auf der Kraft und klingt in 0,12 s ab
-    pulse_dir   -1.0 .. +1.0  Richtung des Stosses (+ = rechts)
+    pulse_dir   -1.0 .. +1.0  Richtung des Stosses (+ = rechts). **0 heisst
+                              "kein Vorzeichen"** - es gibt keinen Lenkbefehl,
+                              gegen den der Stoss laufen koennte. Dann wird das
+                              Rad geschuettelt (Anschlag/Klopfen), nicht still
+                              gelassen. Gemessen am 21.09.2026 kam ein
+                              Schaltstoss mit `pulse_dir 0` als **0,000** am
+                              Rad an, obwohl `pulse` 0,45 betrug - und das
+                              Spiel setzt die Lenkung per Totzone auf der
+                              Geraden genau auf 0.
     spring       0.0 ..  1.0  Rest-Zentrierfeder, Standard 0 (das Zentrieren
                               macht der Nachlauf des Spiels)
     source/clip/damage        Herkunft der Kraft, Anteil "am Anschlag" und
@@ -131,8 +139,26 @@ TORQUE_RISE = 40.0      ## Kraft pro Sekunde, wenn sie steigt (0.2/Sample bei 20
 TORQUE_FALL = 8.0       ## Kraft pro Sekunde, wenn sie faellt
 PULSE_MIX = 0.70        ## wie stark ein Puls (Schalten, Aufprall) auf die Kraft geht
 PULSE_DECAY = 0.12      ## s, bis ein Puls wieder weg ist
+## Ein Stoss **ohne Vorzeichen** (das Spiel sendet `pulse_dir 0`, sobald kein
+## Lenkbefehl anliegt - auf der Geraden ist das der Normalfall) ist kein Push
+## in eine Richtung, sondern ein Anschlag: das Rad wird mit dieser Frequenz hin
+## und her geklopft, solange der Stoss anliegt. Ohne diese Zeile war die Kraft
+## dort schlicht 0 - Schaltstoss, Bodenwelle und ein gerader Einschlag kamen am
+## Lenkrad nicht an, obwohl HUD und Kamera sie zeigten.
+PULSE_SHAKE_HZ = 30.0
 IDLE_SPRING = 0.0       ## Feder im Leerlauf: aus (das Zentrieren macht der Nachlauf)
 ACK_PERIOD = 0.1        ## s zwischen zwei Lebenszeichen an das Spiel
+## Nach so vielen Sekunden ohne Paket gibt der Helfer das Lenkrad **ganz**
+## frei (Geraet schliessen), statt es nur mit Ruhegewicht zu halten. Warum das
+## noetig ist - gemessen am 21.09.2026 (`docs/reviews/ffb_wave7_ownership.md`):
+## Das G29 vertraegt nur eine Reihenfolge. Haelt der Helfer das Rad (exklusiv
+## ueber DirectInput), bekommt das Spiel beim Start keine Achsendaten mehr.
+## Genau das passierte bei jedem Neustart des Spiels: der Helfer lief weiter,
+## liess nur die Kraft los (`[idle]`-Zeile mit damp=0.10 fric=0.05) und hielt
+## das Geraet dabei. Mit der Freigabe ist die Reihenfolge beliebig: der Helfer
+## holt sich das Rad zurueck, sobald das Spiel wieder sendet - und dann ist das
+## Spiel der Erste, genau wie gemessen.
+RELEASE_WHEEL_AFTER = 30.0
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -896,7 +922,14 @@ class G29ForceFeedback:
         """
         sign = -1.0 if invert else 1.0
         g = _clamp(gain, 0.0, 1.0)
-        burst = _clamp(pulse, 0.0, 1.0) * g * PULSE_MIX * _clamp(pulse_dir, -1.0, 1.0)
+        amount = _clamp(pulse, 0.0, 1.0) * g * PULSE_MIX
+        direction = _clamp(pulse_dir, -1.0, 1.0)
+        if amount > 0.0 and abs(direction) <= 1e-3:
+            # Kein Vorzeichen: der Anschlag wird als Klopfen angelegt. Das
+            # Vorzeichen wechselt mit `PULSE_SHAKE_HZ`, zeitbasiert und damit
+            # unabhaengig davon, mit welcher Rate der Loop laeuft.
+            direction = 1.0 if int(time.monotonic() * PULSE_SHAKE_HZ * 2.0) % 2 == 0 else -1.0
+        burst = amount * direction
         total = _clamp(_clamp(force, -1.0, 1.0) * g + burst, -1.0, 1.0)
         magnitude = int(total * 10000 * sign)
         self._set_constant(magnitude)
@@ -1135,7 +1168,7 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                dry_run: bool = False, run_seconds: float = 0.0,
                report: dict = None, quiet: bool = False,
                wheel_override=None, name_filter=None,
-               wait_game: float = -1.0) -> int:
+               wait_game: float = -1.0, release_after: float = 0.0) -> int:
     """Pakete lesen und Kraft ans Lenkrad geben.
 
     `report` (optional) wird mit den Messwerten des Laufs gefuellt, damit
@@ -1150,6 +1183,13 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
     `wait_game`: so lange (Sekunden) auf das erste Paket des Spiels warten,
     bevor das Lenkrad uebernommen wird. `-1` (Standard) wartet unbegrenzt,
     `0` schaltet das Warten ab. Siehe `wait_for_game()`.
+
+    `release_after`: so viele Sekunden ohne Paket, bis das Lenkrad **freigegeben**
+    wird (Geraet schliessen, nicht nur Kraft loslassen). `0` (Standard hier)
+    schaltet es ab; die Kommandozeile setzt `RELEASE_WHEEL_AFTER`. Ohne diese
+    Freigabe traf ein Neustart des Spiels genau den gemessenen Fehlerfall:
+    der Helfer hielt das Rad noch, und das Spiel bekam keine Achse mehr.
+    Beim naechsten Paket wird das Rad erneut uebernommen.
     """
     wheel = None
     if wheel_override is not None:
@@ -1183,19 +1223,26 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
     if wheel_override is None and not dry_run and wait_game != 0.0:
         carry = wait_for_game(sock, wait_game, quiet)
 
+    def make_wheel():
+        """Das Lenkrad oeffnen - erster Versuch und jeder weitere."""
+        return G29ForceFeedback(name_filter=name_filter, verbose=verbose,
+                                exclusive=exclusive)
+
+    def announce_wheel(w) -> None:
+        if not quiet:
+            print(f"[ffb] {w.name} bereit, Effekte: "
+                  f"{', '.join(w.effects_created) or '(keine)'}")
+        if w.effects_failed:
+            print(f"[ffb] nicht verfuegbar: {'; '.join(w.effects_failed)}")
+
     if wheel is None and not dry_run:
         try:
-            wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
-                                     exclusive=exclusive)
+            wheel = make_wheel()
         except WheelError as exc:
             print(f"[ffb] kein Lenkrad: {exc}")
             sock.close()
             return 1
-        if not quiet:
-            print(f"[ffb] {wheel.name} bereit, Effekte: "
-                  f"{', '.join(wheel.effects_created) or '(keine)'}")
-        if wheel.effects_failed:
-            print(f"[ffb] nicht verfuegbar: {'; '.join(wheel.effects_failed)}")
+        announce_wheel(wheel)
         if not wheel.effects_created:
             print("[ffb] ohne Effekte beendet sich der Helfer")
             wheel.close()
@@ -1203,6 +1250,16 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
     elif wheel is None and dry_run and not quiet:
         print("[ffb] Trockenlauf: kein Lenkrad, nur die Rechnung "
               "(zum Pruefen der Kette ohne Hardware)")
+    ## Wann das Rad zuletzt uebernommen wurde - die Freigabe rechnet ab dem
+    ## spaeteren von "letztes Paket" und "Rad offen", damit auch ein Rad, das
+    ## nie ein Paket gesehen hat, wieder freikommt.
+    opened_at: float = time.time() if wheel is not None else 0.0
+    ## Nach einer Freigabe wartet der Helfer auf das naechste Paket und holt
+    ## sich das Rad dann zurueck. Beim ersten Oeffnen ist das nicht noetig.
+    reopen_wanted: bool = False
+    last_open_try: float = 0.0
+    wheel_releases: int = 0
+    wheel_reopens: int = 0
 
     period = 1.0 / max(rate, 20.0)
     # Ziel (was das Spiel will) und Ist (was gleich am Lenkrad liegt). Zwischen
@@ -1294,6 +1351,34 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                 except (BlockingIOError, OSError):
                     break
                 got = data
+
+            # Das Rad zurueckholen, wenn das Spiel wieder sendet. Das Oeffnen
+            # passiert **nach** dem Paket und damit nach dem Spiel - die einzige
+            # Reihenfolge, die das G29 vertraegt (siehe `wait_for_game()`).
+            if (got and wheel is None and wheel_override is None and not dry_run
+                    and reopen_wanted and now - last_open_try > 0.5):
+                last_open_try = now
+                try:
+                    wheel = make_wheel()
+                except WheelError as exc:
+                    print(f"[ffb] noch kein Lenkrad: {exc}")
+                    wheel = None
+                else:
+                    announce_wheel(wheel)
+                    if not wheel.effects_created:
+                        print("[ffb] ohne Effekte - kein weiterer Versuch")
+                        wheel.close()
+                        wheel = None
+                        reopen_wanted = False
+                    else:
+                        wheel_reopens += 1
+                        reopen_wanted = False
+                        opened_at = now
+                        if not quiet:
+                            print("[ffb] das Spiel sendet wieder - Lenkrad erneut "
+                                  "uebernommen (es war freigegeben, damit ein "
+                                  "Neustart des Spiels die Achse nicht verliert)")
+
             if got:
                 try:
                     msg = json.loads(got.decode("utf-8", "replace"))
@@ -1397,6 +1482,34 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                 target["spring"] = 0.0
                 target["pulse"] = 0.0
 
+            # --- Lenkrad freigeben, wenn das Spiel weg ist ---------------------
+            # Ohne das blieb das Geraet exklusiv uebernommen, waehrend nur die
+            # Kraft auf Ruhegewicht fiel (`[idle]`). Ein Neustart des Spiels
+            # traf dann genau den gemessenen Fehlerfall aus
+            # docs/reviews/ffb_wave7_ownership.md: das Spiel konnte die Achse
+            # nicht mehr lesen. Nach der Freigabe ist die Reihenfolge beliebig -
+            # der Helfer holt das Rad erst zurueck, wenn das Spiel wieder sendet.
+            if (wheel is not None and wheel_override is None and not dry_run
+                    and release_after > 0.0 and not carry
+                    and now - max(last_packet, opened_at) > release_after):
+                if not quiet:
+                    print(f"[ffb] kein Spiel seit {release_after:.0f} s - Lenkrad "
+                          "freigegeben (Haende weg). Startet das Spiel neu, "
+                          "uebernimmt der Helfer es von selbst wieder.")
+                try:
+                    wheel.apply(0.0, 0.0, 0.0, 0.0, 0.0, invert)
+                except Exception:
+                    # Ein Rad, das schon weg ist, ist kein Grund zu sterben.
+                    pass
+                wheel.close()
+                wheel = None
+                reopen_wanted = True
+                last_open_try = now
+                wheel_releases += 1
+                for key in ("torque", "damper", "fric", "rumble", "pulse",
+                            "pulse_dir"):
+                    live[key] = 0.0
+
             before = live["torque"]
             live["torque"] = _slew(live["torque"], _clamp(target["torque"], -1.0, 1.0), period)
             max_step = max(max_step, abs(live["torque"] - before))
@@ -1442,6 +1555,8 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                         "acks_with_axis": acks_with_axis,
                         "hz_peak": hz_peak,
                         "over_one": over_one,
+                        "wheel_releases": wheel_releases,
+                        "wheel_reopens": wheel_reopens,
                     })
                 if not quiet:
                     print(f"[ffb-dry] {packets} Pakete in {now - started:.1f} s, "
@@ -1549,6 +1664,26 @@ class _MagnitudeProbe:
     def peak(self) -> float:
         """Groesste Kraft, die wirklich ans Lenkrad ging (Anteil von 1.0)."""
         return max((abs(m) for m in self.magnitudes), default=0) / 10000.0
+
+
+def _count_sign_flips(magnitudes) -> int:
+    """Wie oft wechselt die Kraft ihr Vorzeichen?
+
+    Ein *gerichteter* Stoss ist ein Push in eine Richtung (0 Wechsel), ein
+    Stoss **ohne** Vorzeichen muss ein Klopfen sein (viele Wechsel). Genau
+    daran laesst sich messen, ob ein Anschlag am Rad ankommt - die blosse
+    Amplitude verraet es nicht.
+    """
+    flips = 0
+    last = 0
+    for m in magnitudes:
+        s = (m > 0) - (m < 0)
+        if s == 0:
+            continue
+        if last != 0 and s != last:
+            flips += 1
+        last = s
+    return flips
 
 
 def _measure(script, run_seconds: float, rate: float = 200.0,
@@ -1677,6 +1812,112 @@ def _bridge_order_probe(wait_game: float = 5.0) -> tuple[bool, bool]:
         globals()["G29ForceFeedback"] = saved
 
 
+class _ReopenWheel:
+    """Ersatz-Lenkrad, das mitschreibt, *wann* es gebaut und *wann* es
+    geschlossen wird - die zwei Zeitpunkte, an denen die Freigabe haengt."""
+
+    opened_at: list = []
+    closed_at: list = []
+
+    def __init__(self, name_filter=None, verbose: bool = False,
+                 exclusive: bool = True) -> None:
+        _ReopenWheel.opened_at.append(time.time())
+        self.name = "REOPEN-STUB"
+        self.effects_created = ["const"]
+        self.effects_failed = []
+        self.applied = 0
+
+    def apply(self, *args, **kwargs) -> None:
+        self.applied += 1
+
+    def close(self) -> None:
+        _ReopenWheel.closed_at.append(time.time())
+
+
+def _reopen_probe(release_after: float, preferred_port: int = 5661) -> dict:
+    """Gibt der Helfer das Rad frei, wenn kein Spiel mehr sendet - und holt er
+    es sich zurueck, wenn das Spiel wieder faehrt?
+
+    Warum das zaehlt (gemessen am 21.09.2026,
+    `docs/reviews/ffb_wave7_ownership.md`): Das G29 vertraegt nur eine
+    Reihenfolge - haelt der Helfer das Rad, bekommt das Spiel keine
+    Achsendaten mehr. Der Helfer hielt es auch nach dem Ende des Spiels fest
+    (er liess nur die Kraft los, sichtbar als `[idle]`-Zeile mit dem
+    Ruhegewicht damp=0.10 fric=0.05). Jeder Neustart des Spiels traf damit
+    genau den Fehlerfall. Geprueft werden hier beide Richtungen: freigeben ohne
+    Spiel, zurueckholen bei Paketen - und dass dazwischen wirklich gewartet
+    wird (kein Zurueckholen ohne Paket).
+
+    `release_after=0` ist die Gegenprobe: dann darf gar nichts freigegeben
+    werden. Nur so ist die Pruefung ueberhaupt falsifizierbar.
+    """
+    port = _free_port(preferred_port)
+    saved = globals()["G29ForceFeedback"]
+    globals()["G29ForceFeedback"] = _ReopenWheel
+    _ReopenWheel.opened_at = []
+    _ReopenWheel.closed_at = []
+    report: dict = {}
+    result = {
+        "opened_before_packets": False, "opened_after_packets": False,
+        "released": False, "stayed_released": False, "reopened": False,
+        "opens": 0, "releases": 0,
+    }
+
+    def traffic(seconds: float) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            payload = _packet(v=2, torque=0.2, damper=0.05, friction=0.05,
+                              rumble=0.0, rumble_hz=24.0, pulse=0.0,
+                              pulse_dir=0.0, spring=0.0, gain=1.0,
+                              source="Test")
+            end = time.time() + seconds
+            while time.time() < end:
+                sock.sendto(payload, ("127.0.0.1", port))
+                time.sleep(1.0 / 60.0)
+        finally:
+            sock.close()
+
+    try:
+        bridge = threading.Thread(
+            target=lambda: run_bridge(port, 200.0, False, False, 0.5,
+                                      report=report, quiet=True, wait_game=-1.0,
+                                      release_after=release_after,
+                                      run_seconds=9.0),
+            daemon=True)
+        bridge.start()
+        time.sleep(0.5)
+        # Der Helfer wartet (Welle 7): ohne Paket darf noch kein Rad offen sein.
+        result["opened_before_packets"] = bool(_ReopenWheel.opened_at)
+        traffic(0.7)
+        result["opened_after_packets"] = bool(_ReopenWheel.opened_at)
+
+        # Spiel weg: nach `release_after` muss das Rad geschlossen sein.
+        deadline = time.time() + max(release_after, 0.0) + 2.5
+        while time.time() < deadline and not _ReopenWheel.closed_at:
+            time.sleep(0.05)
+        result["released"] = bool(_ReopenWheel.closed_at)
+
+        # Und es darf nicht von allein wieder aufgehen: der Helfer wartet auf
+        # das naechste Paket (sonst waere er beim Neustart wieder der Erste).
+        opens_before = len(_ReopenWheel.opened_at)
+        time.sleep(0.6)
+        result["stayed_released"] = len(_ReopenWheel.opened_at) == opens_before
+
+        # Das Spiel faehrt wieder: jetzt muss das Rad zurueckkommen.
+        traffic(0.7)
+        deadline = time.time() + 2.5
+        while time.time() < deadline and len(_ReopenWheel.opened_at) <= opens_before:
+            time.sleep(0.05)
+        result["reopened"] = len(_ReopenWheel.opened_at) > opens_before
+        result["opens"] = len(_ReopenWheel.opened_at)
+        result["releases"] = len(_ReopenWheel.closed_at)
+        bridge.join(timeout=12.0)
+    finally:
+        globals()["G29ForceFeedback"] = saved
+    result["report"] = report
+    return result
+
+
 def check_chain(rate: float = 200.0) -> int:
     """Die Kette Paket -> Kraft ohne Lenkrad pruefen (0 = alles gut)."""
     failed = 0
@@ -1748,6 +1989,32 @@ def check_chain(rate: float = 200.0) -> int:
     burst = float(r.get("peak_wheel", 0.0))
     check(abs(burst - 0.4 * PULSE_MIX) < 0.01, "puls_sitzt_sofort_auf_der_kraft",
           f"pulse=0.40 -> Rad {burst:.3f} = {burst / 0.4:.0%} des Pulses (ohne Rampe)")
+
+    # 4b) Der Stoss **ohne Vorzeichen** darf nicht verschwinden. Das Spiel
+    #     sendet `pulse_dir 0`, sobald kein Lenkbefehl anliegt - und
+    #     `g29_input.gd` setzt die Lenkung per Totzone auf der Geraden auf
+    #     genau 0,0. Gemessen am 21.09.2026 kam `pulse 0.45` damit als
+    #     **0,000** am Rad an: Schaltstoss, Bodenwelle und ein gerader
+    #     Einschlag waren am Lenkrad nicht zu spueren, waehrend HUD und Kamera
+    #     sie zeigten. Jetzt wird das Rad geklopft (Vorzeichenwechsel
+    #     innerhalb des Stosses). Die Gegenprobe ist der gerichtete Stoss
+    #     oben: der darf **nicht** schwingen, sonst waere ein Schaltstoss ein
+    #     Rumpeln.
+    undirected = _packet(v=2, torque=0.0, damper=0.0, friction=0.0, rumble=0.0,
+                         rumble_hz=24.0, pulse=0.45, pulse_dir=0.0, spring=0.0,
+                         gain=1.0, source="Schalten")
+    knock_probe = _MagnitudeProbe()
+    r = _measure([(undirected, 0.6), (None, 0.6)], 1.4, rate, knock_probe)
+    knock_peak = float(r.get("peak_wheel", 0.0))
+    knock_flips = _count_sign_flips(knock_probe.magnitudes)
+    check(knock_peak > 0.2 and knock_flips >= 3,
+          "ohne_stossrichtung_wird_das_rad_geklopft",
+          f"pulse=0.45 ohne Richtung -> Rad {knock_peak:.3f} mit "
+          f"{knock_flips} Vorzeichenwechseln (vorher 0,000 / 0 Wechsel)")
+    straight_flips = _count_sign_flips(probe.magnitudes)
+    check(straight_flips == 0, "mit_stossrichtung_bleibt_der_stoss_gerade",
+          f"pulse=0.40 mit Richtung +1 -> {straight_flips} Vorzeichenwechsel "
+          f"(muss 0 sein)")
 
     # 5) Gegenprobe zur Trennung der Kanaele: `torque` ist laut Protokoll die
     #    GRUNDKRAFT und enthaelt den Stoss NICHT. Ein Paket mit 0.4 Kraft plus
@@ -1846,6 +2113,30 @@ def check_chain(rate: float = 200.0) -> int:
           f"sofort, genau der Fall, der das Spiel blind machte; nach dem "
           f"Paket: {late_control})")
 
+    # 11) **Die Freigabe.** Das Warten aus (10) schuetzt nur den *ersten*
+    #     Start. Der Helfer hielt das Rad nach dem Ende des Spiels weiter
+    #     (Geraet offen, nur die Kraft auf Ruhegewicht) - ein Neustart des
+    #     Spiels traf damit genau den Fehlerfall aus (10). Geprueft wird:
+    #     freigeben ohne Spiel, warten (kein Zurueckholen ohne Paket),
+    #     zurueckholen bei Paketen - und mit `release_after=0` darf nichts
+    #     freigegeben werden (Gegenprobe, sonst waere die Pruefung nicht
+    #     falsifizierbar).
+    reopen = _reopen_probe(1.0)
+    check(reopen["opened_after_packets"] and reopen["released"]
+          and reopen["stayed_released"] and reopen["reopened"],
+          "das_rad_wird_freigegeben_wenn_das_spiel_weg_ist",
+          f"offen vor dem ersten Paket: {reopen['opened_before_packets']} "
+          f"(muss False sein), nach Paketen offen: {reopen['opened_after_packets']} "
+          f"(muss True sein), freigegeben: {reopen['released']}, wartet danach: "
+          f"{reopen['stayed_released']}, zurueckgeholt: {reopen['reopened']} "
+          f"(Oeffnen {reopen['opens']}, Freigaben {reopen['releases']})")
+    control = _reopen_probe(0.0, preferred_port=5671)
+    check(not control["released"],
+          "die_freigabe_kann_ausbleiben",
+          f"Gegenprobe mit --release-wheel-after 0: freigegeben = "
+          f"{control['released']} (muss False sein; ohne die Freigabe bleibt das "
+          f"Rad offen, genau der Fall, der den Neustart blind machte)")
+
     print(f"FFB_CHECK {'PASS' if failed == 0 else 'FAIL'} {checks} Pruefungen, "
           f"{failed} Mangel")
     return 1 if failed else 0
@@ -1875,9 +2166,15 @@ DEMO_STAGES = [
     (0.5, "Schaltstoss",
      {"torque": -0.30, "damper": 0.25, "fric": 0.12, "rumble": 0.05, "rumble_hz": 26.0,
       "pulse": 0.45, "pulse_dir": -1.0}),
+    (0.5, "Schaltstoss auf der Geraden (kein Lenkbefehl): Anschlag als Klopfen",
+     {"torque": 0.00, "damper": 0.30, "fric": 0.12, "rumble": 0.06, "rumble_hz": 30.0,
+      "pulse": 0.45, "pulse_dir": 0.0}),
     (0.5, "Einschlag in die Wand",
      {"torque": -0.20, "damper": 0.30, "fric": 0.20, "rumble": 0.30, "rumble_hz": 30.0,
       "pulse": 1.00, "pulse_dir": -1.0}),
+    (0.5, "Einschlag geradeaus (kein Lenkbefehl): voller Anschlag als Klopfen",
+     {"torque": 0.00, "damper": 0.30, "fric": 0.20, "rumble": 0.35, "rumble_hz": 30.0,
+      "pulse": 1.00, "pulse_dir": 0.0}),
     (1.6, "Loslassen",
      {"torque": 0.00, "damper": 0.06, "fric": 0.05, "rumble": 0.00, "rumble_hz": 20.0}),
 ]
@@ -2025,6 +2322,15 @@ def main(argv: list[str] | None = None) -> int:
                              "muss das Rad zuerst oeffnen, sonst liefert es "
                              "keine Achsendaten (gemessen, siehe "
                              "docs/reviews/ffb_wave7_ownership.md)")
+    parser.add_argument("--release-wheel-after", type=float,
+                        default=RELEASE_WHEEL_AFTER, metavar="SEKUNDEN",
+                        help="so lange ohne Paket, bis das Lenkrad ganz "
+                             "freigegeben wird (0 = nie). Danach holt der Helfer "
+                             f"es sich zurueck, sobald das Spiel wieder sendet "
+                             f"(Standard {RELEASE_WHEEL_AFTER:.0f} s). Ohne die "
+                             "Freigabe traf ein Neustart des Spiels genau den "
+                             "gemessenen Fehlerfall: der Helfer hielt das Rad, "
+                             "und das Spiel bekam keine Achsendaten mehr")
     parser.add_argument("--spring", type=float, default=0.0,
                         help="Zentrierfeder 0..1 (Standard 0: das Zentrieren "
                              "macht der Nachlauf des Spiels)")
@@ -2075,7 +2381,8 @@ def main(argv: list[str] | None = None) -> int:
     return run_bridge(args.port, args.rate, args.invert, args.verbose,
                       args.idle_release, args.exclusive, args.spring, args.gain,
                       args.dry_run, args.dry_run_seconds if args.dry_run else 0.0,
-                      name_filter=args.name, wait_game=args.wait_game)
+                      name_filter=args.name, wait_game=args.wait_game,
+                      release_after=args.release_wheel_after)
 
 
 if __name__ == "__main__":

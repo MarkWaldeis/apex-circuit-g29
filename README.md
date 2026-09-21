@@ -44,6 +44,14 @@ still (`docs/reviews/ffb_wave7_ownership.md`). Läuft das Spiel schon, nimmt
 läuft das Spiel unverändert, nur eben ohne Kraft — Godot selbst kann am G29
 kein Force Feedback erzeugen.
 
+Das Fenster darf dabei offen bleiben, auch über mehrere Runden: sendet das
+Spiel 30 s lang nicht mehr (Spiel beendet, oder lange im Pausenmenü), gibt der
+Helfer das **Lenkrad** von allein frei und holt es sich zurück, sobald das Spiel
+wieder sendet. Ohne diese Freigabe hätte ein Spiel-Neustart bei laufendem Helfer
+genau den Fehler aus `docs/reviews/ffb_wave7_ownership.md` erzeugt: der Helfer
+hielt das Rad, das Spiel bekam keine Achsendaten mehr. Abschaltbar mit
+`--release-wheel-after 0`.
+
 Unterstützt werden **G29, G920 und G923** — der Helfer sucht die ganze
 Logitech-Familie (ein anderes Rad: `python tools/g29_ffb.py --name <Name>`).
 Im Logitech G HUB einstellen: **Betriebsbereich 900°, Zentrierfeder AUS**,
@@ -189,7 +197,10 @@ Spiel muss das Lenkrad zuerst öffnen.
 * `"Apex Circuit FFB starten.cmd"` macht das jetzt von allein: es startet zuerst
   das Spiel und wartet dann auf dessen Pakete.
 * Läuft der Helfer schon und das Spiel zeigt „G29 ohne Achsendaten“: **Spiel
-  neu starten**, Helfer weiterlaufen lassen.
+  neu starten**, Helfer weiterlaufen lassen — der Helfer gibt das Rad nach 30 s
+  ohne Paket von allein frei und übernimmt es erst, wenn das Spiel wieder
+  sendet (`python tools/g29_ffb.py --check`, Prüfung
+  `das_rad_wird_freigegeben_wenn_das_spiel_weg_ist`).
 * Ein `report timeout` im Einzelprüfer beweist **nichts** — das G29 sendet nur,
   wenn sich etwas ändert. Ohne Drehen liest auch ein gesundes Rad nur Stille.
 

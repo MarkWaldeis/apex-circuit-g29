@@ -183,8 +183,9 @@ DirectInput las die Achse, während HID und SDL nichts bekamen. Die Kette selbst
 ist ohne Hardware prüfbar:
 `tests/test_ffb_link.gd` (14 s echte Fahrt: v2-Pakete, 60 Hz, Kraft im Bogen,
 Stoß, Wertebereiche, Lebenszeichen des Helfers), `python tools/g29_ffb.py --check`
-(16 Prüfungen ohne Lenkrad: Stärke genau einmal, Rampe, Stoß, Loslassen,
+(20 Prüfungen ohne Lenkrad: Stärke genau einmal, Rampe, Stoß, Loslassen,
 Ereignis/Tempo, Antwort an das Spiel, **der Helfer wartet auf das Spiel** samt
+Gegenprobe und **er gibt das Lenkrad frei, wenn kein Spiel mehr sendet**, samt
 Gegenprobe) und
 `python tools/g29_ffb.py --dry-run` (Rampe, Wertebereiche am Rad).
 

@@ -21,6 +21,9 @@ echo   * Das Lenkrad braucht sein NETZTEIL - ohne Netzteil gibt es keine Kraft.
 echo   * Im Logitech G HUB: Betriebsbereich 900 Grad, Zentrierfeder AUS.
 echo   * Dieses Fenster waehrend des Fahrens offen lassen. Esc oder Strg+C
 echo     beendet es und laesst das Lenkrad los.
+echo   * Kein Spiel mehr? Nach 30 s gibt der Helfer das Lenkrad von allein frei
+echo     und holt es sich zurueck, sobald das Spiel wieder sendet. Ein Neustart
+echo     des Spiels braucht also keinen Neustart des Helfers.
 echo   * Anderes Lenkrad als G29/G920/G923: --name NAME mitgeben.
 echo.
 
@@ -86,6 +89,7 @@ echo   "Apex Circuit FFB starten.cmd" --demo     Fuehltest am Lenkrad, ohne Spie
 echo   "Apex Circuit FFB starten.cmd" --sign     Kraftrichtung messen
 echo   "Apex Circuit FFB starten.cmd" --dry      Trockenlauf ohne Lenkrad
 echo   python tools\g29_ffb.py --wait-game 0      nicht auf das Spiel warten (Diagnose)
+echo   python tools\g29_ffb.py --release-wheel-after 0   Lenkrad nie freigeben
 echo   python tools\g29_ffb.py --name G923        anderes Lenkrad suchen
 goto :done
 

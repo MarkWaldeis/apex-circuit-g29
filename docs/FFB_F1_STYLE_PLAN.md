@@ -228,6 +228,15 @@ Zwei Regeln, die zur Kette gehören und geprüft werden:
    Der Helfer setzt es sofort ohne Rampe auf die Kraft. Steckte es zusätzlich
    in `torque`, käme es doppelt an — gemessen waren das 111 % eines
    Schaltstoßes, beim vollen Einschlag über 1,0 und damit gekappt.
+   **`pulse_dir` 0 heißt dabei „kein Vorzeichen", nicht „kein Stoß":** auf der
+   Geraden setzt `g29_input.gd` die Lenkung per Totzone auf genau 0.0, der
+   Stoss bekam damit `-signf(0.0)` = 0 — und der Helfer machte daraus gemessen
+   **0,000 Kraft**. Schaltstoß, Bodenwelle und ein gerader Einschlag waren am
+   Lenkrad nicht zu spüren, obwohl HUD und Kamera sie zeigten. Der Helfer legt
+   einen vorzeichenlosen Stoss seit dem 21.09.2026 als **Klopfen** an
+   (Vorzeichenwechsel mit 30 Hz über die Stoßdauer): gemessen 0,315 mit 39
+   Vorzeichenwechseln statt 0,000. Ein gerichteter Stoß bleibt davon unberührt
+   (0 Vorzeichenwechsel).
 
 ### 3.4 Der Helfer (`tools/g29_ffb.py`)
 
@@ -319,6 +328,9 @@ Auf der Einstellungen-Seite, Abschnitt „Force Feedback (G29)“:
 | 15 | Rückkanal | der Helfer antwortet dem Spiel (`{"ack":1}`); `test_ffb_link` prüft, dass das Spiel das Lebenszeichen liest und `helper_alive()` wahr wird; `--check` prüft die Antwort |
 | 16 | Tests hängen nicht am Fahrer-Profil | `test_ffb_link` nagelt die FFB-Einstellungen selbst fest (an, Bänder 100 %, Stärke 0,75); ein Headless-Lauf darf `user://ffb_settings.json` nicht schreiben (`test_ffb_settings`) |
 | 17 | Kein stilles Lenkrad | das HUD nennt den Grund: „LENKRADKRAFT AUS“ (Schalter), „LENKRADKANAL AUS“ (Kanal), „KEIN HELFER“ (keine Antwort) — statt einfach 0 % |
+| 18 | Ein Stoss ohne Lenkbefehl kommt trotzdem an | `pulse_dir 0` (Gerade, `g29_input` setzt die Lenkung per Totzone auf 0.0) muss am Rad ein **Klopfen** ergeben: `--check` verlangt > 0,2 mit mindestens 3 Vorzeichenwechseln, die Gegenprobe (`pulse_dir +1`) genau 0 Wechsel. Vorher: `pulse 0.45` → **0,000 am Rad** |
+| 19 | Die Oberfläche führt, die Unwucht bleibt auf dem Asphalt | `tests/test_ffb_model.gd` §19 + `tests/probe_wave9_loudness.gd`: bei Schaden 1,0 muss auf Kerb `Quelle Kerb` (0,588 @ 29 Hz) und auf Kies `Quelle Kies` (0,300 @ 13 Hz) stehen — vorher stand dort überall `Unwucht 0,750 @ 19 Hz`; auf Asphalt bleibt die Unwucht bei 0,750 |
+| 20 | Ein Stoss ohne Vorzeichen verschwindet nicht in der Invertierung | `invert` dreht `pulse_dir` mit; 0 bleibt 0 (kein Vorzeichen) und wird vom Helfer geklopft, nicht verschluckt |
 
 ## 5. Prüfwellen (fremde Agenten, kritisch)
 
@@ -352,6 +364,7 @@ der Root nach und startet die nächste Welle — so lange, bis eine Welle
 | 5 | Messkette/Auslieferung (Root-Audit) | §10 dieses Dokuments | Drei Mängel, alle behoben: ein **Kollisionslauf zählte als grün** (`LAP_DRIVE PASS` aus einer Welt ohne Auto), ein **hängender Godot blieb als Waise stehen** und vergiftete jede weitere Messung, und die **ausgelieferte Kopie konnte still veralten** (Desktop-Start 18:58, Export 19:06). Neu: `tools/run_all_tests.ps1`, gehärteter `tools/run_godot.ps1`, `tools/export_and_deliver.ps1` |
 | 6 | Modell/Realismus, Kette (Root-Audit) | `docs/reviews/ffb_direction_selfcheck.md` | 13 Gegenproben der neuen Richtungsautomatik plus eine Dauerprobe: ein einzelner Streifer gab dem Rad **dauerhaft zu viel Unwucht** (0,38 nach Schaden 0,22, gesättigt bei 0,62). Neu bemessen (0,11 / 0,19 / 0,38 / 0,64 / 0,75) |
 | 7 | **Besitz/Reihenfolge am echten G29** (Root-Audit) | `docs/reviews/ffb_wave7_ownership.md` | **Der wichtigste Fund der ganzen Reihe:** die seit Welle 4 behauptete „unzuverlässige Hardware“ war die **Startreihenfolge**. Helfer zuerst → Spiel liest keine Achse, Rad steht still (auch für den Helfer). Spiel zuerst → beides läuft (1 920 HID-Reports, Spanne 2,0 im Spiel). Behoben mit Warteschritt im Helfer, neuem Startskript, ehrlichen Hinweisen und 16 Kettentests inkl. Gegenprobe. Der Richtungstest liefert **erstmals** ein Ergebnis am echten Rad: positive Kraft dreht nach links → `invert = true` bestätigt |
+| 9 | **Stoss-Kanal und Oberflaechen-Vorrang** (Root-Audit, dieser Durchgang) | §11 dieses Dokuments | Zwei gemessene Maengel: (1) ein **Stoss ohne Vorzeichen kam als 0,000 am Rad an** — auf der Geraden der Normalfall, weil die Lenkung per Totzone exakt 0.0 ist; betroffen waren Schalten, Bodenwelle und ein gerader Einschlag. (2) Ein **Wrack verdraengte Kerb und Kies** (0,300 @ 13 Hz → 0,750 @ 19 Hz, `Quelle Unwucht`) fuer den Rest der Sitzung. Beide behoben; dazu zwei falsche Behauptungen in Code/Doku korrigiert (Kerb-Lautstaerke, Kies-Frequenzband) |
 
 ## 6. Risiken
 
@@ -420,7 +433,9 @@ und `tools/g29_ffb.py --check`, 12 Prüfungen, Kette ohne Godot):
 | Gerade bei Tempo (> 180 km/h, Querlast < 0,6 g) | Kraft Mittel 0,003 · Spitze 0,042 · Dämpfung 0,297 · Rütteln Mittel 0,143 · **Sprung pro Tick 0,0005** (kein Zappeln) |
 | Schrittgeschwindigkeit (< 60 km/h) | Kraft Mittel 0,054 · Spitze 0,153 · Rütteln 0,05 (keine erfundene Zentrierung) |
 | Kerb | Rütteln 0,62 bei 30 Hz |
-| Kies | Rütteln 0,29 bei 12–30 Hz (langsamer und schwächer als Kerb) |
+| Kies | Rütteln 0,30 bei 13 Hz (langsamer und schwächer als Kerb); das alte „12–30 Hz" in dieser Zeile war ein Restwert aus der ersten Fassung, der Bauplan selbst nennt 8–15 Hz |
+| Kerb gegen Unwucht | 108 km/h, Schaden 1,0: **vorher** `Quelle Unwucht, 0,750 @ 19 Hz` auf Kerb **und** Kies — das Off-Track-Band war damit fuer den Rest der Sitzung nicht mehr zu spueren (es gibt keine Werkstatt); **jetzt** Kerb 0,588 @ 29 Hz und Kies 0,300 @ 13 Hz. Auf Asphalt bleibt die Unwucht unveraendert deutlich (0,750 @ 19 Hz). Messung: `tests/probe_wave9_loudness.gd` |
+| Stoss ohne Vorzeichen | Paket `pulse 0.45, pulse_dir 0.0` → **vorher 0,000 am Rad**, jetzt 0,315 mit 39 Vorzeichenwechseln (Klopfen) in `python tools/g29_ffb.py --check`; Gegenprobe `pulse_dir +1` → 0 Vorzeichenwechsel |
 | Kuppe / Bodenwelle | senkrechte Last 0,16–2,05 g auf der Runde (Mittel 1,00); **37 Ticks unter 0,80 g** (Kuppe: Kraft bis 40 % leichter) und **20 Ticks über 1,35 g** (Bodenwelle: Stoß + Rütteln 14–26 Hz) |
 | Blockierende Vorderräder | Kraft 0,143 statt 0,797 = **18 %** der Bogenkraft, Rütteln 0,70 bei 34 Hz |
 | Bremsen ohne Blockieren | geradeaus 58 %, Trail-Braking 74 % der jeweiligen Kraft ohne Bremse (das Anbremsen macht das Lenkrad nicht tot) |
@@ -868,3 +883,50 @@ starten und fahren.“).
 Offen bleibt weiterhin nur der **Fühltest am Lenkrad** (schwerer Bogen, leichtes
 Untersteuern, Kerb, Anschlag): Software kann messen, dass Kraft in der richtigen
 Stärke in die richtige Richtung geht — nicht, ob sie sich richtig anfühlt.
+
+---
+
+# 12. Welle 8: das Warten schützte nur den ersten Start
+
+Vollständiger Bericht: `docs/reviews/ffb_wave8_restart.md`.
+
+Welle 7 hat die Reihenfolge gemessen und den Helfer auf das erste Paket des
+Spiels warten lassen. Das schützt aber **nur den ersten Start**. Danach gilt:
+
+| Beobachtung | Beweis |
+|---|---|
+| Der Helfer ließ nach dem Ende des Spiels nur die **Kraft** los (`[idle]`-Zeile mit dem Ruhegewicht `damp=0.10 fric=0.05`) und hielt das Gerät dabei weiter exklusiv | `tools/g29_ffb.py`, im Loop steht kein `wheel.close()` — geschlossen wurde nur im `finally` beim Beenden |
+| Wer das Spiel also später neu startet (Desktop-Symbol), trifft **genau den Fehlerfall aus Welle 7**: der Helfer hält das Rad, das Spiel bekommt keine Achsendaten mehr | `docs/reviews/ffb_wave7_ownership.md` („Helfer zuerst, dann Spiel“) |
+| Am echten G29 gemessen: nach 2,5 s ohne Paket gibt der Helfer das Rad frei, und beim nächsten Paket übernimmt er es wieder — beide Geräteöffnungen gelangen | Live-Probe `tools/g29_ffb.py` (Spy um `G29ForceFeedback`), Meldungen: `kein Spiel seit 2 s - Lenkrad freigegeben (Haende weg)` / `das Spiel sendet wieder - Lenkrad erneut uebernommen` |
+
+Behoben:
+
+* `tools/g29_ffb.py` gibt das Lenkrad nach `--release-wheel-after` Sekunden
+  ohne Paket **ganz** frei (Gerät schließen, nicht nur Kraft loslassen) — ohne
+  neuen Code in der Kette: beim nächsten Paket baut der Helfer dasselbe Rad
+  erneut auf, also **nach** dem Spiel, der gemessen sicheren Reihenfolge.
+  Standard 30 s; `0` schaltet es ab. Der Puls-/Kraft-Zustand wird dabei
+  zurückgesetzt, damit nach der Rückkehr nichts „nachhängt“.
+* `python tools/g29_ffb.py --check` prüft beide Richtungen **und** die
+  Falsifizierbarkeit: freigeben ohne Spiel, *warten* danach (kein Zurückholen
+  ohne Paket), zurückholen bei Paketen — und mit `--release-wheel-after 0` darf
+  nichts freigegeben werden. **20 Prüfungen, 0 Mängel.**
+* `README.md` und `Apex Circuit FFB starten.cmd` sagen es dem Fahrer: das
+  Helfer-Fenster darf offen bleiben, ein Neustart des Spiels braucht keinen
+  Neustart des Helfers.
+
+Noch nicht gemessen: ob das Spiel die Achse **weiterliest**, wenn der Helfer sie
+während einer laufenden Sitzung (Pausenmenü > 30 s) freigibt und zurückholt.
+Die Messung dafür ist aufgesetzt und braucht das Rad allein
+(`probe_axis_track.gd` läuft nur mit Fenster, headless zählt Godot keine
+Joysticks):
+
+```
+python tools/g29_ffb.py --release-wheel-after 3        # Kraft-Helfer mit kurzer Freigabe
+powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 320x200 ^
+    --script tests/probe_axis_track.gd                 # Spiel liest die Achse 30 s mit
+```
+
+Erwartung: `AXIS_TRACK ... data=true` auch nach der Freigabe, und die Spanne
+wächst weiter, sobald der Helfer das Rad zurückgeholt hat. Genau dieses
+Kriterium fehlt noch in der Beweiskette; der übrige Weg ist gemessen.
