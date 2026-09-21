@@ -365,6 +365,7 @@ Auf der Einstellungen-Seite, Abschnitt „Force Feedback (G29)“:
 | 18 | Ein Stoss ohne Lenkbefehl kommt trotzdem an | `pulse_dir 0` (Gerade, `g29_input` setzt die Lenkung per Totzone auf 0.0) muss am Rad ein **Klopfen** ergeben: `--check` verlangt > 0,2 mit mindestens 3 Vorzeichenwechseln, die Gegenprobe (`pulse_dir +1`) genau 0 Wechsel. Vorher: `pulse 0.45` → **0,000 am Rad** |
 | 19 | Die Oberfläche führt, die Unwucht bleibt auf dem Asphalt | `tests/test_ffb_model.gd` §19 + `tests/probe_wave9_loudness.gd`: bei Schaden 1,0 muss auf Kerb `Quelle Kerb` (0,588 @ 29 Hz) und auf Kies `Quelle Kies` (0,300 @ 13 Hz) stehen — vorher stand dort überall `Unwucht 0,750 @ 19 Hz`; auf Asphalt bleibt die Unwucht bei 0,750 |
 | 20 | Ein Stoss ohne Vorzeichen verschwindet nicht in der Invertierung | `invert` dreht `pulse_dir` mit; 0 bleibt 0 (kein Vorzeichen) und wird vom Helfer geklopft, nicht verschluckt |
+| 21 | Die letzte Naht ist gemessen: Paketfeld → DirectInput-Struktur | `--check` mit `_DeviceProbe`: `rumble_hz 30` → `dwPeriod 33333 µs` (= 30,00 Hz), Rütteln 5600/8000, Dämpfung 3500/7000, Reibung 1750/7000; Kies 13 Hz → 76923 µs gegen Kerb 42 Hz → 23809 µs; `invert` dreht die Kraft im Gerät (5000 → −5000); der vorzeichenlose Stoss klopft auch dort (4 Vorzeichenwechsel in 60 ms, Amplitude 3150). Vorher war nur der Loop gemessen — die Sonde ersetzte genau die Setter, die das Gerät schreiben |
 
 ## 5. Prüfwellen (fremde Agenten, kritisch)
 
@@ -945,6 +946,13 @@ Behoben:
   Falsifizierbarkeit: freigeben ohne Spiel, *warten* danach (kein Zurückholen
   ohne Paket), zurückholen bei Paketen — und mit `--release-wheel-after 0` darf
   nichts freigegeben werden. **20 Prüfungen, 0 Mängel.**
+* Nachtrag aus demselben Durchgang (Root-Audit): die **letzte Naht** der Kette
+  war ungemessen — was im DirectInput-Effekt steht. `_MagnitudeProbe` ersetzt
+  genau die Setter, die Frequenz, Dämpfung und Reibung ins Gerät schreiben.
+  Neu `_DeviceProbe`, die nur den Aufruf ans Gerät ersetzt: 30 Hz → `dwPeriod`
+  33333 µs, Kies 76923 µs gegen Kerb 23809 µs, `invert` dreht die Kraft
+  (5000 → −5000), vorzeichenloser Stoss klopft auch im Gerät. **24 Prüfungen,
+  0 Mängel.**
 * `README.md` und `Apex Circuit FFB starten.cmd` sagen es dem Fahrer: das
   Helfer-Fenster darf offen bleiben, ein Neustart des Spiels braucht keinen
   Neustart des Helfers.

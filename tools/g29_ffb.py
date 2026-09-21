@@ -1686,6 +1686,52 @@ def _count_sign_flips(magnitudes) -> int:
     return flips
 
 
+class _DeviceProbe:
+    """Ersatz-Lenkrad, das die **DirectInput-Strukturen** stehen laesst.
+
+    `_MagnitudeProbe` ersetzt die Setter und sieht deshalb nur die Kraft. Die
+    letzte Naht der Kette war damit ungemessen: was steht wirklich im Effekt,
+    den DirectInput bekommt - Frequenz (`dwPeriod`), Daempfung, Reibung,
+    Feder? Genau dort lebten die Behauptungen "Kerb schnell, Kies grob" und
+    "Wheel Damper". Hier wird nur `_update` (der Aufruf ans Geraet) ersetzt,
+    alles andere ist echt.
+    """
+
+    def __init__(self) -> None:
+        wheel = G29ForceFeedback.__new__(G29ForceFeedback)
+        wheel._constant = DICONSTANTFORCE(0)
+        wheel._damper = DICONDITION(0, 0, 0, 0, 0, 0)
+        wheel._friction = DICONDITION(0, 0, 0, 0, 0, 0)
+        wheel._spring = DICONDITION(0, 0, 0, 0, 0, 0)
+        wheel._periodic = DIPERIODIC(0, 0, 0, 24000)
+        for name in ("eff_constant", "eff_damper", "eff_friction", "eff_spring",
+                     "eff_rumble"):
+            setattr(wheel, name, ctypes.c_void_p(1))
+        wheel._constant_sent = False
+        wheel._damper_sent = False
+        wheel._friction_sent = False
+        wheel._spring_sent = False
+        wheel._update = lambda *args, **kwargs: None
+        self.wheel = wheel
+
+    def hz(self) -> float:
+        """Die Frequenz, die im Geraet steht - aus `dwPeriod` zurueckgerechnet."""
+        period = int(self.wheel._periodic.dwPeriod)
+        return 1_000_000.0 / period if period > 0 else 0.0
+
+    def rumbling(self) -> int:
+        return int(self.wheel._periodic.dwMagnitude)
+
+    def constant(self) -> int:
+        return int(self.wheel._constant.lMagnitude)
+
+    def damper(self) -> int:
+        return int(self.wheel._damper.lPositiveCoefficient)
+
+    def friction(self) -> int:
+        return int(self.wheel._friction.lPositiveCoefficient)
+
+
 def _measure(script, run_seconds: float, rate: float = 200.0,
              probe: _MagnitudeProbe = None) -> dict:
     """Den echten Bruecken-Loop mit einem synthetischen Sender messen."""
@@ -2015,6 +2061,61 @@ def check_chain(rate: float = 200.0) -> int:
     check(straight_flips == 0, "mit_stossrichtung_bleibt_der_stoss_gerade",
           f"pulse=0.40 mit Richtung +1 -> {straight_flips} Vorzeichenwechsel "
           f"(muss 0 sein)")
+
+    # 4c) Die **letzte Naht**: was steht im DirectInput-Effekt? Bis hierher war
+    #     gemessen, dass die Paketwerte im Loop ankommen (`[ffb-peak]`) und
+    #     dass die Kraft am Rad anliegt. Nicht gemessen war die Uebersetzung in
+    #     die Geraetestruktur - und genau dort standen die Behauptungen
+    #     "Kerb schnell, Kies grob" (`dwPeriod`) und "Wheel Damper"
+    #     (`lPositiveCoefficient`). `_MagnitudeProbe` ersetzt diese Setter,
+    #     deshalb sah sie es nicht.
+    dev = _DeviceProbe()
+    dev.wheel.apply(force=0.0, damp=0.5, fric=0.25, rumble=0.70, pulse=0.0,
+                    invert=False, spring=0.0, rumble_hz=30.0, gain=1.0, pulse_dir=0.0)
+    check(abs(dev.hz() - 30.0) < 0.5 and dev.rumbling() == 5600
+          and dev.damper() == 3500 and dev.friction() == 1750,
+          "frequenz_und_daempfung_stehen_im_geraet",
+          f"30 Hz -> dwPeriod {int(dev.wheel._periodic.dwPeriod)} us "
+          f"(= {dev.hz():.2f} Hz), Ruetteln {dev.rumbling()}/8000, "
+          f"Daempfung {dev.damper()}/7000, Reibung {dev.friction()}/7000")
+    # Kies (13 Hz) muss im Geraet groeber sein als ein Kerb (42 Hz) - das ist
+    # die F1-Paritaet, die der Fahrer fuehlt.
+    dev.wheel.apply(force=0.0, damp=0.0, fric=0.0, rumble=0.45, pulse=0.0,
+                    invert=False, spring=0.0, rumble_hz=13.0, gain=1.0, pulse_dir=0.0)
+    gravel_period = int(dev.wheel._periodic.dwPeriod)
+    dev.wheel.apply(force=0.0, damp=0.0, fric=0.0, rumble=0.85, pulse=0.0,
+                    invert=False, spring=0.0, rumble_hz=42.0, gain=1.0, pulse_dir=0.0)
+    kerb_period = int(dev.wheel._periodic.dwPeriod)
+    check(gravel_period > kerb_period * 2 and abs(1_000_000.0 / kerb_period - 42.0) < 0.5,
+          "kies_ist_im_geraet_groeber_als_der_kerb",
+          f"Kies 13 Hz -> {gravel_period} us, Kerb 42 Hz -> {kerb_period} us "
+          f"(= {1_000_000.0 / kerb_period:.1f} Hz)")
+    # Die Kraftrichtung: `invert` muss im Geraet das Vorzeichen umdrehen.
+    dev.wheel.apply(force=0.5, damp=0.0, fric=0.0, rumble=0.0, pulse=0.0,
+                    invert=False, spring=0.0, rumble_hz=24.0, gain=1.0, pulse_dir=0.0)
+    plain = dev.constant()
+    dev.wheel._constant_sent = False
+    dev.wheel.apply(force=0.5, damp=0.0, fric=0.0, rumble=0.0, pulse=0.0,
+                    invert=True, spring=0.0, rumble_hz=24.0, gain=1.0, pulse_dir=0.0)
+    flipped = dev.constant()
+    check(plain == 5000 and flipped == -5000,
+          "invert_dreht_die_kraft_im_geraet",
+          f"force 0.5 -> {plain}, mit invert -> {flipped}")
+    # Und der vorzeichenlose Stoss muss auch **im Geraet** schwingen, nicht nur
+    # im Loop: mehrere Aufrufe in kurzer Folge muessen das Vorzeichen wechseln.
+    knocks: list = []
+    for _ in range(12):
+        dev.wheel._constant_sent = False
+        dev.wheel.apply(force=0.0, damp=0.0, fric=0.0, rumble=0.0, pulse=0.45,
+                        invert=False, spring=0.0, rumble_hz=24.0, gain=1.0,
+                        pulse_dir=0.0)
+        knocks.append(dev.constant())
+        time.sleep(0.005)
+    knock_flips = _count_sign_flips(knocks)
+    check(knock_flips >= 2 and max(abs(k) for k in knocks) == 3150,
+          "der_vorzeichenlose_stoss_klopft_auch_im_geraet",
+          f"12 Aufrufe in 60 ms -> {knock_flips} Vorzeichenwechsel, "
+          f"Amplitude {max(abs(k) for k in knocks)}/10000")
 
     # 5) Gegenprobe zur Trennung der Kanaele: `torque` ist laut Protokoll die
     #    GRUNDKRAFT und enthaelt den Stoss NICHT. Ein Paket mit 0.4 Kraft plus
