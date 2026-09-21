@@ -83,9 +83,20 @@ const IMPACT_RUMBLE_DECAY := 3.0
 ## eine Unwucht zu spueren, die mit dem Tempo schneller wird. Genau das macht
 ## das offizielle Spiel nach einem Platten oder einem harten Einschlag - die
 ## Kraft ist weg, das Ruetteln bleibt.
-const FLAT_FROM := 0.05
+##
+## Die Werte sind nach einer Dauerprobe nachgezogen (tests/probe_wave6_feel.gd):
+## vorher gab ein einzelner Streifer (Schaden 0,22, das ist `DAMAGE_PER_CRASH`)
+## **dauerhaft** 0,38 Ruetteln - dreimal so laut wie die Asphalt-Textur, und
+## ohne Werkstatt im Spiel blieb das die ganze Sitzung. Ausserdem sättigte die
+## Kurve: 0,44 und 1,0 ergaben beide 0,62, schwerer Schaden war also nicht
+## schlimmer als mittlerer.
+const FLAT_FROM := 0.15
 ## Schaden, ab dem die Unwucht voll anliegt.
-const FLAT_FULL := 0.45
+const FLAT_FULL := 0.75
+## Kruemmung: leicht geschaedigt = leises Mahlen, schwer geschaedigt = deutliches
+## Wuchteln. Ohne den Exponenten waere der Sprung nach dem ersten Kontakt zu
+## gross (gemessen).
+const FLAT_CURVE := 1.3
 
 var settings
 ## Letzte Rechnung - alles, was HUD, Kamera und Tests lesen.
@@ -465,7 +476,11 @@ func _rumble_for(speed: float, v_ratio: float, surface: Dictionary,
 	# Unwucht (Platter nach dem Blockieren, verbogenes Rad nach dem Einschlag):
 	# dumpf im Stand, mit dem Tempo schneller und staerker.
 	if effects_on and flat > 0.01:
-		var wobble: float = (0.20 + 0.42 * flat) * clampf(speed / 25.0, 0.0, 1.0)
+		# Leichter Schaden bleibt leise (0,19 nach einem Streifer), schwerer
+		# Schaden wird deutlich staerker (0,75) - und der Kerb (0,85) bleibt
+		# immer noch das lauteste Geraeusch am Lenkrad.
+		var wobble: float = (0.15 + 0.60 * pow(flat, FLAT_CURVE)) \
+			* clampf(speed / 25.0, 0.0, 1.0)
 		if wobble > level:
 			level = wobble
 			hz = 11.0 + 16.0 * clampf(speed / 60.0, 0.0, 1.2)

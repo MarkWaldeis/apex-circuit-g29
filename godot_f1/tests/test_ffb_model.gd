@@ -298,12 +298,25 @@ func _run() -> void:
 	var clean: Dictionary = _steady(_corner({"damage": 0.0}))
 	var damaged: Dictionary = _steady(_corner({"damage": 0.30, "speed": 20.0}))
 	var damaged_fast: Dictionary = _steady(_corner({"damage": 0.30, "speed": 62.0}))
-	_check(float(damaged["rumble"]) > float(clean["rumble"]) + 0.15
+	# Dauerprobe (probe_wave6_feel.gd): ein einzelner Streifer darf das Lenkrad
+	# nicht fuer den Rest der Sitzung laut machen. Gemessen gilt jetzt:
+	# Schaden 0,22 -> 0,19 | 0,44 -> 0,38 | 0,66 -> 0,64 | 1,0 -> 0,75, und
+	# der Kerb (0,85) bleibt immer lauter.
+	var mild: float = float(_steady(_corner({"damage": 0.22}))["rumble"])
+	var medium: float = float(_steady(_corner({"damage": 0.44}))["rumble"])
+	var badly: float = float(_steady(_corner({"damage": 0.66}))["rumble"])
+	var wrecked: float = float(_steady(_corner({"damage": 1.0}))["rumble"])
+	_check(float(damaged["rumble"]) > float(clean["rumble"]) + 0.05
 		and String(damaged["source"]) == "Unwucht",
 		"schaden_ruettelt_am_lenkrad",
 		"ohne %.2f (%s) -> mit Schaden %.2f @ %.0f Hz (%s)" % [
 			float(clean["rumble"]), str(clean["source"]),
 			float(damaged["rumble"]), float(damaged["rumble_hz"]), str(damaged["source"])])
+	_check(mild < 0.25 and medium > mild + 0.10 and badly > medium + 0.10
+		and wrecked > badly + 0.05 and wrecked < 0.85,
+		"unwucht_waechst_mit_dem_schaden_ohne_zu_saettigen",
+		"Streifer %.2f < mittel %.2f < schwer %.2f < Wrack %.2f (Kerb 0.85)" % [
+			mild, medium, badly, wrecked])
 	_check(float(damaged_fast["rumble_hz"]) > float(damaged["rumble_hz"]) + 3.0,
 		"unwucht_wird_mit_dem_tempo_schneller",
 		"%.0f Hz -> %.0f Hz" % [float(damaged["rumble_hz"]), float(damaged_fast["rumble_hz"])])
