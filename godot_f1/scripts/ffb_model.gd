@@ -334,7 +334,13 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	var commanded: float = clampf(_smooth_torque, -1.0, 1.0)
 	torque = commanded * gain
 	if settings != null and bool(settings.invert):
+		# Nicht nur die Grundkraft: ein Stoss (Einschlag, Schalten, Bodenwelle)
+		# faehrt denselben Weg zum Lenkrad und muss mitgedreht werden. Sonst
+		# haette das Rad in der Kurve in die richtige Richtung gedrueckt, der
+		# Einschlag aber in die falsche - gemessen und behoben nach der
+		# Hardwaremessung (tools/ffb_hw_probe.py).
 		torque = -torque
+		pulse_dir = -pulse_dir
 	if not on:
 		torque = 0.0
 		damper = 0.0

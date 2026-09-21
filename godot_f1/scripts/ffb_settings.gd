@@ -12,7 +12,10 @@ extends RefCounted
 ## OWNER: ROOT (workstream "Lenkrad-Gefuehl").
 
 const PATH := "user://ffb_settings.json"
-const VERSION := 1
+## Version 2: `invert` hat jetzt einen gemessenen Standardwert. Dateien der
+## Version 1 kannten die Messung noch nicht und werden beim Laden migriert
+## (siehe `load_profile`).
+const VERSION := 2
 ## Ein Testlauf kann seine eigene Einstellungsdatei mitgeben. Ohne das haengt
 ## jede Messung an dem, was der Fahrer im Menue zuletzt eingestellt hat - ein
 ## Prueflauf mit "FFB AUS" hat dann keine Kraft gemessen und die Kette fuer
@@ -48,12 +51,20 @@ var ontrack_effects: float = 1.0
 var kerb_effects: float = 1.0
 var offtrack_effects: float = 1.0
 var rotation_deg: float = 400.0
-## Kraftrichtung umdrehen. Standard "normal": eine positive Kraft dreht das
-## Lenkrad nach rechts - so ist die ganze Kette definiert. Ob die Hardware das
-## wirklich tut, misst `tools/ffb_direction_check.ps1`; wenn es sich verkehrt
-## anfuehlt, dreht dieser Schalter es um (das ist die ehrliche Variante von
-## "--invert", ohne Kommandozeile).
-var invert: bool = false
+## Kraftrichtung umdrehen.
+##
+## Die ganze Kette ist so definiert: `torque > 0` heisst "drueckt das Lenkrad
+## nach rechts". Ob eine positive DirectInput-Kraft das auf **dieser** Hardware
+## wirklich tut, ist gemessen worden (`tools/ffb_hw_probe.py`, 21.09.2026):
+## eine positive Kraft faehrt die G29-Achse zum **Minimum**, und laut
+## Kalibrierung des Fahrers ist "rechts" das **Maximum** (`steer_invert: false`
+## im Profil). Auf diesem Lenkrad muss das Vorzeichen also umgedreht werden -
+## sonst zieht das Rad im Bogen nach links statt nach rechts.
+##
+## Der Schalter im Menue bleibt: andere Firmware, ein anderes Rad oder ein
+## Treiberwechsel kann das umdrehen. `tools/ffb_direction_check.ps1` misst es
+## in ein paar Sekunden nach.
+var invert: bool = true
 ## Diagnostics for the tests: True once a profile was written or read.
 var loaded: bool = false
 var saved: int = 0
@@ -86,7 +97,13 @@ func load_profile() -> bool:
 	ontrack_effects = clampf(float(d.get("ontrack_effects", ontrack_effects)), 0.0, 1.0)
 	kerb_effects = clampf(float(d.get("kerb_effects", kerb_effects)), 0.0, 1.0)
 	offtrack_effects = clampf(float(d.get("offtrack_effects", offtrack_effects)), 0.0, 1.0)
-	invert = bool(d.get("invert", invert))
+	# Migration: Dateien der Version 1 wurden geschrieben, bevor die
+	# Kraftrichtung am echten Lenkrad gemessen war. Ihr `invert` ist deshalb
+	# nicht die Meinung des Fahrers, sondern nur der alte Standard - er wird
+	# durch den gemessenen ersetzt. Ab Version 2 gilt, was in der Datei steht.
+	var file_version: int = int(d.get("version", 1))
+	if file_version >= 2:
+		invert = bool(d.get("invert", invert))
 	var rot: float = float(d.get("rotation_deg", rotation_deg))
 	rotation_deg = rot if ROTATIONS.has(rot) else 400.0
 	loaded = true

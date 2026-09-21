@@ -39,6 +39,21 @@ const DETECT_MIN := 0.25      ## smallest movement that counts at all
 const DETECT_GOOD := 0.55     ## "pedal fully pressed" movement
 const DETECT_TIMEOUT := 8.0   ## accept a half press after this long
 const DEADZONE_DEFAULT := 0.03
+## Grenze fuer einen Kalibrierpunkt: eine SDL-Achse laeuft von -1.0 bis +1.0,
+## ein Punkt ausserhalb kann also nie gemessen worden sein. Der *Abstand*
+## zwischen Ruhe und Druck darf dagegen bis 2.0 gehen (ein Pedal ueber die
+## ganze Achse: Ruhe +1.0, Druck -1.0), das ist eine gueltige Bauart und wird
+## von `tests/test_input_mapping.gd` (`_pedal_polarities`) geprueft.
+##
+## Gemessen am 21.09.2026 im Fahrer-Profil:
+## `throttle_rest: 0.0, throttle_press: -1.8828`. Der Druckpunkt lag ausserhalb
+## der Achse; `clampf(dev / span, 0, 1)` blieb deshalb bei 1.0 / 1.8828 =
+## 0.531 stehen und der Zweig "laengeren Weg lernen" konnte nie greifen -
+## **Vollgas war unmoeglich** (53 % statt 100 %, halbes Pedal 27 %). Die Werte
+## stammten aus einem verseuchten Profil vom 17.09. (Ruhe 1.0 statt 0.0),
+## dessen unmoeglicher Abstand von der Ruhe-Korrektur in `_anchor_auto_rest()`
+## mitgeschleppt wurde. Geprueft von `tests/test_pedal_span.gd`.
+const PEDAL_AXIS_LIMIT := 1.02
 
 ## ---- device state ---------------------------------------------------------
 var device: int = -1
@@ -128,7 +143,29 @@ var _profile_dirty: bool = false
 var _save_timer: float = 0.0
 
 
+## Ein Diagnose-/Messlauf (z. B. tools/ffb_direction_check.ps1) darf das
+## Lenkrad-Profil des Fahrers nicht ueberschreiben. Solche Laeufe koennen nicht
+## headless laufen (headless zaehlt Godot keine Joysticks auf), also greift der
+## Headless-Schutz in save_profile() dort nicht. Sie setzen stattdessen
+## APEX_G29_PROFILE - derselbe Weg, den die Tests mit `profile_path` schon
+## nutzen, nur von aussen. Gemessen am 21.09.2026: ohne diesen Schutz schrieb
+## der Richtungstest das echte Profil neu.
+func _apply_profile_override() -> void:
+	if OS.has_environment("APEX_G29_PROFILE"):
+		var override_path: String = OS.get_environment("APEX_G29_PROFILE").strip_edges()
+		if override_path != "" and override_path != PROFILE_PATH:
+			profile_path = override_path
+
+
+func _init() -> void:
+	# Schon beim Erzeugen, nicht erst in `_ready`: ein Pruefskript, das die
+	# Klasse nur instanziiert (ohne sie in den Baum zu haengen), muss denselben
+	# Pfad sehen.
+	_apply_profile_override()
+
+
 func _ready() -> void:
+	_apply_profile_override()
 	_raw.resize(AXES)
 	_prev_raw.resize(AXES)
 	_rest.resize(AXES)
@@ -252,10 +289,22 @@ func _anchor_auto_rest() -> void:
 			var stored_press: float = float(_pedal_press[name])
 			var now: float = _raw[_axis_of(name)]
 			if absf(now - stored_rest) > 0.5:
-				_pedal_rest[name] = now
-				_pedal_press[name] = now + (stored_press - stored_rest)
+				if not _pedal_points_on_axis(now, now + (stored_press - stored_rest)):
+					# Ein verseuchtes Profil (Ruhe 1.0 statt 0.0) wuerde hier
+					# sonst seinen unmoeglichen Abstand mitschleppen:
+					# `now + (press - rest)` ergab -1.88 fuer ein Pedal, das
+					# nur bis -1.0 kommt (Vollgas blieb bei 53 %). Statt zu
+					# verschieben wird die unbrauchbare Kalibrierung verworfen.
+					print("G29 Kalibrierung fuer ", name, " verworfen: aus Ruhe ",
+						stored_rest, " / Druck ", stored_press,
+						" wird ein Punkt neben der Achse")
+					_pedal_rest.erase(name)
+					_pedal_press.erase(name)
+				else:
+					_pedal_rest[name] = now
+					_pedal_press[name] = now + (stored_press - stored_rest)
+					print("G29 profile rest for %s corrected: %.2f -> %.2f" % [name, stored_rest, now])
 				_profile_dirty = true
-				print("G29 profile rest for %s corrected: %.2f -> %.2f" % [name, stored_rest, now])
 	print("G29 data arrived: rest gas=%.2f brake=%.2f clutch=%.2f steer=%.2f" % [
 		_auto_rest.get("throttle", 0.0), _auto_rest.get("brake", 0.0),
 		_auto_rest.get("clutch", 0.0), _steer_rest])
@@ -328,10 +377,17 @@ func _pedal_value(name: String, axis: int) -> float:
 		var c_rest: float = float(_pedal_rest[name])
 		var c_press: float = float(_pedal_press[name])
 		var c_span: float = c_press - c_rest
-		if absf(c_span) < 0.15:
-			# Implausible calibration (a pedal travels much further than that):
-			# fall through to the automatic mapping instead of believing it.
+		if absf(c_span) < 0.15 or not _pedal_points_on_axis(c_rest, c_press):
+			# Unbrauchbare Kalibrierung: zu kurz fuer ein Pedal, oder ein
+			# Punkt liegt neben der Achse. Beides wird verworfen und die
+			# automatische Zuordnung uebernimmt - ein Druckpunkt, den die
+			# Achse nie erreicht, deckelt das Pedal dauerhaft (Vollgas war
+			# so unmoeglich).
+			print("G29 Kalibrierung fuer ", name, " verworfen: Ruhe ", c_rest,
+				" / Druck ", c_press, " liegt neben der Achse - wird neu gelernt")
 			_pedal_press.erase(name)
+			_pedal_rest.erase(name)
+			_profile_dirty = true
 		else:
 			# Learn a longer travel: the driver often presses harder during the
 			# race than during calibration, and a mapped range that is too short
@@ -362,6 +418,13 @@ func _pedal_value(name: String, axis: int) -> float:
 		return 0.0
 	var value: float = dev / span
 	return clampf(value, 0.0, 1.0)
+
+
+## Liegen Ruhe- und Druckpunkt auf der Achse? Eine SDL-Achse laeuft von -1.0
+## bis +1.0; ein Punkt daneben ist nie gemessen worden. Ein Abstand bis 2.0
+## (Pedal ueber die ganze Achse) ist dagegen in Ordnung.
+func _pedal_points_on_axis(rest: float, press: float) -> bool:
+	return absf(rest) <= PEDAL_AXIS_LIMIT and absf(press) <= PEDAL_AXIS_LIMIT
 
 
 func _apply_steer() -> void:
@@ -702,7 +765,11 @@ func load_profile() -> bool:
 		if d.has(rest_key) and d.has(press_key):
 			var r: float = float(d[rest_key])
 			var p: float = float(d[press_key])
-			if absf(p - r) >= 0.15:
+			# Zu kurz ist kein Pedal, und ein Punkt neben der Achse kann nie
+			# gemessen worden sein (siehe PEDAL_AXIS_LIMIT). Beides wird nicht
+			# geglaubt, damit ein Profil aus einem kaputten Stand das Pedal
+			# nicht dauerhaft deckeln kann.
+			if absf(p - r) >= 0.15 and _pedal_points_on_axis(r, p):
 				_pedal_rest[name] = r
 				_pedal_press[name] = p
 	for name in ["throttle", "brake", "clutch"]:

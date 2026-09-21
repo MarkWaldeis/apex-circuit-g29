@@ -346,8 +346,8 @@ der Root nach und startet die nächste Welle — so lange, bis eine Welle
 | 2 | Kette | `docs/reviews/ffb_wave2_chain.md` | 7 Mängel gefunden: **der Kettentest konnte die Kraft nicht verlieren** (Schwelle 0,02 gegen 0,163, Wagen fuhr geradeaus), zwei weitere Prüfungen konnten nie fehlschlagen, `event`/`speed` im Helfer ungelesen, Doku wich vom Code ab — alle behoben |
 | 3 | Integration/Auslieferung (Root-Audit) | `docs/reviews/ffb_wave3_integration.md` | 3 Mängel gefunden: **G920/G923 wurden abgewiesen** (Filter fest auf „G29“), **ein Prüflauf hatte die echten Einstellungen des Fahrers auf „FFB AUS“ gestellt** (die nächste Messung fand keine Kraft und meldete die Kette als kaputt), und **die Auslieferung war nicht belegt**. Alle drei behoben — siehe §7 „Welle 3“ |
 | 3 | Modell/Realismus, Kette/Hardware | — (kein Bericht) | Die beiden Welle-3-Agenten liefen bis zum Abbruch, ohne einen Bericht zu schreiben. Was sie an Zwischenständen hinterlassen haben (Headless-Schutz, zwei zusätzliche Ende-zu-Ende-Prüfungen), ist in den Dateien und in §8 dokumentiert. **Ersetzt durch Welle 4** — die Prüfung ist damit nicht „bestanden“, sondern wiederholt |
-| 4 | Modell/Realismus + Kette/Hardware (fremder Agent `wave4_chain_model`) | `docs/reviews/ffb_wave4_chain_model.md` | läuft |
-| 4 | Integration/Auslieferung (fremder Agent `wave4_integration_delivery`) | `docs/reviews/ffb_wave4_integration.md` | startet, sobald ein Agentenplatz frei ist (4 Plätze, davon einer von dieser Kette belegt) |
+| 4 | Modell/Realismus (Agent `wave4_realism`) | — (kein eigener Bericht) | Der Agent brach ab; sein erhaltener Beitrag ist die **NAN-/INF-Härtung** in `ffb_model.gd` samt Randfall-Test `tests/test_ffb_edge.gd` (6 Prüfungen) — vom Root übernommen und nachgemessen |
+| 4 | Kette/Hardware **am echten G29** (Root-Audit) | `docs/reviews/ffb_wave4_hardware.md` | Erstmals lag echte Hardware vor: **Motor dreht das Rad** (dreimal gemessen: +0,5 Kraft → Achse 32767→26), aber **nur zeitweise** (später dieselbe Messung ohne Bewegung). Zwei Mängel in den Diagnosewerkzeugen gefunden und behoben: der Richtungstest **startete den Helfer nie** (Pfad mit Leerzeichen) und **schrieb das Lenkrad-Profil des Fahrers neu**. Dazu drei neue Werkzeuge (`tools/ffb_hw_probe.py`, `tests/probe_axis_read.gd`, `tests/test_g29_profile_path.gd`) |
 
 ## 6. Risiken
 
@@ -429,19 +429,112 @@ und `tools/g29_ffb.py --check`, 12 Prüfungen, Kette ohne Godot):
 | Radfamilie | `--check`: `die_ganze_lenkradfamilie_wird_gefunden` — „Logitech G29/G920/G923“ treffen, ein Gamepad nicht; `--name G923` grenzt auf ein Rad ein (12 Prüfungen, 0 Mängel) |
 | Ausgelieferter Build | `tools/ship_check.ps1` gegen `Apex Circuit.exe` (Desktop-Start): ~428 Pakete, im Stand Reibung 0,12–0,13 / Dämpfung 0,31, Quelle `Asphalt`; mit `APEX_FFB_SETTINGS` = FFB AUS: Reibung 0,000, Dämpfung 0,000, Quelle `aus` → **der Build enthält den neuen Stand** (3 Prüfungen, 0 Mängel). Ein Textvergleich im `.pck` beweist das **nicht**: dort sind nur die Dateipfade lesbar (`rg -a -c "scripts/ffb_model.gd"` findet 3 Treffer, `"AM ANSCHLAG"` oder `"LENKRADKRAFT AUS"` dagegen 0) — die GDScript-Literale liegen kompiliert und unlesbar im Pack. Der Beweis ist die Messung, nicht die Suche |
 
-**Offen — Hardware.** Das G29 meldet sich am PC, sendet aber **keine
-HID-Reports** (`python tools/hid_probe.py 046d:c24f`: auf allen drei
-Schnittstellen `report timeout ... (no data)`). Genau der Fall, den die
-README seit dem Pedal-Paket beschreibt: **ohne Netzteil** gibt es weder
-Achsendaten noch Kraft. Damit ist alles bis zum DirectInput-Aufruf belegt,
-die Kraft am eigenen Lenkrad aber noch nicht gefühlt. Sobald das Netzteil
-steckt:
+**Hardware, Stand Welle 4.** Am 21.09.2026 lag das G29 **zeitweise mit
+Kraft** vor: `python tools/ffb_hw_probe.py --seconds 2.0 --force 0.5` fuhr die
+Achse dreimal reproduzierbar `32767 → 26` (positive Kraft) und `→ 59525`
+(negative Kraft) — der Motor arbeitet. Sechs Minuten später dieselbe Messung:
+keine Bewegung (`delta=+0`, `+168`) und Godot bekam kaum Achsdaten
+(`rest gas=1.00 brake=0.00 clutch=0.00` — eine Woche vorher genau andersherum).
+Das Rad ist in diesem Zustand **unzuverlässig** (Netzteil? Kabel? Port?),
+und genau deshalb ist der Fühltest weiterhin offen — plus die Kraftrichtung,
+die nur mit zuverlässig meldendem Rad messbar ist. Alles dazu, mit Messwerten
+und den zwei behobenen Werkzeug-Mängeln, steht in
+`docs/reviews/ffb_wave4_hardware.md`. Sobald das Rad laufend Reports liefert
+(`python tools/hid_probe.py 046d:c24f`):
 
 ```
-"Apex Circuit FFB starten.cmd" --demo     # Fühltest am Lenkrad
-"Apex Circuit FFB starten.cmd"            # Helfer für das Spiel
-tools/ffb_direction_check.ps1             # Kraftrichtung nachmessen
+python tools/hid_probe.py 046d:c24f        # laufende Reports = Rad ist bereit
+tools\ffb_direction_check.ps1              # Kraftrichtung messen (5 s)
+"Apex Circuit FFB starten.cmd" --demo      # Fühltest am Lenkrad
+"Apex Circuit FFB starten.cmd"             # Helfer für das Spiel
 ```
+
+### Die Kraftrichtung ist jetzt entschieden (Nachtrag zum Stand oben)
+
+Die Messung oben liefert nicht nur „der Motor arbeitet“, sondern auch die
+Richtung — und die war bis hierher offen:
+
+* Positive DirectInput-Kraft fährt die G29-Achse zum **Minimum**
+  (`33117 → 14`, dreimal reproduziert).
+* Die Kalibrierung des Fahrers sagt: „rechts“ ist das **Maximum**
+  (`steer_invert: false`, `steer_span: +0.5547` — beim Drehen nach rechts
+  stieg die Achse).
+* Also dreht eine positive Kraft dieses Rad **nach links**, während das Modell
+  mit positivem `torque` „nach rechts drücken“ meint. Die Kraft wäre
+  spiegelverkehrt angekommen: in der Kurve gegen den Fahrer statt mit ihm.
+
+Folge, umgesetzt und geprüft:
+
+* `ffb_settings.invert` steht auf **true** (gemessener Wert dieser Hardware).
+* `invert` dreht **auch `pulse_dir`** mit — vorher hätte die Grundkraft in der
+  Kurve gestimmt und der Einschlag in die falsche Richtung gedrückt
+  (`test_ffb_settings.gd`: `kraftrichtung_dreht_auch_den_stoss`).
+* Einstellungsdateien der **Version 1** werden beim Laden migriert: ihr
+  `invert` war nur der alte Standard, nicht die Wahl des Fahrers
+  (`alte_datei_bekommt_die_gemessene_kraftrichtung`). Ab Version 2 gilt die
+  Datei (`neue_datei_darf_das_vorzeichen_selbst_bestimmen`).
+* `tests/probe_ffb_steer.gd` meldet ohne Achsendaten jetzt **„UNBEKANNT“**
+  statt „dreht nach links“ — ein Fehlalarm, der wie eine Messung aussah.
+
+Der Menüschalter und `tools/ffb_direction_check.ps1` bleiben: nach einem
+Treiberwechsel oder an einem anderen Rad kann die Richtung anders sein.
+
+**Nachgemessen an der ganzen Kette** (echtes Spiel, echter Helfer, zwei
+Einstellungsdateien, je 36 s; Port privat, damit nichts dazwischenfunkt):
+
+```text
+invert = true  (neuer Standard): torque  -0.233 .. +0.584
+invert = false (alter Stand)  : torque  -0.584 .. +0.233
+```
+
+Spiegelbildlich bis auf die Stelle — die Umdrehung wirkt also wirklich vom
+Modell über das Paket bis zum Helfer, und die Spitze im Bogen (0,584) bleibt
+in der Größe erhalten.
+
+---
+
+## 9. Welle 4: was der Root am echten Lenkrad gefunden und geändert hat
+
+Vollständiger Bericht: `docs/reviews/ffb_wave4_hardware.md`.
+
+### 9.1 Mangel: Der Richtungstest startete den Helfer nie (behoben)
+
+`tools/ffb_direction_check.ps1` übergab die Helfer-Argumente als **Array** an
+`Start-Process`; der Projektpfad enthält ein Leerzeichen, also startete Python
+mit `C:\Users\Mark` als Skript (`ffb_bridge.err`: `File "C:\Users\Mark", line
+8 … SyntaxError`). Es wurde **nie eine Kraft gesendet**, und der Test meldete
+„das Lenkrad bewegt sich nicht“ — ein Fehlalarm, der wie ein Hardware-Fehler
+aussieht. Behoben mit einem selbst gequoteten Argument-String (dieselbe
+Falle war in `tools/ffb_live_check.ps1` schon einmal behoben worden).
+
+### 9.2 Mangel: Ein Prüflauf schrieb das Lenkrad-Profil des Fahrers neu (behoben)
+
+`tests/probe_ffb_steer.gd` kann nicht headless laufen (headless zählt Godot
+keine Joysticks auf), also griff der Headless-Schutz in `save_profile()` dort
+nicht. Beleg aus `logs/godot2026-09-21T18.12.20.log` mitten im Richtungstest:
+`G29 profile saved: { … "throttle_rest": 0.0, "throttle_press": -1.88 … }`
+— das von Hand kalibrierte Pedalprofil des Fahrers wurde überschrieben.
+Behoben in vier Schichten: `APEX_G29_PROFILE` verlegt den Profilpfad
+(`g29_input.gd`, in `_init()` **und** `_ready()`), die beiden Fenster-Probes
+setzen die Variable selbst, das Richtungstest-Skript zusätzlich von außen,
+und `tests/test_g29_profile_path.gd` (6 Prüfungen) hält fest, dass das echte
+Profil inhaltlich und im Zeitstempel unberührt bleibt.
+
+### 9.3 Mangel: Ein abgebrochener Prüflauf ließ den Helfer stehen (behoben)
+
+`$ErrorActionPreference = 'Stop'` brach das Skript vor dem Aufräumen ab, das
+Lenkrad blieb exklusiv belegt. Behoben: Aufräumen in `finally`, Zeitlimit für
+den Prüflauf, eigenes Protokoll `tools/ffb_direction_probe.log`.
+
+### 9.4 Mangel: Ein NAN-Tick vergiftete die Kraft dauerhaft (behoben, vom Agenten)
+
+Der Welle-4-Agent `wave4_realism` hat gemessen, dass ein einziger
+NAN-/INF-Wert aus der Physik in der Glättung hängen bleibt und jeden weiteren
+Tick vergiftet (HUD „nan“, Paket für den Helfer undeutbar). `ffb_model.gd`
+ersetzt seitdem jede nicht endliche Zahl über `_num()`/`_safe()` durch einen
+Ersatzwert, plus Selbstheilung der Glättung. Der Test dazu ist jetzt
+`tests/test_ffb_edge.gd` (600 Ticks NAN/INF/widersprüchliche Eingaben,
+6 Prüfungen).
 
 ---
 

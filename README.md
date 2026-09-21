@@ -48,6 +48,15 @@ Die Rüttel-Regler heißen wie im offiziellen Spiel (**On Track Effects**,
 **Rumble Strip Effects**, **Off Track Effects** — je 0–100 %) und wirken
 getrennt: den Kerb leiser stellen lässt das grobe Kies-Mahlen stehen.
 
+Die **Kraftrichtung** ist auf diesem Lenkrad nachgemessen
+(`python tools/ffb_hw_probe.py --seconds 1.5 --force 0.5`: eine positive
+DirectInput-Kraft fährt die G29-Achse zum Minimum, „rechts“ ist laut
+Kalibrierung das Maximum) und steht deshalb im Menü auf **umgekehrt**. Zieht
+das Lenkrad trotzdem in die falsche Richtung — etwa nach einem Treiberwechsel
+oder an einem anderen Rad —, dann unter `Esc` → *Einstellungen* → *Force
+Feedback* auf **Kraftrichtung: normal** stellen oder
+`tools\ffb_direction_check.ps1` laufen lassen.
+
 **Wichtig für Änderungen am Spiel:** der Doppelklick-Start läuft auf dem
 **Export**, nicht auf den Godot-Quellen. Nach Änderungen also
 `export_windows.cmd` ausführen (schreibt `ApexCircuit\ApexCircuit.exe` und

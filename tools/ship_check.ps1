@@ -134,10 +134,32 @@ Check ($off.fric -le 0.001 -and $off.peak -le 0.001 -and $off.damp -le 0.001) `
     (("FFB AUS -> Reibung {0:N3}, Kraft {1:N3}, Daempfung {2:N3} " +
       "(ein alter Build haette hier die Werte des AN-Laufs)") -f $off.fric, $off.peak, $off.damp)
 
+# Der zweite, unabhaengige Beweis, dass im Pack wirklich der neue Stand liegt:
+# ein Testfall, den es vorher nicht gab, laeuft **im ausgelieferten Build**.
+# `tests/test_pedal_span.gd` haelt den Fund vom 21.09.2026 fest - eine
+# Pedal-Kalibrierung mit einem Punkt neben der Achse
+# (`throttle_press: -1.8828`) deckelte Vollgas auf 53 %. Ein alter Build
+# liefert dort 0.53 und damit rot, der neue 1.00 und gruen. Der Test schreibt
+# nur in seine eigenen `user://g29_pedal_span_*.json`, nie in das Fahrer-Profil.
+$pedalLog = Join-Path $env:TEMP "apex_ship_pedal.log"
+$pedalErr = Join-Path $env:TEMP "apex_ship_pedal.err"
+foreach ($p in @($pedalLog, $pedalErr)) {
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }
+}
+$pedal = Start-Process -FilePath $Exe `
+    -ArgumentList "--headless --script res://tests/test_pedal_span.gd" `
+    -WindowStyle Hidden -PassThru -Wait `
+    -RedirectStandardOutput $pedalLog -RedirectStandardError $pedalErr
+$pedalOut = @(Get-Content -LiteralPath $pedalLog -ErrorAction SilentlyContinue)
+$pedalPush = @($pedalOut | Where-Object { $_ -match "Vollgas" } | Select-Object -First 1)
+Check ($pedalOut -match "PEDAL_SPAN PASS") `
+    "der Build enthaelt die Pedal-Haertung (neuer Stand)" `
+    ($(if ($pedalPush.Count -gt 0) { $pedalPush[0] } else { "kein Ergebnis (Log: $pedalLog)" }))
+
 if ($failed -gt 0) {
     Write-Host "[ship] Log: $($on.log)"
     Write-Host "SHIP_RESULT FAIL $failed Mangel"
     exit 1
 }
-Write-Host "SHIP_RESULT PASS 3 Pruefungen, 0 Mangel"
+Write-Host "SHIP_RESULT PASS 4 Pruefungen, 0 Mangel"
 exit 0

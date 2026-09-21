@@ -49,6 +49,8 @@ Das Ergebnis landet in `user://g29_profile.json` (`%APPDATA%\Godot\app_userdata\
 
 In dieses Profil schreibt nur das echte Spiel mit echtem Lenkrad: Testläufe, Diagnose-Skripte und alles, was mit simulierten Achswerten arbeitet, werden am Speichern gehindert (`save_profile()` weigert sich im Simulationsmodus), damit erfundene Werte die von Hand kalibrierte Zuordnung nicht kaputtmachen können.
 
+Das gilt auch für die Messläufe, die **nicht headless** sein können (headless zählt Godot keine Joysticks auf): `tests/probe_ffb_steer.gd`, `tests/probe_axis_read.gd` und `tools/ffb_direction_check.ps1` setzen `APEX_G29_PROFILE` und schreiben damit in eine Diagnosedatei statt in `user://g29_profile.json`. Gemessen am 21.09.2026 schrieb der Richtungstest sonst das echte Profil neu (im Godot-Log: `G29 profile saved: … "throttle_press": -1.88 …`), samt neu gelernter Pedal-Ruheposition. `tests/test_g29_profile_path.gd` (6 Prüfungen) hält fest, dass das echte Profil dabei inhaltlich **und im Zeitstempel** unberührt bleibt.
+
 Wichtig: Das G29 braucht sein **Netzteil**. Hängt nur USB dran, meldet sich das Lenkrad zwar am PC an, sendet aber **keinen einzigen Eingabe-Report** — es kommen also keine Achsendaten an. Das Spiel zeigt das ehrlich an: In den Einstellungen steht dann „G29 verbunden (…), aber noch keine Achsendaten — Lenkrad oder Pedal einmal bewegen; sonst Netzteil und Pedalkabel prüfen“, die Achsenbalken und Pedal-Zeilen zeigen `—` statt erfundener Nullwerte, und das HUD meldet „G29 ohne Achsendaten“.
 
 Das lässt sich unabhängig nachmessen, ohne Godot zu starten:
@@ -178,6 +180,28 @@ Stoß, Wertebereiche, Lebenszeichen des Helfers), `python tools/g29_ffb.py --che
 (12 Prüfungen ohne Lenkrad: Stärke genau einmal, Rampe, Stoß, Loslassen,
 Ereignis/Tempo, Antwort an das Spiel) und
 `python tools/g29_ffb.py --dry-run` (Rampe, Wertebereiche am Rad).
+
+Am **echten** Rad ist die Kraft inzwischen ebenfalls gemessen — nur nicht
+immer: `python tools/ffb_hw_probe.py --seconds 2.0 --force 0.5` fuhr die Achse
+dreimal reproduzierbar von `32767` (Mitte) auf `26` (positive Kraft) und auf
+`59525` (negative Kraft), sechs Minuten später dieselbe Messung: keine
+Bewegung (`delta=+0`). Das G29 lieferte in diesem Zustand also **zeitweise**
+Motor und Achsdaten, zeitweise nicht — dasselbe Bild in Godot
+(`tests/probe_axis_read.gd`: `data=false`, später `a1=+1.000 data=true`, und
+die gelernten Ruhepositionen der Pedale wechselten zwischen Läufen). Solange
+das Rad so unzuverlässig meldet, ist jede „fühlt sich echt an?“-Aussage
+wertlos; erst `python tools/hid_probe.py 046d:c24f` mit **laufenden** Reports
+schafft eine belastbare Grundlage. Danach:
+
+```
+python tools/hid_probe.py 046d:c24f     # laufende Reports = Rad ist bereit
+tools\ffb_direction_check.ps1           # dreht das Rad 2x3 s, misst die Richtung
+"Apex Circuit FFB starten.cmd" --demo   # Fühltest: Gerade, Bogen, Kerb, Blockieren
+```
+
+Beide Mängel, die dieser Test hatte — er startete den Helfer wegen eines
+Leerzeichens im Pfad nie und ließ ihn bei einem Fehler belegt zurück —, sind
+behoben; er schreibt seine Ausgabe nach `tools/ffb_direction_probe.log`.
 `powershell -File tools/ffb_end_to_end.ps1` lässt das **echte Spiel** gegen den
 **echten Helfer** fahren (1829 Pakete, Kraftspitze **0,584** — genau der
 Modellwert, also verlustfrei —, Rütteln 0,700 @ 42 Hz, Quellen und

@@ -27,6 +27,9 @@ func _initialize() -> void:
 	settings.auto_save = false
 	settings.gain = 1.0
 	settings.damper = 1.0
+	# Die Gegenprobe prueft die innere Vorzeichenwelt des Modells; die
+	# gemessene Hardware-Umdrehung (`invert`) wird hier bewusst ausgeschaltet.
+	settings.invert = false
 	model = Model.new()
 	model.setup(settings)
 	_direction_probe()

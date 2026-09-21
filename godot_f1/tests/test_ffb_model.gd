@@ -21,6 +21,10 @@ func _initialize() -> void:
 	settings.auto_save = false
 	settings.gain = 1.0
 	settings.damper = 1.0
+	# Hier wird die INNERE Vorzeichenwelt des Modells geprueft (+ = drueckt nach
+	# rechts). Die Hardware-Umdrehung (`invert`, gemessen am G29) gehoert nicht
+	# dazu und wird in `test_ffb_settings.gd` geprueft.
+	settings.invert = false
 	model = Model.new()
 	model.setup(settings)
 	_run()
@@ -313,6 +317,7 @@ func _run() -> void:
 	band_settings.auto_save = false
 	band_settings.gain = 1.0
 	band_settings.damper = 1.0
+	band_settings.invert = false
 	var band_model := Model.new()
 	band_model.setup(band_settings)
 	var surf_kerb: Dictionary = {"surface": 1, "name": "Kerb", "rumble": 0.75, "rough": 0.55, "grip": 0.94}

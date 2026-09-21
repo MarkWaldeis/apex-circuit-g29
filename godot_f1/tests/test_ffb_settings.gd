@@ -90,6 +90,22 @@ func _run() -> void:
 		and is_equal_approx(legacy.offtrack_effects, 1.0),
 		"alte_einstellungsdatei_laedt_weiter",
 		"ok=%s gain=%.2f kerb=%s" % [str(legacy_ok), legacy.gain, legacy.kerb_label()])
+	# Und ihr `invert` zaehlt nicht: Version 1 wurde geschrieben, bevor die
+	# Kraftrichtung am echten Lenkrad gemessen war (G29: positive Kraft faehrt
+	# die Achse zum Minimum). Der gemessene Standard muss gewinnen, sonst zieht
+	# das Rad auf diesem Lenkrad verkehrt herum.
+	_check(legacy.invert == true, "alte_datei_bekommt_die_gemessene_kraftrichtung",
+		"invert=%s (Datei sagte false, gemessen ist true)" % str(legacy.invert))
+	# Ab Version 2 gilt dagegen, was in der Datei steht - auch ein bewusst
+	# umgestelltes Vorzeichen.
+	var v2_file := FileAccess.open(TMP + ".v2", FileAccess.WRITE)
+	v2_file.store_string('{"version":2,"enabled":true,"gain":0.6,"damper":1.0,"effects":true,"invert":false,"rotation_deg":360.0}')
+	v2_file.close()
+	var v2 := Settings.new()
+	v2.path = TMP + ".v2"
+	v2.load_profile()
+	_check(v2.invert == false, "neue_datei_darf_das_vorzeichen_selbst_bestimmen",
+		"invert=%s" % str(v2.invert))
 
 	# --- Die Knoepfe schalten weiter -------------------------------------
 	var i := Settings.new()
@@ -202,7 +218,18 @@ func _run() -> void:
 		model.update(1.0 / 90.0, ctx)
 	_check(model.torque > 0.0, "kraftrichtung_dreht_das_vorzeichen",
 		"torque=%+.3f" % model.torque)
+	# Auch ein Stoss muss mitgedreht werden: sonst drueckt das Rad in der Kurve
+	# richtig und beim Einschlag verkehrt herum.
+	model.poke("crash", 1.0, 1.0)
+	var flipped_hit: Dictionary = model.update(1.0 / 90.0, ctx)
+	_check(float(flipped_hit["pulse_dir"]) < 0.0,
+		"kraftrichtung_dreht_auch_den_stoss",
+		"pulse_dir=%+.2f bei invert=%s" % [float(flipped_hit["pulse_dir"]), str(ms.invert)])
 	ms.invert = false
+	model.poke("crash", 1.0, 1.0)
+	var normal_hit: Dictionary = model.update(1.0 / 90.0, ctx)
+	_check(float(normal_hit["pulse_dir"]) > 0.0, "ohne_umdrehen_bleibt_der_stoss_geradeaus",
+		"pulse_dir=%+.2f" % float(normal_hit["pulse_dir"]))
 	ms.effects = false
 	for n in 60:
 		model.update(1.0 / 90.0, ctx)

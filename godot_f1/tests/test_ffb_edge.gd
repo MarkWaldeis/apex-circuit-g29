@@ -3,7 +3,13 @@ extends SceneTree
 ## Zappeln ins Lenkrad bringen? Und bleiben sich Anschlag, Einschlag und Kerb
 ## gleichzeitig im Zaum?
 ##
-##   powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_wave4_edge.gd
+## Gefunden in Welle 4: ein einziger NAN-Tick aus der Physik blieb in der
+## Glättung hängen und vergiftete jeden weiteren Tick (HUD "nan", Paket für
+## den Helfer unlesbar). Das Modell ersetzt seitdem jede nicht endliche Zahl
+## durch einen Ersatzwert (ffb_model.gd, `_num`/`_safe`); dieser Test hält das
+## fest.
+##
+##   powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/test_ffb_edge.gd
 
 const Model := preload("res://scripts/ffb_model.gd")
 const Settings := preload("res://scripts/ffb_settings.gd")
@@ -133,8 +139,8 @@ func _run() -> void:
 		"groesster Wert %.3f" % worst_all)
 
 	if failed > 0:
-		print("WAVE4_EDGE FAIL count=%d von %d" % [failed, checks])
+		print("FFB_EDGE FAIL count=%d von %d" % [failed, checks])
 		quit(1)
 	else:
-		print("WAVE4_EDGE PASS %d Pruefungen" % checks)
+		print("FFB_EDGE PASS %d Pruefungen" % checks)
 		quit(0)
