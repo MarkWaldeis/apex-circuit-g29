@@ -130,6 +130,11 @@ statt still zu bleiben:
   jedem Paket zurück (`{"ack":1}`), deshalb kann das Spiel das überhaupt
   erkennen. (Die Warnung erscheint erst nach rund zwei Sekunden Fahrt, damit
   sie beim Laden der Szene nicht fälschlich aufleuchtet.)
+* **„LENKRAD MELDET NICHTS — Netzteil, Pedalkabel, USB-Port prüfen“** — der
+  Helfer läuft und hat das Rad übernommen, aber das G29 sendet **keine
+  Achsdaten**. Genau der Fall, den `Lenkrad pruefen.cmd` prüft: ohne Netzteil
+  gibt es weder Achsen noch Kraft. Erst wenn dieses Band verschwindet, kann
+  das Spiel die Kraftrichtung selbst messen (dafür braucht es Achsdaten).
 
 Prüfen lässt sich die Kette ohne Spiel und ohne Lenkrad:
 

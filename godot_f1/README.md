@@ -165,8 +165,9 @@ Menü wirkt genau einmal (im Modell); der Helfer verstärkt nicht ein zweites Ma
 Der Helfer antwortet außerdem auf jedes Paket mit einem Lebenszeichen
 (`{"ack":1,"mode":"wheel"}`); daran erkennt das Spiel, ob überhaupt jemand
 zuhört. Ein totes Lenkrad bleibt damit nicht stumm: das HUD schreibt
-„LENKRADKRAFT AUS“ (Schalter im Menü), „LENKRADKANAL AUS (APEX_FFB=0)“ oder
-„KEIN HELFER — Apex Circuit FFB starten.cmd“ statt einfach 0 %.
+„LENKRADKRAFT AUS“ (Schalter im Menü), „LENKRADKANAL AUS (APEX_FFB=0)“,
+„KEIN HELFER — Apex Circuit FFB starten.cmd“ oder „LENKRAD MELDET NICHTS —
+Netzteil, Pedalkabel, USB-Port prüfen“ statt einfach 0 %.
 Alles zusammen steht in `../docs/FFB_F1_STYLE_PLAN.md`, die Einzelprüfungen in
 `tests/test_ffb_model.gd` (34 Checks), die Gegenproben in
 `tests/probe_review_root.gd` (18 Checks) und die Messung auf der Strecke in
