@@ -43,6 +43,17 @@ ruckelig, Anschlag zu früh? Die Werte dafür stehen konzentriert in
 `godot_f1/scripts/ffb_model.gd` (Grundkraft, Einbrüche, Rüttelbänder, Unwucht,
 Anschlag) und in `tools/g29_ffb.py` (Rampe, Puls, Freigabe).
 
+`--demo` ist genau diese Tabelle zum Fühlen: 18 Stationen mit den **gemessenen**
+Paketwerten des Spiels (nicht mit Wunschzahlen — die erste Fassung zeigte die
+Gegenrichtung und wurde am 21.09.2026 auf die Messwerte umgestellt): Gerade bei
+Schrittgeschwindigkeit und bei 250 km/h, schneller Bogen (0,636) gegen
+Untersteuern (0,132), Kerb (0,623 @ 30 Hz), Kies (0,318 @ 13 Hz), Gras,
+Vollbremsung mit blockierenden Vorderrädern (0,118 + 0,700 @ 34 Hz), Kuppe,
+Bodenwelle, durchdrehende Räder, Schaltstoß in der Kurve und auf der Geraden
+(dort als Klopfen, weil kein Lenkbefehl anliegt), Einschlag in beiden Lagen,
+Unwucht nach mittlerem Schaden (0,383 @ 28 Hz), Rangieren am Anschlag und
+Loslassen.
+
 ---
 
 ## 1. Recherche: was das offizielle Spiel am Lenkrad macht
