@@ -18,8 +18,9 @@ als „offen" steht, ist es ausdrücklich.
 
 | Welle | Fund | behoben |
 |---|---|---|
-| 2 | Stärke wurde **zweimal** angewendet (30 % kamen als 9 % am Rad an) | ✅ eine Stelle skaliert |
-| 2 | Kettentest konnte sich per „Port belegt“ selbst überspringen und meldete trotzdem Erfolg | ✅ belegter Port = FAIL |
+| 1 | Kette: Stärke wurde **zweimal** angewendet (30 % kamen als 9 % am Rad an) — `ffb_chain_review.md`, Mangel 1 | ✅ eine Stelle skaliert |
+| 1 | Kette: der Test konnte sich per „FFB SKIP port busy“ selbst überspringen und meldete trotzdem Erfolg — `ffb_chain_review.md`, Mangel 2 | ✅ belegter Port = FAIL |
+| 2 | Kette: der Test **konnte die Kraft nicht verlieren** (Schwelle 0,02 gegen gemessene 0,163, weil der Wagen geradeaus fuhr); `max_rumble >= 0.0` konnte nie falsch werden; ein Vergleich war zufallsabhängig — `ffb_wave2_chain.md`, Mängel 1–3 | ✅ echte Kurvenfahrt, falsifizierbare Schwellen |
 | 3 | Ein Prüflauf hatte dem Fahrer **das FFB abgeschaltet** | ✅ Headless schreibt nie ins Profil, `APEX_FFB_SETTINGS` |
 | 4 | **NaN** aus der Physik vergiftete die Glättung dauerhaft | ✅ `_num`/`_safe` + Selbstheilung |
 | 4 | Diagnoselauf überschrieb das **Lenkrad-Profil** des Fahrers | ✅ `APEX_G29_PROFILE` |
@@ -30,7 +31,10 @@ als „offen" steht, ist es ausdrücklich.
 | 8 | Zwei Fehlermeldungen des Versand-Gates brachen **genau im Fehlerfall** ab | ✅ Klammerung, mit System-PID 4 gemessen |
 | 9 | Stöße **ohne Lenkbefehl** kamen als 0,000 am Rad an (Schalten, Einschlag) | ✅ Klopfen mit 30 Hz statt nichts |
 | 9 | Prüfwerkzeuge erschlugen sich gegenseitig (parallele Läufe) | ✅ Alters-Regel, Exit 125 |
-| 10 | Der Fühltest (`--demo`) hätte die **Gegenrichtung** vorgeführt | ✅ auf gemessene Paketwerte umgestellt |
+| 9 | Ein **Wrack verdrängte Kerb und Kies** (0,300 @ 13 Hz → 0,750 @ 19 Hz, Quelle „Unwucht“) für den Rest der Sitzung | ✅ die Oberfläche führt, auf Asphalt bleibt die Unwucht (0,75) |
+| 9 | Die **letzte Naht** (Paketfeld → DirectInput-Effekt) war nie gemessen | ✅ `_DeviceProbe`: `dwPeriod` 33333 µs = 30 Hz, Kies 76923 gegen Kerb 23809 µs, `invert` dreht im Gerät |
+| 10 | Der Fühltest (`--demo`) hätte die **Gegenrichtung** vorgeführt | ✅ auf gemessene Paketwerte umgestellt (18 Stationen) |
+| 10 | Die Stufe „Geradeaus 250 km/h“ trug 0,097 aus einem synthetischen Schräglauf und schob das frei gelassene Rad an den Anschlag | ✅ echte Gerade: 0,000 (Runde Mittel 0,003), neue Prüfung `der_fuehltest_laesst_die_gerade_ruhen` |
 
 ## Gemessene Antworten auf die Fragen aus dem Auftrag
 
@@ -60,5 +64,9 @@ sagen:
 
 3. **Gras** ist nur im Modell und in der Demo gemessen, nicht in der Szene —
 die Barriere steht bei 16 m Querabstand, Gras beginnt bei 16,85 m; erreichbar
-ist es nur an den vier Stellen, an denen beim Streckenbau eine Barriere
-verworfen wurde.
+ist es nur an den vier Stellen, an denen `barriers.gd` eine Box **verwirft,
+weil sie auf der Strecke läge** (gemessen mit
+`tests/probe_barrier_geometry.gd`: `Barriers 476 boxes, 4 skipped`). Über eine
+solche Lücke kommt der Wagen bis auf 16,85 m und weiter — dort gilt dann
+Gras/Grip 0,30. Im normalen Fahren ist die Gras-Rückmeldung also unerreichbar,
+und das ist eine Eigenschaft der Strecke, nicht des Lenkradmodells.
