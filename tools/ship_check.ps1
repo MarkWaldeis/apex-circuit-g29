@@ -86,8 +86,16 @@ function Stop-RecordedProcess($proc, [string]$label) {
         $still = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
     }
     if ($still) {
-        Write-Host ("[ship] FAIL: {0} {1} liess sich nicht beenden - weitere " +
-            "Messungen und der Export waeren unbrauchbar") -f $label, $proc.Id
+        # Das `-f` gehoert IN die Klammer: aussen bindet PowerShell es an
+        # `Write-Host -ForegroundColor` (Abkuerzung) und bricht genau dann mit
+        # "Cannot convert value ... to type System.ConsoleColor" ab, wenn die
+        # Meldung helfen soll. Dieselbe Falle war schon im Fehlerpfad von
+        # tools/export_and_deliver.ps1 (behoben am 21.09.2026). Und es muss um
+        # die **ganze** zusammengesetzte Zeichenkette stehen: `"a{0}" + "b" -f x`
+        # formatiert nur das zweite Stueck und druckt dann "{0}" woertlich
+        # (gemessen am 21.09.2026 mit einem nicht beendbaren Prozess).
+        Write-Host (("[ship] FAIL: {0} {1} liess sich nicht beenden - weitere " +
+            "Messungen und der Export waeren unbrauchbar") -f $label, $proc.Id)
         return $false
     }
     return $true
@@ -190,8 +198,14 @@ function Run-Shipped([bool]$enabled, [int]$runPort) {
             if ($l -match 'Quelle=(\S+)') { $lastSource = $Matches[1] }
         }
         if ($packets -ge $MinPackets) { break }
-        Write-Host ("[ship] Lauf {0} (FFB {1}) lieferte nur {2} Pakete - " +
-            "wird wiederholt") -f $attempt, $(if ($enabled) { 'AN' } else { 'AUS' }), $packets
+        # Auch hier muss das `-f` **in** die Klammer und um die ganze
+        # zusammengesetzte Zeichenkette: aussen bindet es an
+        # `Write-Host -ForegroundColor` und bricht die Messung genau dann ab,
+        # wenn sie wiederholen will. Gemessen am 21.09.2026 (ParameterBinding:
+        # 'Cannot convert value "38" to type System.ConsoleColor').
+        Write-Host (("[ship] Lauf {0} (FFB {1}) lieferte nur {2} Pakete - " +
+            "wird wiederholt") -f $attempt,
+            $(if ($enabled) { 'AN' } else { 'AUS' }), $packets)
     }
     return [pscustomobject]@{
         enabled = $enabled; lines = $lines; packets = $packets; peak = $peak

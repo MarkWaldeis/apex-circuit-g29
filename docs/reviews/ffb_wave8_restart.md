@@ -130,3 +130,46 @@ Programm das Rad liest war genau der Welle-7-Fall „Spiel zuerst, dann Helfer�
   Motor aus/im Menü: Kraft fällt auf null“).
 * `--release-wheel-after 0` stellt das alte Verhalten her (nie freigeben), falls
   es je stören sollte.
+
+---
+
+## Nachbrenner: zwei Fehlermeldungen desselben Prüfwerkzeugs waren selbst kaputt
+
+Beim Nachfahren des Versand-Gates (`tools/ship_check.ps1`) aufgefallen — dieselbe
+Falle, die in `tools/export_and_deliver.ps1` schon behoben war, aber in zwei
+weiteren Stellen stand: `Write-Host ("a" + "b") -f $x` bindet das `-f` an
+`Write-Host` (Abkürzung von `-ForegroundColor`) statt zu formatieren.
+
+| Stelle | Vorher | Gemessen |
+|---|---|---|
+| `Stop-RecordedProcess`, Prozess läßt sich nicht beenden | `Write-Host ("…" + "…") -f $label, $proc.Id` | `ParameterBindingException: Cannot bind parameter 'ForegroundColor'` — mit `$ErrorActionPreference = 'Stop'` bricht das ganze Gate ab |
+| „Lauf lieferte nur N Pakete — wird wiederholt“ | `Write-Host ("…" + "…") -f $attempt, …` | `Cannot convert value "38" to type "System.ConsoleColor"` — genau der Pfad, der die Messung retten soll |
+
+Beide Meldungen stehen jetzt **in** der Klammer und um die ganze
+zusammengesetzte Zeichenkette:
+
+```
+Write-Host (("[ship] FAIL: {0} {1} liess sich nicht beenden - …") -f $label, $proc.Id)
+Write-Host (("[ship] Lauf {0} (FFB {1}) lieferte nur {2} Pakete - " +
+    "wird wiederholt") -f $attempt, $(if ($enabled) { 'AN' } else { 'AUS' }), $packets)
+```
+
+Wichtig: nur `-f` nach innen ziehen reicht **nicht**. `"a{0}" + "b" -f x`
+formatiert nur das zweite Teilstück und druckt dann `{0}` wörtlich — still und
+falsch. Das war der erste Versuch dieses Fixes und ist am 21.09.2026 mit einem
+echten nicht beendbaren Prozess gemessen worden (Ziel: System-PID 4,
+`Stop-Process` verweigert, `Get-Process` findet ihn weiter):
+
+```
+[ship] WARNUNG: System 4 laeuft noch - wird ein zweites Mal beendet
+[ship] FAIL: System 4 liess sich nicht beenden - weitere Messungen und der Export waeren unbrauchbar   (vorher: "{0} {1}")
+Rueckgabe: False (muss False sein)
+```
+
+Die Wiederhol-Meldung wurde isoliert nachgefahren: `Lauf 1 (FFB AUS) lieferte
+nur 38 Pakete - wird wiederholt` (vorher: Abbruch mit ParameterBinding-Fehler).
+Das Gate als Ganzes läuft danach unverändert durch:
+
+```
+SHIP_RESULT PASS 7 Pruefungen, 0 Mangel
+```
