@@ -2057,6 +2057,57 @@ def check_chain(rate: float = 200.0) -> int:
           "ohne_stossrichtung_wird_das_rad_geklopft",
           f"pulse=0.45 ohne Richtung -> Rad {knock_peak:.3f} mit "
           f"{knock_flips} Vorzeichenwechseln (vorher 0,000 / 0 Wechsel)")
+
+    # 4d) **Der Fuehltest muss spielen, was das Spiel spielt.** `DEMO_STAGES`
+    #     stand in der inneren Vorzeichenwelt des Modells (Rechtsbogen
+    #     negativ). Das Spiel sendet aber die gedrehten Paketwerte, weil
+    #     `invert: true` ausgeliefert ist (eine positive DirectInput-Kraft
+    #     dreht das G29 nach LINKS, am Rad gemessen). Die Demo zeigte damit im
+    #     Bogen und bei jedem Stoss die Gegenrichtung - und ein Fuehltest, der
+    #     die Richtung falsch zeigt, ist schlimmer als keiner: der Fahrer
+    #     dreht danach im Menue die Kraftrichtung um und macht das Spiel
+    #     falsch. Die Zahlen stammen aus `tests/probe_demo_stages.gd`
+    #     (Standard-Einstellungen: Staerke 75 %, Daempfung 0,70).
+    corner = _demo_stage("Bogen")
+    understeer_demo = _demo_stage("Untersteuern")
+    locked = _demo_stage("blockieren")
+    kerb_demo = _demo_stage("Kerb")
+    gravel_demo = _demo_stage("Kies")
+    check(float(corner["torque"]) > 0.5
+          and abs(float(corner["torque"]) - 0.636) < 0.03,
+          "der_fuehltest_zeigt_den_bogen_in_spielrichtung",
+          f"Rechtsbogen im Fuehltest torque {float(corner['torque']):+.3f} "
+          f"(Spiel sendet +0.636; vorher stand hier -0.62 = Gegenrichtung)")
+    check(abs(float(understeer_demo["torque"])) < abs(float(corner["torque"])) * 0.35
+          and abs(float(locked["torque"])) < abs(float(corner["torque"])) * 0.25
+          and float(locked["rumble"]) > 0.5 and 20.0 < float(locked["rumble_hz"]) < 40.0,
+          "der_fuehltest_traegt_die_kanaele_des_modells",
+          f"Bogen {float(corner['torque']):.3f}, Untersteuern "
+          f"{float(understeer_demo['torque']):.3f} "
+          f"({100.0 * abs(float(understeer_demo['torque'])) / abs(float(corner['torque'])):.0f} %), "
+          f"blockiert {float(locked['torque']):.3f} + Rattern "
+          f"{float(locked['rumble']):.2f} @ {float(locked['rumble_hz']):.0f} Hz")
+    check(float(kerb_demo["rumble"]) > float(gravel_demo["rumble"]) > 0.1
+          and float(kerb_demo["rumble_hz"]) > float(gravel_demo["rumble_hz"]) + 10.0
+          and abs(float(kerb_demo["rumble"]) - 0.623) < 0.03,
+          "der_fuehltest_zeigt_kerb_schnell_und_kies_grob",
+          f"Kerb {float(kerb_demo['rumble']):.2f} @ {float(kerb_demo['rumble_hz']):.0f} Hz, "
+          f"Kies {float(gravel_demo['rumble']):.2f} @ {float(gravel_demo['rumble_hz']):.0f} Hz")
+    missing = [needle for needle in
+               ("Bogen", "Untersteuern", "Kerb", "Kies", "Gras", "blockieren", "Kuppe",
+                "Bodenwelle", "drehen durch", "Schaltstoss in der Kurve",
+                "Schaltstoss auf der Geraden", "Einschlag in die Wand",
+                "Einschlag auf der Geraden", "Unwucht", "Anschlag", "Loslassen")
+               if not any(needle.lower() in label.lower() for _s, label, _st in DEMO_STAGES)]
+    bad_values = [label for _s, label, st in DEMO_STAGES
+                  if abs(float(st["torque"])) > 1.0 or not 0.0 <= float(st["rumble"]) <= 1.0
+                  or not 5.0 <= float(st["rumble_hz"]) <= 60.0
+                  or not 0.0 <= float(st.get("pulse", 0.0)) <= 1.0
+                  or abs(float(st.get("pulse_dir", 0.0))) > 1.0]
+    check(not missing and not bad_values,
+          "der_fuehltest_deckt_die_situationen_ab_und_bleibt_im_bereich",
+          f"{len(DEMO_STAGES)} Stufen, fehlend: {missing or 'keine'}, "
+          f"ausserhalb der Grenzen: {bad_values or 'keine'}")
     straight_flips = _count_sign_flips(probe.magnitudes)
     check(straight_flips == 0, "mit_stossrichtung_bleibt_der_stoss_gerade",
           f"pulse=0.40 mit Richtung +1 -> {straight_flips} Vorzeichenwechsel "
@@ -2245,40 +2296,98 @@ def check_chain(rate: float = 200.0) -> int:
 
 ## Der Fuehltest: die Stationen, die das Spiel am Lenkrad erzeugt, ohne Spiel.
 ##
-## Jede Zeile ist eine Fahrsituation aus docs/FFB_F1_STYLE_PLAN.md, mit genau
-## den Zahlen, die `ffb_model.gd` dort auch liefert. Wer das laufen laesst,
-## fuehlt den Plan am eigenen Lenkrad - und kann sagen, welche Station zu
-## schwach oder zu stark ist.
+## **Diese Zahlen sind Paketwerte, keine Modell-Innenwerte.** Sie wurden mit
+## `godot_f1/tests/probe_demo_stages.gd` aus `ffb_model.gd` gemessen - mit den
+## **Standard-Einstellungen des Menues** (Staerke 75 %, Daempfung MITTEL 0,70,
+## Baender je 100 %). Genau diese Zahlen schickt das Spiel in den beschriebenen
+## Situationen an den Helfer, und genau das spielt die Demo dann ans Lenkrad.
+##
+## Warum das ausdruecklich so dasteht: die erste Fassung stand in der inneren
+## Vorzeichenwelt des Modells (Rechtsbogen **negativ**). Das Spiel liefert aber
+## die gedrehten Paketwerte - `invert: true` ist ausgeliefert, weil eine
+## positive DirectInput-Kraft das G29 nach LINKS dreht (gemessen,
+## `docs/reviews/ffb_wave7_ownership.md`). Der Fuehltest zeigte damit im Bogen
+## und bei jedem Stoss die **Gegenrichtung**: der Fahrer haette danach die
+## Kraftrichtung im Menue umgedreht und das Spiel damit falsch gemacht.
+## Gemessen jetzt mit `probe_demo_stages.gd`: Rechtsbogen `torque +0.636`.
+##
+## Die Kraftrichtung folgt trotzdem der Einstellung des Fahrers: steht in
+## `ffb_settings.json` `invert: false`, dreht `demo()` die Tabelle genauso wie
+## das Spiel es taete.
 DEMO_STAGES = [
     (1.6, "Geradeaus, Schrittgeschwindigkeit: lose, nur Reibung",
-     {"torque": 0.00, "damper": 0.12, "fric": 0.14, "rumble": 0.00, "rumble_hz": 20.0}),
+     {"torque": 0.000, "damper": 0.078, "fric": 0.171, "rumble": 0.044, "rumble_hz": 22.8}),
     (2.0, "Geradeaus 250 km/h: Grundgewicht, kein Zappeln",
-     {"torque": 0.00, "damper": 0.32, "fric": 0.10, "rumble": 0.06, "rumble_hz": 30.0}),
-    (2.6, "Schneller Bogen, 3 g bei 250 km/h: schwer, drueckt zurueck",
-     {"torque": -0.62, "damper": 0.30, "fric": 0.10, "rumble": 0.08, "rumble_hz": 30.0}),
+     {"torque": 0.097, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
+    (2.6, "Schneller Bogen, 3,2 g bei 250 km/h: schwer, drueckt GEGEN den Lenkbefehl",
+     {"torque": 0.636, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
     (2.6, "Vorderachse geht weg (Untersteuern): Lenkrad wird leicht",
-     {"torque": -0.22, "damper": 0.30, "fric": 0.10, "rumble": 0.12, "rumble_hz": 32.0}),
+     {"torque": 0.132, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
     (2.0, "Kerb bei 120 km/h: hartes, schnelles Ruetteln",
-     {"torque": -0.45, "damper": 0.25, "fric": 0.30, "rumble": 0.85, "rumble_hz": 38.0}),
-    (2.0, "Kies: grobes Mahlen, langsamer als der Kerb",
-     {"torque": -0.38, "damper": 0.22, "fric": 0.45, "rumble": 0.45, "rumble_hz": 12.0}),
+     {"torque": 0.577, "damper": 0.218, "fric": 0.267, "rumble": 0.623, "rumble_hz": 30.4}),
+    (2.0, "Kies bei 120 km/h: grobes Mahlen, langsamer als der Kerb",
+     {"torque": 0.577, "damper": 0.218, "fric": 0.312, "rumble": 0.318, "rumble_hz": 13.0}),
+    (1.5, "Gras bei 120 km/h: dumpf und leise",
+     {"torque": 0.577, "damper": 0.218, "fric": 0.252, "rumble": 0.187, "rumble_hz": 11.2}),
     (2.0, "Vollbremsung, Vorderraeder blockieren: leicht + Rattern",
-     {"torque": -0.12, "damper": 0.22, "fric": 0.16, "rumble": 0.60, "rumble_hz": 28.0}),
-    (0.5, "Schaltstoss",
-     {"torque": -0.30, "damper": 0.25, "fric": 0.12, "rumble": 0.05, "rumble_hz": 26.0,
-      "pulse": 0.45, "pulse_dir": -1.0}),
+     {"torque": 0.118, "damper": 0.247, "fric": 0.090, "rumble": 0.700, "rumble_hz": 34.0}),
+    (1.2, "Kuppe: Vorderachse hebt ab, Lenkrad wird kurz leicht",
+     {"torque": 0.387, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
+    (0.5, "Bodenwelle: dumpfer Schlag durch die gestauchte Feder",
+     {"torque": 0.636, "damper": 0.285, "fric": 0.090, "rumble": 0.420, "rumble_hz": 20.6,
+      "pulse": 0.550, "pulse_dir": 1.0}),
+    (1.2, "Raeder drehen durch (Traktion aus): dumpfes Mahlen",
+     {"torque": 0.636, "damper": 0.247, "fric": 0.090, "rumble": 0.530, "rumble_hz": 24.0}),
+    (0.5, "Schaltstoss in der Kurve",
+     {"torque": 0.636, "damper": 0.285, "fric": 0.090, "rumble": 0.110, "rumble_hz": 37.4,
+      "pulse": 0.450, "pulse_dir": 1.0}),
     (0.5, "Schaltstoss auf der Geraden (kein Lenkbefehl): Anschlag als Klopfen",
-     {"torque": 0.00, "damper": 0.30, "fric": 0.12, "rumble": 0.06, "rumble_hz": 30.0,
-      "pulse": 0.45, "pulse_dir": 0.0}),
-    (0.5, "Einschlag in die Wand",
-     {"torque": -0.20, "damper": 0.30, "fric": 0.20, "rumble": 0.30, "rumble_hz": 30.0,
-      "pulse": 1.00, "pulse_dir": -1.0}),
-    (0.5, "Einschlag geradeaus (kein Lenkbefehl): voller Anschlag als Klopfen",
-     {"torque": 0.00, "damper": 0.30, "fric": 0.20, "rumble": 0.35, "rumble_hz": 30.0,
-      "pulse": 1.00, "pulse_dir": 0.0}),
-    (1.6, "Loslassen",
-     {"torque": 0.00, "damper": 0.06, "fric": 0.05, "rumble": 0.00, "rumble_hz": 20.0}),
+     {"torque": 0.087, "damper": 0.275, "fric": 0.090, "rumble": 0.110, "rumble_hz": 37.4,
+      "pulse": 0.450, "pulse_dir": 0.0}),
+    (0.5, "Einschlag in die Wand (voll)",
+     {"torque": 0.636, "damper": 0.260, "fric": 0.090, "rumble": 0.850, "rumble_hz": 32.0,
+      "pulse": 1.000, "pulse_dir": 1.0}),
+    (0.5, "Einschlag auf der Geraden (kein Lenkbefehl): voller Anschlag als Klopfen",
+     {"torque": 0.087, "damper": 0.250, "fric": 0.090, "rumble": 0.850, "rumble_hz": 32.0,
+      "pulse": 1.000, "pulse_dir": 0.0}),
+    (2.0, "Unwucht nach mittlerem Schaden bei 230 km/h: es wuchtet weiter",
+     {"torque": 0.093, "damper": 0.292, "fric": 0.148, "rumble": 0.383, "rumble_hz": 28.1}),
+    (1.6, "Rangieren am Lenkanschlag (Soft Lock): die Wand ist zu spueren",
+     {"torque": 0.370, "damper": 0.075, "fric": 0.177, "rumble": 0.042, "rumble_hz": 22.5}),
+    (1.6, "Loslassen (Stillstand, kein Motor): Kraft faellt auf null",
+     {"torque": 0.000, "damper": 0.070, "fric": 0.190, "rumble": 0.040, "rumble_hz": 22.0}),
 ]
+
+
+def _game_invert(default: bool = True) -> bool:
+    """Die Kraftrichtung aus den Einstellungen des Fahrers.
+
+    Standard ist `invert: true` - die am G29 gemessene Richtung. Ist die Datei
+    nicht lesbar, gilt der Standard (dann verhaelt sich die Demo wie ein
+    frisch installiertes Spiel).
+    """
+    path = os.path.join(os.environ.get("APPDATA", ""), "Godot", "app_userdata",
+                        "Apex Circuit", "ffb_settings.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return default
+    if not isinstance(data, dict) or "invert" not in data:
+        return default
+    return bool(data["invert"])
+
+
+def _demo_stage(needle: str) -> dict:
+    """Die Demostufe, deren Beschriftung `needle` enthaelt (fuer die Pruefung).
+
+    Damit prueft `--check` nicht eine zweite Liste, sondern die, die der
+    Fahrer wirklich zu spueren bekommt.
+    """
+    for _seconds, label, stage in DEMO_STAGES:
+        if needle.lower() in label.lower():
+            return stage
+    raise KeyError(f"keine Demostufe mit {needle!r}")
 
 
 def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
@@ -2297,6 +2406,21 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
         wheel.close()
         return 1
     print("[demo] Haende locker lassen: das Lenkrad bewegt sich von selbst.")
+    # Die Tabelle steht in den Paketwerten des ausgelieferten Standards
+    # (`invert: true`). Steht in den Einstellungen des Fahrers etwas anderes,
+    # muss die Demo genauso drehen wie das Spiel - sonst fuehlt der Fahrer hier
+    # die Gegenrichtung und dreht danach im Menue die Kraftrichtung um.
+    flip: bool = not _game_invert()
+    print("[demo] Werte = das, was das Spiel bei Standard-Einstellungen sendet "
+          "(Staerke 75 %, Daempfung MITTEL, Baender 100 %).")
+    if flip:
+        print("[demo] Kraftrichtung: die Einstellungen des Fahrers sagen "
+              "invert: false - die Demo spiegelt die Tabelle genau so wie das Spiel.")
+    else:
+        print("[demo] Kraftrichtung: wie ausgeliefert (invert: true, am G29 gemessen).")
+    if invert:
+        print("[demo] ACHTUNG: --invert dreht zusaetzlich - die Richtung ist "
+              "dann NICHT mehr die des Spiels (nur zur Diagnose).")
     period = 1.0 / max(rate, 20.0)
     live = {"torque": 0.0, "damper": 0.0, "fric": 0.0, "rumble": 0.0,
             "rumble_hz": 24.0, "pulse": 0.0, "pulse_dir": 0.0, "spring": 0.0}
@@ -2316,9 +2440,10 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
                                  ("rumble", 0.05), ("rumble_hz", 0.10)):
                     live[key] = _approach(live[key], float(target[key]), period, tau)
                 live["pulse"] = max(live["pulse"] - period / PULSE_DECAY, 0.0)
-                wheel.apply(live["torque"], live["damper"], live["fric"],
+                sign = -1.0 if flip else 1.0
+                wheel.apply(live["torque"] * sign, live["damper"], live["fric"],
                             live["rumble"], live["pulse"], invert, live["spring"],
-                            live["rumble_hz"], gain, live["pulse_dir"])
+                            live["rumble_hz"], gain, live["pulse_dir"] * sign)
                 time.sleep(period)
     except KeyboardInterrupt:
         print("\n[demo] abgebrochen")

@@ -66,6 +66,8 @@ goto :done
 
 :demo
 echo [Demo] Fuehltest: alle Fahrsituationen einmal am Lenkrad, ohne Spiel.
+echo [Demo] Die Zahlen sind das, was das Spiel bei Standard-Einstellungen
+echo [Demo] sendet (gemessen, 18 Stationen). Kraftrichtung wie im Spiel.
 echo [Demo] Haende weg vom Lenkrad.
 echo.
 python tools\g29_ffb.py --demo

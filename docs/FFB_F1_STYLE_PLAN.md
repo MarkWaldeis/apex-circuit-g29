@@ -297,10 +297,18 @@ Zwei Regeln, die zur Kette gehören und geprüft werden:
   `rumble_hz` (statt konstant),
 * Effekte: Konstante Kraft, Dämpfer, Reibung, periodisches Rütteln,
   Zentrierfeder (nur noch als Rest, Standard 0),
-* `--demo`: spielt eine feste Abfolge ab (Gerade → Bogen → Untersteuern →
-  Kerb → Blockieren → Schalten → Einschlag → loslassen) und schreibt zu
-  jedem Schritt auf die Konsole, was gerade anliegt. Damit lässt sich der
-  Plan **am echten Lenkrad abfahren**, ohne das Spiel zu starten.
+* `--demo`: spielt eine feste Abfolge ab (**18 Stationen**: Gerade im Schritt-
+  und im Renntempo, Bogen, Untersteuern, Kerb, Kies, Gras, blockierende
+  Vorderräder, Kuppe, Bodenwelle, durchdrehende Räder, Schalten in der Kurve
+  **und** auf der Geraden, Einschlag in der Kurve und geradeaus, Unwucht nach
+  Schaden, Lenkanschlag, Loslassen) und schreibt zu jedem Schritt auf die
+  Konsole, was gerade anliegt. Damit lässt sich der Plan **am echten Lenkrad
+  abfahren**, ohne das Spiel zu starten.
+  Die Zahlen sind **Paketwerte**, keine Modell-Innenwerte: gemessen mit
+  `godot_f1/tests/probe_demo_stages.gd` bei den Standard-Einstellungen
+  (Stärke 75 %, Dämpfung MITTEL, Bänder 100 %). Die Kraftrichtung folgt der
+  Einstellung des Fahrers (`ffb_settings.json`) — steht dort `invert: false`,
+  spiegelt die Demo die Tabelle genau so wie das Spiel es täte.
 * `--idle-release`, `--invert`, `--shared`, `--rate`, `--gain` wie gehabt.
 
 ### 3.5 Der Soft Lock (Lenkbereich)
@@ -366,6 +374,7 @@ Auf der Einstellungen-Seite, Abschnitt „Force Feedback (G29)“:
 | 19 | Die Oberfläche führt, die Unwucht bleibt auf dem Asphalt | `tests/test_ffb_model.gd` §19 + `tests/probe_wave9_loudness.gd`: bei Schaden 1,0 muss auf Kerb `Quelle Kerb` (0,588 @ 29 Hz) und auf Kies `Quelle Kies` (0,300 @ 13 Hz) stehen — vorher stand dort überall `Unwucht 0,750 @ 19 Hz`; auf Asphalt bleibt die Unwucht bei 0,750 |
 | 20 | Ein Stoss ohne Vorzeichen verschwindet nicht in der Invertierung | `invert` dreht `pulse_dir` mit; 0 bleibt 0 (kein Vorzeichen) und wird vom Helfer geklopft, nicht verschluckt |
 | 21 | Die letzte Naht ist gemessen: Paketfeld → DirectInput-Struktur | `--check` mit `_DeviceProbe`: `rumble_hz 30` → `dwPeriod 33333 µs` (= 30,00 Hz), Rütteln 5600/8000, Dämpfung 3500/7000, Reibung 1750/7000; Kies 13 Hz → 76923 µs gegen Kerb 42 Hz → 23809 µs; `invert` dreht die Kraft im Gerät (5000 → −5000); der vorzeichenlose Stoss klopft auch dort (4 Vorzeichenwechsel in 60 ms, Amplitude 3150). Vorher war nur der Loop gemessen — die Sonde ersetzte genau die Setter, die das Gerät schreiben |
+| 22 | Der Fühltest spielt, was das Spiel spielt | `--check` (28 Prüfungen) gegen `DEMO_STAGES`: Rechtsbogen `torque +0,636` (Spielrichtung, vorher −0,62), Untersteuern 21 % davon, blockiert 0,118 + Rattern 0,70 @ 34 Hz, Kerb 0,62 @ 30 Hz gegen Kies 0,32 @ 13 Hz, 18 Stationen vollständig und alle Werte im Protokollbereich |
 
 ## 5. Prüfwellen (fremde Agenten, kritisch)
 
@@ -969,6 +978,60 @@ powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 320x200 ^
     --script tests/probe_axis_track.gd                 # Spiel liest die Achse 30 s mit
 ```
 
-Erwartung: `AXIS_TRACK ... data=true` auch nach der Freigabe, und die Spanne
-wächst weiter, sobald der Helfer das Rad zurückgeholt hat. Genau dieses
-Kriterium fehlt noch in der Beweiskette; der übrige Weg ist gemessen.
+**Nachtrag: gemessen.** `godot_f1/tests/probe_wave9_reacquire.gd` fährt 8 s,
+pausiert 6 s (keine Pakete, der Helfer gibt das Rad frei) und fährt 8 s weiter
+(der Helfer holt es zurück) — mit Fenster und echtem Rad, weil Godot headless
+keine Joysticks zählt. Ergebnis: **nach dem Zurückholen 0 Ticks ohne
+Achsdaten** (Spanne 0,073 im Nachlauf, der Wagen startet aus dem Stand).
+Die einzigen blinden Ticks des Laufs (2,1 s) liegen in der **Anlaufphase**:
+`_have_data` verlangt, dass eine Achse sich bewegt — ein Rad, das nur
+enumeriert, liefert Nullen und darf nicht als Messung gelten. Damit ist auch
+dieses Kriterium belegt (Bericht: `docs/reviews/ffb_wave8_restart.md`).
+
+---
+
+# 13. Welle 9/10: der Fühltest zeigte die Gegenrichtung
+
+Diese Welle hat nicht das Modell geprüft, sondern **das, was der Fahrer als
+Beweis bekommt**: den Fühltest `--demo`.
+
+`DEMO_STAGES` behauptete, „genau die Zahlen" des Modells zu spielen — gemeint
+waren aber die **Innenwerte** des Modells, nicht die Paketwerte. Das Spiel
+sendet die gedrehten Werte, weil `invert: true` ausgeliefert ist (am G29
+gemessen: eine positive DirectInput-Kraft dreht das Rad nach links). Für einen
+Rechtsbogen heißt das: innen −0,85, im Paket **+0,636**.
+
+| Grösse | Fühltest (alt) | Was das Spiel sendet | Messung |
+|---|---|---|---|
+| Rechtsbogen | `torque −0,62` | **+0,636** | `tests/probe_demo_stages.gd` |
+| Vorderrad blockiert | `torque −0,12`, Rütteln 0,60 @ 28 Hz | +0,118, **0,700 @ 34 Hz** | dieselbe |
+| Kerb bei 120 km/h | Rütteln 0,85 @ 38 Hz | **0,623 @ 30,4 Hz** | dieselbe |
+| Kies bei 120 km/h | Rütteln 0,45 @ 12 Hz | **0,318 @ 13,0 Hz** | dieselbe |
+| Geradeaus 250 km/h | Rütteln 0,06 @ 30 Hz | **0,121 @ 39,8 Hz** | dieselbe |
+| Kuppe, Bodenwelle, Gras, durchdrehende Räder, Unwucht, Lenkanschlag | fehlten ganz | — | — |
+
+Die Folge war nicht kosmetisch: der Fahrer hätte im Fühltest eine Kraft
+gefühlt, die ihn im Bogen **mitzieht statt gegenhält**, und danach im Menü die
+Kraftrichtung umgedreht — womit das *Spiel* falsch geworden wäre. Ein
+Fühltest, der die Richtung falsch zeigt, ist schlimmer als keiner.
+
+Behoben:
+
+* `DEMO_STAGES` trägt jetzt die **gemessenen Paketwerte** der
+  Standard-Einstellungen (Stärke 75 %, Dämpfung MITTEL, Bänder 100 %), Quelle
+  steht als Kopfkommentar im Code und ist mit
+  `tests/probe_demo_stages.gd` jederzeit reproduzierbar (18 Stationen).
+* Die Demo **folgt der Einstellung des Fahrers**: steht in
+  `ffb_settings.json` `invert: false`, spiegelt sie die Tabelle wie das Spiel
+  (gemessen: Datei `true` → normal, `false` → gespiegelt, fehlende oder kaputte
+  Datei → Standard). Wer `--invert` zusätzlich setzt, wird ausdrücklich
+  gewarnt, dass die Richtung dann nicht mehr die des Spiels ist.
+* `--check` prüft die Tabelle selbst, nicht eine zweite Liste daneben
+  (`_demo_stage(...)`): Bogen in Spielrichtung (+0,636), Untersteuern 21 %
+davon, blockiert 12 % + Rattern 0,70 @ 34 Hz, Kerb 0,62 @ 30 Hz gegen Kies
+0,32 @ 13 Hz, 18 Stationen vollständig, alle Werte im Protokollbereich und die
+Richtungsprüfung falsifizierbar. **28 Prüfungen, 0 Mängel.**
+
+Falsifizierbarkeit nachgewiesen (nicht nur behauptet): mit der alten Zahl
+−0,62 bzw. 0,85 am Kerb wird die jeweilige Prüfung **rot** (`False`), und ohne
+die Anschlag-Station meldet die Abdeckungsprüfung „fehlend: ['Anschlag']".

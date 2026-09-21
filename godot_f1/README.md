@@ -204,7 +204,7 @@ schafft eine belastbare Grundlage. Danach:
 ```
 python tools/hid_probe.py 046d:c24f     # laufende Reports = Rad ist bereit
 tools\ffb_direction_check.ps1           # dreht das Rad 2x3 s, misst die Richtung
-"Apex Circuit FFB starten.cmd" --demo   # Fühltest: Gerade, Bogen, Kerb, Blockieren
+"Apex Circuit FFB starten.cmd" --demo   # Fühltest: 18 Situationen, Werte wie im Spiel
 ```
 
 Beide Mängel, die dieser Test hatte — er startete den Helfer wegen eines

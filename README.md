@@ -161,7 +161,7 @@ Prüfen lässt sich die Kette ohne Spiel und ohne Lenkrad:
 python tools/g29_ffb.py --check             # Kette prüfen: Stärke genau einmal, Rampe, Puls, Loslassen (Exit 0/1)
 python tools/g29_ffb.py --dry-run          # Pakete, Rampe, Wertebereiche
 python tools/g29_ffb.py --selftest         # Gerät + Effekte, kurzer Teststoß
-python tools/g29_ffb.py --demo             # alle Fahrsituationen am Lenkrad fühlen
+python tools/g29_ffb.py --demo             # 18 Fahrsituationen am Lenkrad fühlen (Werte = was das Spiel sendet)
 python tools/g29_ffb.py --name G923        # anderes Rad als G29/G920/G923 suchen
 powershell -File tools/ffb_end_to_end.ps1  # echtes Spiel gegen den echten Helfer, ohne Lenkrad
 powershell -File tools/ship_check.ps1      # läuft der AUSGELIEFERTE Build (Desktop-Start) richtig?
