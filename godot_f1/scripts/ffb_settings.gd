@@ -121,6 +121,13 @@ func load_profile() -> bool:
 	var rot: float = float(d.get("rotation_deg", rotation_deg))
 	rotation_deg = rot if ROTATIONS.has(rot) else 400.0
 	loaded = true
+	# Eine migrierte Datei wird gleich zurueckgeschrieben: sonst stand auf der
+	# Platte weiter `version 1` mit dem alten `invert`, obwohl das Spiel schon
+	# mit dem gemessenen Wert faehrt - und niemand konnte von aussen sehen,
+	# welche Richtung nun gilt (die Datei des Fahrers stand am 21.09. genau so
+	# da). `auto_save` schuetzt Testlaeufe.
+	if file_version < VERSION:
+		save_profile()
 	return true
 
 

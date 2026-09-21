@@ -31,6 +31,16 @@ func _check(ok: bool, label: String, detail: String = "") -> void:
 		failed += 1
 
 
+## Liest die "version" aus einer Einstellungsdatei (0 = keine/keine Angabe).
+func _file_version(path_of_file: String) -> int:
+	if not FileAccess.file_exists(path_of_file):
+		return 0
+	var data = JSON.parse_string(FileAccess.get_file_as_string(path_of_file))
+	if typeof(data) != TYPE_DICTIONARY:
+		return 0
+	return int(data.get("version", 0))
+
+
 func _run() -> void:
 	# --- Speichern und Laden ---------------------------------------------
 	var s := Settings.new()
@@ -96,6 +106,20 @@ func _run() -> void:
 	# das Rad auf diesem Lenkrad verkehrt herum.
 	_check(legacy.invert == true, "alte_datei_bekommt_die_gemessene_kraftrichtung",
 		"invert=%s (Datei sagte false, gemessen ist true)" % str(legacy.invert))
+	# Und die Migration wird festgeschrieben: sonst steht auf der Platte weiter
+	# `version 1` mit dem alten Vorzeichen, waehrend das Spiel den neuen Wert
+	# benutzt - von aussen nicht nachpruefbar.
+	var migrated := Settings.new()
+	migrated.path = TMP + ".old"
+	migrated.load_profile()
+	var written := Settings.new()
+	written.path = TMP + ".old"
+	written.load_profile()
+	_check(int(FileAccess.get_file_as_string(TMP + ".old").length()) > 0
+		and written.invert == true and int(_file_version(TMP + ".old")) >= 3,
+		"die_migration_wird_geschrieben",
+		"Datei sagt jetzt version %d, invert=%s" % [
+			_file_version(TMP + ".old"), str(written.invert)])
 	# Ab Version 2 gilt dagegen, was in der Datei steht - auch ein bewusst
 	# umgestelltes Vorzeichen.
 	var v2_file := FileAccess.open(TMP + ".v2", FileAccess.WRITE)
