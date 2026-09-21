@@ -1,6 +1,8 @@
 # Welle 11: die echte Runde - was das Lenkrad im Spiel wirklich bekommt
 
-Stand 21.09.2026. Sonde: `godot_f1/tests/probe_lap_ffb.gd`
+Stand 21.09.2026, Commit `7c28fc9` (Sonde), Zahlen nachgezogen.
+
+Sonde: `godot_f1/tests/probe_lap_ffb.gd`
 Prufung fuer den Fund: `godot_f1/tests/test_stuck_rejoin.gd`
 Messprotokoll: `tools/testlogs/wave11_lap.log`
 
@@ -20,9 +22,21 @@ powershell -File tools/run_godot.ps1 --fixed-fps 300 --headless ^
     --path godot_f1 --script tests/probe_lap_ffb.gd
 ```
 
-Drei Abschnitte: **A** reale Runde mit dem Autopiloten, **B** Vollbremsung aus
-hoher Geschwindigkeit mit Lenkeinschlag (blockierende Vorderraeder), **C**
-absichtlich weit hinaus (Kerb, Kies, Wand).
+`--fixed-fps` laesst Godot die Physik schneller als in Echtzeit rechnen; der
+Physik-Schritt bleibt 1/60 s. Fuenf Abschnitte:
+
+| Abschnitt | Was passiert | Ausgangslage |
+|---|---|---|
+| A | reale Runde mit dem Autopiloten | Startaufstellung |
+| B1 | beschleunigen auf der Linie | nach A |
+| D | **Untersteuern**: Vollgas und voller Lenkeinschlag bei 252 km/h | auf die Linie gesetzt, 70 m/s angestossen |
+| B2 | **Blockieren**: Vollbremsung mit Lenkeinschlag | auf die Linie gesetzt, 70 m/s |
+| B3 | ausrollen | nach B2 |
+| C | **weit hinaus**: Kerb, Kies, Wandkontakt | auf die Linie gesetzt, 45 m/s |
+
+Nur die **Ausgangslage** der Abschnitte D, B2 und C ist gestellt (zurueck auf
+die Linie, angestossen). Was danach gemessen wird, ist echte Physik auf der
+echten Strecke, kein gestelltes `ctx`.
 
 ## Fund 1: das Auto blieb im Kies liegen - 45 Sekunden lang
 
@@ -38,11 +52,11 @@ LAP_FFB Spur f=4050  Tempo=0 km/h    Abstand=13.86 m  Kies
 ```
 
 KI-Auto **und** Autopilot des Spielerautos fahren nach rund 46 s einmal weit
-hinaus - und bleiben liegen: 13,9 m Querabstand, 0 km/h, **45 s lang**, bis die
-Messung abgebrochen wird. Ursache: die Ideallinie, auf die der Autopilot zielt,
-liegt hinter der Bande (15,5 m). Gas geben heisst dort: in die Wand fahren. Der
-bestehende Rundentest `test_lap_drive.gd` sah das nie, weil er nach **40 s**
-endet - der Ausflug passiert bei Sekunde 46.
+hinaus - und bleiben liegen: 13,9 m Querabstand, 0 km/h, **45 s lang**. Die
+Ideallinie, auf die der Autopilot zielt, liegt hinter der Bande (15,5 m). Gas
+geben heisst dort: in die Wand fahren. Der bestehende Rundentest
+`test_lap_drive.gd` sah das nie, weil er nach **40 s** endet - der Ausflug
+passiert bei Sekunde 46.
 
 ### Behoben in `scripts/car_controller.gd`
 
@@ -51,17 +65,18 @@ endet - der Ausflug passiert bei Sekunde 46.
 wird zurueckgesetzt - nach **2,5 s** Stillstand (`STUCK_SPEED` = 2 m/s) oder
 spaetestens nach **8 s**, wenn es zwar faehrt, aber draussen bleibt. Ein Fahrer
 am Lenkrad wird **nie** angefasst: er entscheidet selbst, ob er rueckwaerts
-fahert oder den Reset benutzt.
+faehrt oder den Reset benutzt.
 
 Nachgemessen mit derselben Sonde:
 
 ```text
 vorher:  Kies 3726 Ticks, laengste Standphase 45,0 s, Wiedereingliederungen 0
-nachher: Kies  840 Ticks, laengste Standphase  2,6 s, Wiedereingliederungen 2
+nachher: Kies  965 Ticks, laengste Standphase  2,6 s, Wiedereingliederungen 5
          Rundenfortschritt 1439 von 1440 Punkten (vollstaendige Runde)
 ```
 
-Und mit einem Test, der beide Seiten prueft (`test_stuck_rejoin.gd`):
+Und mit einem Test, der beide Seiten prueft (`test_stuck_rejoin.gd`, 8
+Pruefungen, in der Suite):
 
 ```text
 STUCK platziert: KI 14.50 m (Nase zur Wand), Autopilot 6.00 m (am Rand)
@@ -74,63 +89,82 @@ PASS der_fahrer_steht_noch_wo_er_war 14.01 m statt 12.00 m
 STUCK_REJOIN PASS
 ```
 
-## Fund 2: ein Fehler in meiner eigenen Messung
+## Fund 2: Fehler in meiner eigenen Messung
 
 Der erste Bericht zeigte "Bogen n=0" und "Untersteuern n=0". Ursache war nicht
 das Spiel, sondern die Sonde: sie las `ctx["lat_g"]`, den Schluessel gibt es
 nicht - die Querlast steht unter `lateral_g`. Mit dem falschen Schluessel war
-jede Querlast 0. Das ist genau die Art Fehler, die eine Messung gruen und
-inhaltslos macht; er steht hier, weil er in dieser Welle passiert ist.
+jede Querlast 0.
 
-Ebenfalls korrigiert: `model.torque` ist mit `invert = true` die **umgedrehte**
-Groesse fuer das G29. Die physikalische Aussage "drueckt gegen den Lenkbefehl"
-gilt vor dieser Umdrehung; die Sonde rechnet sie zurueck.
+Drei weitere Stellen wurden nachgeschaerft, weil sie sonst etwas behauptet
+haetten, das sie nicht gemessen haben:
+
+* `model.torque` ist mit `invert = true` die **umgedrehte** Groesse fuer das
+  G29. Die Aussage "drueckt gegen den Lenkbefehl" gilt vor dieser Umdrehung.
+* "Geradeaus schnell" zaehlte zuerst auch Ticks mit Wandkontakt aus spaeteren
+  Abschnitten mit (Ruetteln 0,700 auf der Geraden). Jetzt zaehlt nur, was die
+  Asphalt-Textur als lauteste Quelle hat: Ruetteln max **0,131**.
+* "Blockiertes Rad" zaehlte zuerst jedes Ruetteln mit, auch Kerb (0,844 @ 39
+  Hz). Jetzt getrennt: Quelle "Blockiert" = **0,700 @ 29-34 Hz**.
 
 ## Die Soll-Tabelle in echter Fahrt
 
-Alle Zahlen aus einem Lauf ueber eine vollstaendige Runde (1439/1440 Punkte,
-Spitze 283 km/h), Standardeinstellungen (`Staerke 75 %`, `invert=true`,
-`400 Grad`):
+Vollstaendige Runde (1439/1440 Punkte), Spitze 283 km/h,
+Standardeinstellungen (`Staerke 75 %`, `invert = true`, `400 Grad`):
 
 | Soll (Plan §2) | In echter Fahrt gemessen | Bewertung |
 |---|---|---|
-| Geradeaus schnell: ruhig, mit Grundgewicht | `torque` max **0,031** ab 198 km/h, Daempfung min **0,242**, Ruetteln max 0,356 | erfuellt |
-| Bogen 3-4 g: schwer, gegen den Lenkbefehl | 407 Ticks ab 3 g: Kraft **Mittel 0,455**, **max 0,584**; **2300 von 2414** Bogen-Ticks druecken gegen den Lenkbefehl (95 %) | Richtung erfuellt, Haerte am unteren Rand (siehe unten) |
-| Asphalt: feine Textur | Ruetteln max **0,131** @ 22-42 Hz | erfuellt (Soll 0,05-0,12; Spitze 9 % darueber) |
-| Kerb: hart und schnell | **0,534** @ 21-27 Hz (35 Ticks) | erfuellt, aber nur bei 60-100 km/h beruehrt |
-| Kies: grobes Mahlen | **0,273** @ 8-12 Hz (789 Ticks) | erfuellt, dumpf und langsam |
-| Blockierende Vorderraeder: leicht + Rattern | 228 Ticks: Kraft **max 0,175**, Rattern **0,700 @ 29-34 Hz** | erfuellt: "leicht und tot" |
-| Schalten: kurzer Anschlag | 421 Pulse, Schaltstoesse 0,45 | erfuellt |
-| Kein Clipping im Normalbetrieb | **0 Ticks** ueber 0,97 (max 0,584) | erfuellt |
-| Soft Lock | in dieser Fahrt nicht beruehrt (0 Ticks) | offen (Rangieren, nicht Rennfahrt) |
-| Untersteuern: Kraft bricht ein | in dieser Fahrt kein Tick mit `understeer > 0,3` | offen - der Autopilot faehrt nicht ueber den Peak |
+| Geradeaus schnell: ruhig, Grundgewicht | n=381 (nur Asphalt): Kraft max **0,031**, Daempfung min **0,244**, Ruetteln max **0,131** @ 22-42 Hz | erfuellt |
+| Bogen 3-4 g: schwer, gegen den Lenkbefehl | n=469 ab 3 g (Spitze 3,97 g): Kraft **Mittel 0,452**, **max 0,673**; **2390 von 2508** Bogen-Ticks druecken gegen den Lenkbefehl (95 %) | Richtung erfuellt, Haerte am unteren Rand (siehe unten) |
+| Enger Bogen, Vorderachse am Limit: bricht ein | **Untersteuern** n=152: Kraft **Mittel 0,075** gegenueber 0,452 im Bogen = **83 % leichter** | erfuellt (Soll: 30-60 % leichter) |
+| Vorderrad blockiert: leicht/tot + Rattern | n=262, Kraft max **0,215**; als lauteste Quelle **0,700 @ 29-34 Hz** (177 Ticks) | erfuellt |
+| Kerb: hart und schnell | **0,795** @ 27-37 Hz (17 Ticks) | erfuellt (Soll 0,6-0,9) |
+| Kies: grobes Mahlen | **0,399** @ 8-15 Hz (815 Ticks) | erfuellt (Soll 0,3-0,5; 9-14 Hz) |
+| Asphalt: feine Textur | max **0,131** @ 22-42 Hz | Spitze 9 % ueber dem Soll-Band (0,05-0,12) |
+| Schalten / Bodenwelle / Aufprall | 614 Pulse: Schalten 539, Aufprall 42, Bodenwelle 33 | erfuellt |
+| Kein Clipping im Normalbetrieb | **0 von 6990** Ticks ueber 0,97 (Kraft max 0,673) | erfuellt |
+| Am Lenkanschlag (Soft Lock) | **0 Ticks** - der Soft Lock braucht den Lenkdruck des Fahrers (`lock_pressure` kommt aus dem G29) | headless nicht messbar, nur im Fuehltest |
+| Stillstand: keine Kraft | Abschnitte B3/C: Kraft 0,000-0,167 | erfuellt |
 
 ## Der Fund, der bleibt: die Bogenkraft haengt an der Staerke-Einstellung
 
-Mit der Werkseinstellung **75 %** liegt der schnelle Bogen bei 0,455 (Mittel) /
-0,584 (Spitze) - die Soll-Tabelle nennt 0,55-0,75. Dieselbe Sonde mit
-`APEX_LAP_GAIN=1.0` gemessen (ein Lauf, gleiche Strecke):
+Mit der Werkseinstellung **75 %** liegt der schnelle Bogen bei 0,452 (Mittel) /
+0,673 (Spitze) - die Soll-Tabelle nennt 0,55-0,75. Dieselbe Sonde mit
+`APEX_LAP_GAIN` (jedes Mal ein Lauf, gleiche Strecke, gleiche Fahrweise, gleiche
+Abschnitte):
 
 ```text
-Staerke  75 %: Bogen ab 3 g  Kraft Mittel 0,455  max 0,584   Clipping-Ticks 0
-Staerke 100 %: Bogen ab 3 g  Kraft Mittel 0,607  max 0,779   Clipping-Ticks 0
+Staerke  75 % (Werk): Bogen ab 3 g  Mittel 0,452  max 0,673   Clipping 0
+Staerke  85 %       : Bogen ab 3 g  Mittel 0,512  max 0,763   Clipping 0
+Staerke 100 %       : Bogen ab 3 g  Mittel 0,603  max 0,898   Clipping 0
 ```
 
-Mit **Staerke 100 %** liegt der Bogen also mitten in der Soll-Tabelle, und es
-klebt trotzdem nichts am Anschlag (0 von 6690 Ticks ueber 0,97) - die weiche
-Begrenzung (SOFT_KNEE 0,72 / SOFT_CEIL 0,90) greift. Das ist kein
-Rechenfehler, sondern die Entscheidung "Kopfraum fuer Einschlaege": der Deckel
-liegt bewusst unter der Anschlaggrenze, sonst verschluckt die Grundkraft den
-Einschlag. **Der Regler im Menue ist damit die ehrliche Antwort auf "das
-Lenkrad ist mir zu leicht": `Staerke` auf 100 %.**
+Damit ist der Regler keine Gefuehlsfrage mehr, sondern gemessen:
+
+* **85 %** trifft die Soll-Tabelle (0,55-0,75) mit der Spitze genau und laesst
+  noch Kopfraum bis zum Deckel (0,90) fuer Einschlaege.
+* **100 %** fuellt den Deckel aus (0,898 von 0,90). Der Bogen ist dann am
+  schwersten, aber ein Einschlag hat kaum noch Platz, obwohl er weiterhin nicht
+  gekappt wird (0 Clipping-Ticks).
+* **75 %** (Werkseinstellung) ist bewusst die zahmere Wahl: die Spitze bleibt
+  bei 0,673, also rund 10 % unter dem Soll-Band.
+
+Das ist die Entscheidung aus Welle 2 ("Kopfraum fuer Einschlaege": Grundkraft
+0,93 liess den Einschlag verschwinden). **Wenn sich der Bogen zu leicht
+anfuehlt: `Staerke` im Menue auf 100 % - gemessen 0,603 statt 0,452 im Mittel,
+ohne Clipping.**
 
 ## Was diese Welle nicht beweist
 
-* **Eine** Runde, **eine** Fahrweise (Autopilot). Ein Fahrer am Limit fahrt
-  spaeter, haerter und haeufiger ueber den Kerb.
-* Kerb und Kies wurden nur bei 60-100 km/h beruehrt. Die Baender bei 120 km/h
-  sind im Modell gemessen (`tests/test_ffb_model.gd`), in der Szene nicht.
-* Untersteuern und Soft Lock kamen in dieser Fahrt nicht vor - sie sind weiter
-  nur synthetisch (und im Fuehltest `--demo`) belegt.
+* **Fuenf Abschnitte, ein Lauf, eine Fahrweise.** Wiederholungen koennen
+  streuen; die Zahlen sind Momentaufnahmen einer Messung, nicht Mittelwerte.
+* **Kerb und Kies** wurden in der Runde selbst kaum beruehrt (4 Ticks Kerb in
+  5400); die belastbaren Kerb-/Kies-Zahlen stammen aus den Abschnitten B2 und
+  C, die absichtlich hinausfahren.
+* **Untersteuern** ist in Abschnitt D gemessen - gestellte Ausgangslage
+  (252 km/h auf der Linie), danach echte Physik. Kein Fahrer hat das Auto
+  absichtlich ins Untersteuern getrieben.
+* **Soft Lock** und **Stillstand ohne Motor** brauchen den Lenkdruck des
+  Fahrers bzw. einen Fensterstart - headless nicht messbar.
 * Ueber das **Gefuehl** sagt keine Zahl etwas. Das bleibt der Fahrtest am
-  eigenen Lenkrad.
+  eigenen Lenkrad (`Apex Circuit FFB starten.cmd` bzw. `--demo`).

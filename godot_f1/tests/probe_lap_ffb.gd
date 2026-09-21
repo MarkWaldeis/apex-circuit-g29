@@ -15,6 +15,8 @@ extends SceneTree
 ##
 ## Drei Abschnitte:
 ##   A  reale Runde  - das Auto faehrt mit dem Autopiloten die Ideallinie
+##   D  Untersteuern - Vollgas und voller Lenkeinschlag bei Tempo, die
+##                     Vorderachse geht ueber ihren Peak
 ##   B  Bremsprobe   - Vollbremsung aus hoher Geschwindigkeit (blockierende
 ##                     Vorderraeder koennen nur hier auftreten, nicht auf der
 ##                     Ideallinie)
@@ -32,6 +34,7 @@ const RacingLine = preload("res://scripts/racing_line.gd")
 ## Abschnittsgrenzen in Physik-Frames (60 Hz).
 var warmup_frames: int = 6
 var lap_frames: int = 5400
+var under_frames: int = 300
 var brake_gas_frames: int = 420
 var brake_frames: int = 150
 var wide_frames: int = 600
@@ -109,6 +112,13 @@ var lock_torque_max: float = 0.0
 var lock_rumble_max: float = 0.0
 var lock_hz_min: float = 999.0
 var lock_hz_max: float = 0.0
+## Nur die Ticks, in denen das Rattern des blockierenden Rads auch die
+## **lauteste** Quelle ist - sonst mischt sich ein Kerb oder ein Einschlag in
+## die Zahl und der Bericht behauptet etwas, das er nicht gemessen hat.
+var lock_src_n: int = 0
+var lock_src_rumble_max: float = 0.0
+var lock_src_hz_min: float = 999.0
+var lock_src_hz_max: float = 0.0
 
 var pulse_n: int = 0
 var pulse_max: float = 0.0
@@ -249,7 +259,8 @@ func _trace() -> void:
 func _switch_phase() -> void:
 	var a_end: int = warmup_frames + lap_frames
 	var b1_end: int = a_end + brake_gas_frames
-	var b2_end: int = b1_end + brake_frames
+	var d_end: int = b1_end + under_frames
+	var b2_end: int = d_end + brake_frames
 	var b3_end: int = b2_end + quiet_frames
 	var c_end: int = b3_end + wide_frames
 	var want: String = phase
@@ -257,6 +268,8 @@ func _switch_phase() -> void:
 		want = "A"
 	elif frames <= b1_end:
 		want = "B1"
+	elif frames <= d_end:
+		want = "D"
 	elif frames <= b2_end:
 		want = "B2"
 	elif frames <= b3_end:
@@ -277,6 +290,19 @@ func _switch_phase() -> void:
 			# Von Hand fahren: der Autopilot wuerde bremsen und die Ideallinie
 			# halten, genau das soll hier nicht passieren.
 			player.auto_drive = false
+		if want == "D":
+			# Kontrollierte Ausgangslage: zurueck auf die Linie und mit 70 m/s
+			# (252 km/h) hinein - was danach passiert, ist echte Physik auf der
+			# echten Strecke (kein gestelltes `ctx`).
+			player.auto_drive = false
+			_launch(70.0)
+		if want == "C":
+			_launch(45.0)
+		if want == "B2":
+			# Die Bremsprobe braucht Tempo: nach dem Untersteuer-Abschnitt liegt
+			# das Auto im Kies (im Lauf davor bremste es aus 6 km/h, was keine
+			# Blockier-Messung ist).
+			_launch(70.0)
 		phase = want
 	# Zurueck an den Anfang der Runde (nach dem Block) fuer den Quer-Abschnitt:
 	# erst die Messungen, dann die Fahrt.
@@ -290,6 +316,11 @@ func _drive() -> void:
 			# das Auto schon in der ersten Kurve ins Kies gefahren und die
 			# Bremsprobe waere aus 4 km/h passiert (im ersten Lauf genau so).
 			player.auto_drive = true
+		"D":
+			player.auto_drive = false
+			Input.action_release("brake")
+			Input.action_press("throttle", 1.0)
+			Input.action_press("steer_right", 1.0)
 		"B2":
 			player.auto_drive = false
 			Input.action_release("throttle")
@@ -307,7 +338,18 @@ func _drive() -> void:
 
 
 func _total_frames() -> int:
-	return warmup_frames + lap_frames + brake_gas_frames + brake_frames + quiet_frames + wide_frames
+	return warmup_frames + lap_frames + brake_gas_frames + under_frames + brake_frames \
+		+ quiet_frames + wide_frames
+
+
+## Auto auf die Linie setzen und mit `speed` m/s in Fahrtrichtung anstossen.
+## Nur die **Ausgangslage** ist gestellt; die Fahrt danach ist echte Physik.
+func _launch(speed: float) -> void:
+	if player == null:
+		return
+	player.rejoin_to_line()
+	player.linear_velocity = player.global_transform.basis.z * speed
+	player.angular_velocity = Vector3.ZERO
 
 
 ## Genau die Zahlen lesen, die `ffb_link.gd` gerade an den Helfer schickt.
@@ -396,7 +438,9 @@ func _sample() -> void:
 		asphalt_hz_max = maxf(asphalt_hz_max, hz)
 
 	# --- Geradeaus schnell: Grundgewicht, Ruhe ------------------------------
-	if speed > 55.0 and absf(lat) < 0.5:
+	# Nur Ticks, in denen die Asphalt-Textur die lauteste Quelle ist: sonst
+	# zaehlt hier ein Wandkontakt aus einem spaeteren Abschnitt mit.
+	if speed > 55.0 and absf(lat) < 0.5 and source == "Asphalt":
 		straight_n += 1
 		straight_torque_max = maxf(straight_torque_max, absf(torque))
 		straight_damper_min = minf(straight_damper_min, float(model.damper))
@@ -436,6 +480,11 @@ func _sample() -> void:
 		lock_rumble_max = maxf(lock_rumble_max, rumble)
 		lock_hz_min = minf(lock_hz_min, hz)
 		lock_hz_max = maxf(lock_hz_max, hz)
+		if source == "Blockiert":
+			lock_src_n += 1
+			lock_src_rumble_max = maxf(lock_src_rumble_max, rumble)
+			lock_src_hz_min = minf(lock_src_hz_min, hz)
+			lock_src_hz_max = maxf(lock_src_hz_max, hz)
 
 	# --- Kerb und Kies -----------------------------------------------------
 	if source == "Kerb":
@@ -505,7 +554,7 @@ func _finish() -> void:
 		ai_slow_n, maxi(frames - 600, 1),
 	])
 	print("LAP_FFB KI-Auto Querabstand max=%.2f m" % ai_off_max)
-	for key in ["A", "B1", "B2", "B3", "C"]:
+	for key in ["A", "B1", "D", "B2", "B3", "C"]:
 		if not phases.has(key):
 			continue
 		var ph: Dictionary = phases[key]
@@ -518,8 +567,8 @@ func _finish() -> void:
 		under_n, under_torque_max,
 		(under_torque_sum / float(under_n)) if under_n > 0 else 0.0,
 	])
-	print("LAP_FFB Blockieren n=%d Kraft max=%.3f Ruetteln max=%.3f Hz %.0f..%.0f" % [
-		lock_n, lock_torque_max, lock_rumble_max, lock_hz_min, lock_hz_max,
+	print("LAP_FFB Blockieren n=%d Kraft max=%.3f (Quelle 'Blockiert': n=%d Ruetteln %.3f Hz %.0f..%.0f)" % [
+		lock_n, lock_torque_max, lock_src_n, lock_src_rumble_max, lock_src_hz_min, lock_src_hz_max,
 	])
 	print("LAP_FFB Stoesse n=%d max=%.3f Arten=%s" % [pulse_n, pulse_max, str(pulse_kinds)])
 	print("LAP_FFB Anschlag n=%d max=%.3f" % [endstop_n, endstop_max])
@@ -560,10 +609,12 @@ func _finish() -> void:
 		"%d Ticks ueber 0,97 (max %.3f)" % [clip_ticks, clip_max])
 	if lock_n == 0:
 		_note("blockierende_Vorderraeder_kamen_in_dieser_fahrt_nicht_vor")
+	elif lock_src_n == 0:
+		_note("blockierende_Vorderraeder_rattern_nie_als_lauteste_quelle (Kerb oder Einschlag war lauter)")
 	else:
-		_check(lock_rumble_max >= 0.30 and lock_hz_min >= 18.0 and lock_hz_max <= 45.0,
+		_check(lock_src_rumble_max >= 0.30 and lock_src_hz_min >= 18.0 and lock_src_hz_max <= 45.0,
 			"blockierende_raeder_rattern", "%.3f @ %.0f..%.0f Hz" % [
-				lock_rumble_max, lock_hz_min, lock_hz_max])
+				lock_src_rumble_max, lock_src_hz_min, lock_src_hz_max])
 	if kerb_n == 0:
 		_note("kerb_wurde_nicht_beruehrt (der_autopilot_faehrt_die_ideallinie)")
 	else:
