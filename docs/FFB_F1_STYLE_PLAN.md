@@ -374,7 +374,8 @@ Auf der Einstellungen-Seite, Abschnitt „Force Feedback (G29)“:
 | 19 | Die Oberfläche führt, die Unwucht bleibt auf dem Asphalt | `tests/test_ffb_model.gd` §19 + `tests/probe_wave9_loudness.gd`: bei Schaden 1,0 muss auf Kerb `Quelle Kerb` (0,588 @ 29 Hz) und auf Kies `Quelle Kies` (0,300 @ 13 Hz) stehen — vorher stand dort überall `Unwucht 0,750 @ 19 Hz`; auf Asphalt bleibt die Unwucht bei 0,750 |
 | 20 | Ein Stoss ohne Vorzeichen verschwindet nicht in der Invertierung | `invert` dreht `pulse_dir` mit; 0 bleibt 0 (kein Vorzeichen) und wird vom Helfer geklopft, nicht verschluckt |
 | 21 | Die letzte Naht ist gemessen: Paketfeld → DirectInput-Struktur | `--check` mit `_DeviceProbe`: `rumble_hz 30` → `dwPeriod 33333 µs` (= 30,00 Hz), Rütteln 5600/8000, Dämpfung 3500/7000, Reibung 1750/7000; Kies 13 Hz → 76923 µs gegen Kerb 42 Hz → 23809 µs; `invert` dreht die Kraft im Gerät (5000 → −5000); der vorzeichenlose Stoss klopft auch dort (4 Vorzeichenwechsel in 60 ms, Amplitude 3150). Vorher war nur der Loop gemessen — die Sonde ersetzte genau die Setter, die das Gerät schreiben |
-| 22 | Der Fühltest spielt, was das Spiel spielt | `--check` (28 Prüfungen) gegen `DEMO_STAGES`: Rechtsbogen `torque +0,636` (Spielrichtung, vorher −0,62), Untersteuern 21 % davon, blockiert 0,118 + Rattern 0,70 @ 34 Hz, Kerb 0,62 @ 30 Hz gegen Kies 0,32 @ 13 Hz, 18 Stationen vollständig und alle Werte im Protokollbereich |
+| 22 | Der Fühltest spielt, was das Spiel spielt | `--check` (29 Prüfungen) gegen `DEMO_STAGES`: Rechtsbogen `torque +0,636` (Spielrichtung, vorher −0,62), Untersteuern 21 % davon, blockiert 0,118 + Rattern 0,70 @ 34 Hz, Kerb 0,62 @ 30 Hz gegen Kies 0,32 @ 13 Hz, Geradeaus 0,000 (Runde: Mittel 0,003), 18 Stationen vollständig und alle Werte im Protokollbereich |
+| 23 | Der Fühltest **misst** die Richtung am eigenen Rad | `--demo` liest während jeder Station die Radachse, vergleicht sie mit der Ruhelage davor und prüft die Stufen mit Erwartung (`DEMO_WHEEL_EXPECT`). Am 21.09.2026 am G29: Standstill `−0,010..0,000` = **ruhe**, Geradeaus `−0,010..−0,010` = **ruhe**, Rechtsbogen `−0,900..−0,010` = **links** (gegen den Lenkbefehl), Einschlag `−1,000` = **links** → `DEMO_RESULT PASS 18 Stationen, davon 3 mit gemessener Radbewegung in der erwarteten Richtung`; eine falsche Richtung lässt die Demo **fehlschlagen** (Exit 1) |
 
 ## 5. Prüfwellen (fremde Agenten, kritisch)
 
@@ -1035,3 +1036,38 @@ Richtungsprüfung falsifizierbar. **28 Prüfungen, 0 Mängel.**
 Falsifizierbarkeit nachgewiesen (nicht nur behauptet): mit der alten Zahl
 −0,62 bzw. 0,85 am Kerb wird die jeweilige Prüfung **rot** (`False`), und ohne
 die Anschlag-Station meldet die Abdeckungsprüfung „fehlend: ['Anschlag']".
+
+## 13.1 Der Fühltest misst jetzt selbst — und ein Fehler in der neuen Tabelle
+
+`--demo` liest während jeder Station die Radachse (Ruhelage vor der ersten
+Kraft, dann 10 Hz), druckt die Auslenkung und **prüft** die Stufen, bei denen
+die Richtung vorhersagbar ist (`DEMO_WHEEL_EXPECT`: Rechtsbogen und Einschlag
+»links«, Schrittgeschwindigkeit »ruhe«). Am echten G29 gemessen:
+
+```text
+[demo] Geradeaus, Schrittgeschwindigkeit:  Rad: -0.010 .. +0.000 -> ruhe
+                                                OK Rad ruhe erwartet -> gemessen ruhe
+[demo] Geradeaus 250 km/h:                 Rad: -0.010 .. -0.010 -> ruhe
+[demo] Schneller Bogen, 3,2 g bei 250 km/h: Rad: -0.900 .. -0.010 -> links
+                                                OK Rad links erwartet -> gemessen links
+[demo] Einschlag in die Wand (voll):       Rad: -1.000 .. -1.000 -> links
+                                                OK Rad links erwartet -> gemessen links
+DEMO_RESULT PASS 18 Stationen, davon 3 mit gemessener Radbewegung in der
+erwarteten Richtung
+```
+
+Damit ist die Kette **Paketwert → DirectInput → Achse** auch für die
+Spielrichtung im Fühltest belegt statt nur für eine rohe Testkraft.
+
+**Ein Fehler, den dieser Lauf in der neuen Tabelle gefunden hat:** die Stufe
+„Geradeaus 250 km/h" trug zuerst `torque 0.097` — der Wert, den
+`probe_demo_stages.gd` mit einem festen synthetischen Schräglauf liefert. Am
+Rad gemessen kroch das Lenkrad damit über die 2 s der Stufe bis an den Anschlag
+(`Rad: -1.000`). Eine **Dauerlast ohne Fahrerhand** schiebt jedes Rad ohne
+Rückstellfeder an den Anschlag; auf einer echten Geraden liefert das Modell
+aber im Mittel **0,003** (Abschnitt 7), weil der Schräglauf um die Null
+schwankt. Die Stufe steht jetzt auf `torque 0.000` (gemessen `Rad: -0.010 ..
+-0.010 = ruhe`), und `--check` hält das mit
+`der_fuehltest_laesst_die_gerade_ruhen` fest. Die Demo sagt dem Fahrer
+ausserdem, dass ein frei gelassenes Rad bei Dauerlast bis an den Anschlag
+wandert — das ist der fehlende Fahrer, nicht eine falsche Kraft.

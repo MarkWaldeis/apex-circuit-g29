@@ -2093,6 +2093,16 @@ def check_chain(rate: float = 200.0) -> int:
           "der_fuehltest_zeigt_kerb_schnell_und_kies_grob",
           f"Kerb {float(kerb_demo['rumble']):.2f} @ {float(kerb_demo['rumble_hz']):.0f} Hz, "
           f"Kies {float(gravel_demo['rumble']):.2f} @ {float(gravel_demo['rumble_hz']):.0f} Hz")
+    # Die Gerade muss **ruhen**. Ein fester Schraeglauf ergaebe 0,097 - eine
+    # Dauerlast, die ein frei gelassenes Rad langsam an den Anschlag schiebt
+    # (am 21.09.2026 im Fuehltest genau so gemessen). Auf einer echten Geraden
+    # liefert das Modell im Mittel 0,003 (Spitze 0,042, Abschnitt 7).
+    straight_demo = _demo_stage("Geradeaus 250")
+    check(abs(float(straight_demo["torque"])) < 0.02
+          and float(straight_demo["damper"]) > 0.25,
+          "der_fuehltest_laesst_die_gerade_ruhen",
+          f"Geradeaus 250 km/h: torque {float(straight_demo['torque']):+.3f} "
+          f"(Runde: Mittel 0,003), Daempfung {float(straight_demo['damper']):.3f}")
     missing = [needle for needle in
                ("Bogen", "Untersteuern", "Kerb", "Kies", "Gras", "blockieren", "Kuppe",
                 "Bodenwelle", "drehen durch", "Schaltstoss in der Kurve",
@@ -2314,11 +2324,22 @@ def check_chain(rate: float = 200.0) -> int:
 ## Die Kraftrichtung folgt trotzdem der Einstellung des Fahrers: steht in
 ## `ffb_settings.json` `invert: false`, dreht `demo()` die Tabelle genauso wie
 ## das Spiel es taete.
+##
+## Zwei Werte sind **nicht** direkt aus `probe_demo_stages.gd`, sondern aus der
+## Rundenmessung (`docs/FFB_F1_STYLE_PLAN.md`, Abschnitt 7):
+## * "Geradeaus 250 km/h" traegt `torque 0.000`, weil das Modell auf einer
+##   echten Geraden im Mittel 0,003 liefert (Spitze 0,042). Eine einzelne
+##   synthetische Gerade mit festem Schraeglauf ergaebe 0,097 - und eine
+##   **Dauerlast** von 0,097 schiebt ein Rad ohne Fahrerhand langsam an den
+##   Anschlag. Gemessen im Fuehltest am 21.09.2026 genau so passiert.
+## * Die Demo zeigt deshalb auch: solange eine Last anliegt, wandert ein frei
+##   gelassenes Rad an den Anschlag - das ist keine falsche Kraft, sondern der
+##   fehlende Fahrer, der sie haelt.
 DEMO_STAGES = [
     (1.6, "Geradeaus, Schrittgeschwindigkeit: lose, nur Reibung",
      {"torque": 0.000, "damper": 0.078, "fric": 0.171, "rumble": 0.044, "rumble_hz": 22.8}),
     (2.0, "Geradeaus 250 km/h: Grundgewicht, kein Zappeln",
-     {"torque": 0.097, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
+     {"torque": 0.000, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
     (2.6, "Schneller Bogen, 3,2 g bei 250 km/h: schwer, drueckt GEGEN den Lenkbefehl",
      {"torque": 0.636, "damper": 0.309, "fric": 0.090, "rumble": 0.121, "rumble_hz": 39.8}),
     (2.6, "Vorderachse geht weg (Untersteuern): Lenkrad wird leicht",
@@ -2390,6 +2411,30 @@ def _demo_stage(needle: str) -> dict:
     raise KeyError(f"keine Demostufe mit {needle!r}")
 
 
+## Was am **echten** Rad passieren muss, wenn die Demo diese Stufe spielt.
+##
+## Die Kraftrichtung ist am G29 gemessen (positive DirectInput-Kraft dreht nach
+## links, `docs/reviews/ffb_wave7_ownership.md`) - und die Demo spielt die
+## Paketwerte des Spiels. Also muss der Fahrer im Rechtsbogen das Rad nach
+## LINKS gedrueckt fuehlen (Gegenkraft gegen den Lenkbefehl), im Stillstand darf
+## es sich nicht bewegen. `demo()` misst das selbst und meldet es als
+## Pruefung - damit ist der Fuehltest nicht nur ein Gefuehl, sondern eine
+## Messung am eigenen Lenkrad.
+DEMO_WHEEL_EXPECT = {
+    "Schneller Bogen": "links",
+    "Einschlag in die Wand (voll)": "links",
+    "Geradeaus, Schrittgeschwindigkeit": "ruhe",
+}
+
+
+def _wheel_side(deviation: float) -> str:
+    if deviation < -0.10:
+        return "links"
+    if deviation > 0.10:
+        return "rechts"
+    return "ruhe"
+
+
 def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
          gain: float, name_filter=None) -> int:
     """Fuehltest am echten Lenkrad, ohne das Spiel zu starten."""
@@ -2405,7 +2450,6 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
         print("[demo] ohne Effekte gibt es nichts zu fuehlen - Ende")
         wheel.close()
         return 1
-    print("[demo] Haende locker lassen: das Lenkrad bewegt sich von selbst.")
     # Die Tabelle steht in den Paketwerten des ausgelieferten Standards
     # (`invert: true`). Steht in den Einstellungen des Fahrers etwas anderes,
     # muss die Demo genauso drehen wie das Spiel - sonst fuehlt der Fahrer hier
@@ -2421,9 +2465,28 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
     if invert:
         print("[demo] ACHTUNG: --invert dreht zusaetzlich - die Richtung ist "
               "dann NICHT mehr die des Spiels (nur zur Diagnose).")
+    print("[demo] Haende locker lassen: das Lenkrad bewegt sich von selbst - "
+          "und wandert bei einer Dauerlast bis an den Anschlag, weil niemand "
+          "gegenhaelt. Genau das machen deine Haende im Rennen.")
+    # Ruhelage VOR der ersten Kraft: die Vergleichsmitte fuer die Messung der
+    # Radbewegung. Ein Rad, das schief stehen gelassen wurde, verfaelscht damit
+    # nichts.
+    rest: float = -1.0
+    start_axis = wheel.read_axis()
+    if start_axis is not None:
+        rest = float(start_axis)
+        print("[demo] Ruhelage der Achse: %d" % int(rest))
+    else:
+        print("[demo] Achse liefert keine Daten - die Richtungsmessung faellt aus "
+              "(das Rad kann trotzdem Kraft geben).")
     period = 1.0 / max(rate, 20.0)
     live = {"torque": 0.0, "damper": 0.0, "fric": 0.0, "rumble": 0.0,
             "rumble_hz": 24.0, "pulse": 0.0, "pulse_dir": 0.0, "spring": 0.0}
+    ## Stationen, deren Radbewegung wirklich gemessen wurde, und die, in denen
+    ## sie falsch war. Ein Fuehltest, der die Richtung falsch zeigt, muss auch
+    ## **fehlschlagen** - sonst ist er nur eine Vorfuehrung.
+    wheel_failures: list = []
+    measured_stages: int = 0
     try:
         for seconds, label, stage in DEMO_STAGES:
             print(f"[demo] {label}  ({seconds:.1f} s)")
@@ -2433,6 +2496,8 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
             if "pulse" in stage:
                 live["pulse"] = float(stage["pulse"])
                 live["pulse_dir"] = float(stage.get("pulse_dir", -1.0))
+            samples: list = []
+            next_sample: float = 0.0
             deadline = time.time() + seconds
             while time.time() < deadline:
                 live["torque"] = _slew(live["torque"], float(target["torque"]), period)
@@ -2444,13 +2509,46 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
                 wheel.apply(live["torque"] * sign, live["damper"], live["fric"],
                             live["rumble"], live["pulse"], invert, live["spring"],
                             live["rumble_hz"], gain, live["pulse_dir"] * sign)
+                now = time.time()
+                if rest >= 0.0 and now >= next_sample:
+                    next_sample = now + 0.1
+                    raw = wheel.read_axis()
+                    if raw is not None:
+                        samples.append((float(raw) - rest) / 32767.0)
                 time.sleep(period)
+            expectation = ""
+            for needle, want in DEMO_WHEEL_EXPECT.items():
+                if needle.lower() in label.lower():
+                    expectation = want
+            if samples:
+                low = float(min(samples))
+                high = float(max(samples))
+                side = _wheel_side(low if abs(low) > abs(high) else high)
+                print(f"[demo]   Rad: {low:+.3f} .. {high:+.3f} -> {side}")
+                if expectation:
+                    ok = (side == expectation) if expectation == "ruhe" else (
+                        expectation in side)
+                    measured_stages += 1
+                    print("[demo]   %s Rad %s erwartet -> gemessen %s" % (
+                        "OK  " if ok else "FAIL", expectation, side))
+                    if not ok:
+                        wheel_failures.append(label)
     except KeyboardInterrupt:
         print("\n[demo] abgebrochen")
     finally:
         wheel.apply(0.0, 0.0, 0.0, 0.0, 0.0, invert)
         wheel.close()
     print("[demo] fertig - Kraft losgelassen")
+    if wheel_failures:
+        print("DEMO_RESULT FAIL %d Stationen mit falscher Radbewegung: %s" % (
+            len(wheel_failures), "; ".join(wheel_failures)))
+        return 1
+    if rest >= 0.0 and measured_stages > 0:
+        print("DEMO_RESULT PASS %d Stationen, davon %d mit gemessener Radbewegung "
+              "in der erwarteten Richtung" % (len(DEMO_STAGES), measured_stages))
+    else:
+        print("DEMO_RESULT PASS %d Stationen gespielt (ohne Achsendaten keine "
+              "Richtungsmessung)" % len(DEMO_STAGES))
     return 0
 
 
