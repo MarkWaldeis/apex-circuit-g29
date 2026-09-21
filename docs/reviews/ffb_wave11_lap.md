@@ -31,11 +31,12 @@ Physik-Schritt bleibt 1/60 s. Sechs Abschnitte:
 | B1 | beschleunigen auf der Linie | nach A |
 | D | **Untersteuern**: Vollgas und voller Lenkeinschlag bei 252 km/h | auf die Linie gesetzt, 70 m/s angestossen |
 | E | **Uebersteuern**: Vollgas im langsamen Bogen, Traktionskontrolle aus | auf die Linie gesetzt, 18 m/s |
+| F | **Anschlag**: am Lenkanschlag stehen, Lenkdruck in fuenf Stufen | auf die Linie gesetzt, 15 m/s, `script_lock` 0,2 → 1,0 |
 | B2 | **Blockieren**: Vollbremsung mit Lenkeinschlag | auf die Linie gesetzt, 70 m/s |
 | B3 | ausrollen | nach B2 |
 | C | **weit hinaus**: Kerb, Kies, Wandkontakt | auf die Linie gesetzt, 45 m/s |
 
-Nur die **Ausgangslage** der Abschnitte D, E, B2 und C ist gestellt (zurueck auf
+Nur die **Ausgangslage** der Abschnitte D, E, F, B2 und C ist gestellt (zurueck auf
 die Linie, angestossen). Was danach gemessen wird, ist echte Physik auf der
 echten Strecke, kein gestelltes `ctx`.
 
@@ -119,25 +120,36 @@ haetten, das sie nicht gemessen haben:
 
 ## Fund 3: mein Uebersteuer-Test war falsch angesetzt
 
-Nachdem Abschnitt E (Vollgas im langsamen Bogen, Traktionskontrolle aus)
-**282 Uebersteuer-Ticks** lieferte, forderte mein erster Test fuer **jeden**
-dieser Ticks, dass die Kraft in die Gegenlenkrichtung dreht. Ergebnis: 66 von
-282 - und der Test schlug fehl. Der Fehler lag im Test, nicht im Modell: die
-Soll-Tabelle nennt die Umdrehung fuer den Moment, in dem der **Schlupfwinkel
-der Vorderraeder durch die Null** dreht. Solange das nicht passiert ist,
-drueckt die Vorderachse weiter gegen den Lenkbefehl - das ist die Kraft, mit
-der man den Wagen ueberhaupt erst faengt.
+Abschnitt E (Vollgas im langsamen Bogen, Traktionskontrolle aus) liefert in
+jeder Messung rund **290 Uebersteuer-Ticks**. Hier habe ich mich **zweimal**
+vertan, und beide Fehler standen zwischenzeitlich als "belegt" im Bericht:
 
-Getrennt gezaehlt (dieselbe Messung, dieselben Ticks):
+1. Der erste Test forderte die Kraftumkehr fuer **jeden** Uebersteuer-Tick
+   (66 von 282). Die Soll-Tabelle meint aber den Moment, in dem die
+   Vorderachse durch die Null geht.
+2. Der zweite Test glaubte, das sei damit erledigt - und lieferte 64 von 67
+   (96 %). Diese Zahl war ein **Artefakt meiner Zuordnung**: das Vorzeichen des
+   Lenkbefehls ist nicht das Vorzeichen des Lenkwinkels (`car_controller.gd`
+   spiegelt den Befehl genau einmal, "positiv = rechts" am Rad, "+steering"
+   aber nach links). Mit korrigierter Zuordnung bleiben von den 96 % nur
+   28 von 61 Ticks - also nichts, worauf man bauen kann.
+
+Gemessen wird deshalb die Groesse, die die Soll-Tabelle wirklich meint: die
+**ungeglaettete** Grundkraft `sat` (das Nachlauf-Moment, bevor Glaettung,
+Staerke und die Umdrehung fuer das G29 ins Spiel kommen):
 
 ```text
-Uebersteuern n=282  Kraft max 0,604
-  Vorderachse durch die Null: n=67  davon dreht die Kraft mit: 64 (96 %)
-  noch nicht durch         : n=215 davon drueckt sie gegen    : 213 (99 %)
+Uebersteuern n=290  Kraft max 0,604
+  Grundkraft sat mit dem Lenkbefehl (Gegenlenkrichtung): 36 Ticks
+  dagegen                                              : 135 Ticks
+  laengste mitlaufende Phase                           : 0,28 s
+  Glaettung laeuft der Umkehr nach                     : 20 von 290 Ticks (45 ms)
 ```
 
-Beide Aussagen sind jetzt einzeln geprueft, und die Zeile der Soll-Tabelle ist
-damit **in echter Fahrt** belegt statt nur synthetisch.
+Damit ist belegt: **die Umdrehung passiert in echter Fahrt** - bis zu 0,28 s
+lang zieht die Vorderachse in die Gegenlenkrichtung. Und ebenso belegt: sie
+kommt nicht in jedem Tick an, sondern mit der Glaettung (45 ms) verspaetet.
+Beides steht so im Pruefbericht, nichts davon als "immer".
 
 ## Die Soll-Tabelle in echter Fahrt
 
@@ -149,14 +161,14 @@ Standardeinstellungen (`Staerke 75 %`, `invert = true`, `400 Grad`):
 | Geradeaus schnell: ruhig, Grundgewicht | n=381 (nur Asphalt): Kraft max **0,031**, Daempfung min **0,244**, Ruetteln max **0,131** @ 22-42 Hz | erfuellt |
 | Bogen 3-4 g: schwer, gegen den Lenkbefehl | n=469 ab 3 g (Spitze 3,97 g): Kraft **Mittel 0,452**, **max 0,673**; **2390 von 2508** Bogen-Ticks druecken gegen den Lenkbefehl (95 %) | Richtung erfuellt, Haerte am unteren Rand (siehe unten) |
 | Enger Bogen, Vorderachse am Limit: bricht ein | **Untersteuern** n=152: Kraft **Mittel 0,075** gegenueber 0,452 im Bogen = **83 % leichter** | erfuellt (Soll: 30-60 % leichter) |
-| Heck bricht aus: Kraft dreht in die Gegenlenkrichtung | **Uebersteuern** n=282: mit Vorderachse durch die Null **64 von 67 (96 %)** gedreht, vorher **213 von 215 (99 %)** gegen den Lenkbefehl; durchdrehende Raeder 213 Ticks, Ruetteln max **0,833** | erfuellt, und zwar genau in dem Moment, den die Soll-Tabelle nennt |
+| Heck bricht aus: Kraft dreht in die Gegenlenkrichtung | **Uebersteuern** n=290: Grundkraft `sat` mit dem Lenkbefehl in **36** Ticks (laengste Phase **0,28 s**), gegen den Lenkbefehl in 135; durchdrehende Raeder 213 Ticks, Ruetteln max **0,833** | erfuellt (bis 0,28 s Gegenlenkrichtung), aber mit **45 ms Glaettungsverzoegerung** in 20 Ticks |
 | Vorderrad blockiert: leicht/tot + Rattern | n=262, Kraft max **0,215**; als lauteste Quelle **0,700 @ 29-34 Hz** (177 Ticks) | erfuellt |
 | Kerb: hart und schnell | **0,795** @ 27-37 Hz (17 Ticks) | erfuellt (Soll 0,6-0,9) |
 | Kies: grobes Mahlen | **0,399** @ 8-15 Hz (815 Ticks) | erfuellt (Soll 0,3-0,5; 9-14 Hz) |
 | Asphalt: feine Textur | max **0,131** @ 22-42 Hz | Spitze 9 % ueber dem Soll-Band (0,05-0,12) |
 | Schalten / Bodenwelle / Aufprall | 614 Pulse: Schalten 539, Aufprall 42, Bodenwelle 33 | erfuellt |
 | Kein Clipping im Normalbetrieb | **0 von 6990** Ticks ueber 0,97 (Kraft max 0,673) | erfuellt |
-| Am Lenkanschlag (Soft Lock) | **0 Ticks** - der Soft Lock braucht den Lenkdruck des Fahrers (`lock_pressure` kommt aus dem G29) | headless nicht messbar, nur im Fuehltest |
+| Am Lenkanschlag (Soft Lock) | **in der Szene gemessen** mit gestelltem Lenkdruck (`script_lock`, 15 m/s, 240 Ticks): Druck 0,2 → Kraft Mittel **0,173**, 0,4 → 0,281, 0,6 → 0,281, 0,8 → **0,448**, 1,0 → **0,537** (Spitze 0,782); 0 Rueckfaelle ueber 0,02 | erfuellt: die Wand wird mit dem Druck monoton staerker. Der Druck kommt im Spiel aus dem G29, hier wurde er gestellt | 
 | Stillstand: keine Kraft | Abschnitte B3/C: Kraft 0,000-0,167 | erfuellt |
 
 ## Der Fund, der bleibt: die Bogenkraft haengt an der Staerke-Einstellung
@@ -205,7 +217,10 @@ ohne Clipping. Noch mehr Kraft gibt 100 % (0,603), dann aber ohne Kopfraum.**
   und die Traktionskontrolle war in Abschnitt E **aus** - im Spiel ist sie
   standardmaessig an (`spin` wird dann mit 0,25 gerechnet, das Ausbrechen ist
   also seltener und leiser).
-* **Soft Lock** und **Stillstand ohne Motor** brauchen den Lenkdruck des
-  Fahrers bzw. einen Fensterstart - headless nicht messbar.
+* **Soft Lock**: gemessen mit **gestelltem** Lenkdruck (`script_lock`). Im Spiel
+  kommt der Druck aus dem G29; ob sich die Wand bei *deinem* Rad so anfuehlt,
+  entscheidet der Fuehltest.
+* **Stillstand ohne Motor** braucht einen Fensterstart - headless nicht messbar
+  (im Fuehltest `--demo` enthalten).
 * Ueber das **Gefuehl** sagt keine Zahl etwas. Das bleibt der Fahrtest am
   eigenen Lenkrad (`Apex Circuit FFB starten.cmd` bzw. `--demo`).

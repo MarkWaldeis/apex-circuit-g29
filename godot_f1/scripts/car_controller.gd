@@ -644,6 +644,13 @@ func _physics_process(delta: float) -> void:
 	last_steer = steer_cmd
 	# Wie weit draengt der Fahrer ueber den Lenkanschlag hinaus? (0 = frei)
 	lock_pressure = _wheel_lock()
+	if has_meta("script_lock"):
+		# Pruefhaken: der Lenkdruck kommt sonst aus dem G29 (`_wheel_lock()`).
+		# Ohne Rad am Platz ist der Anschlag headless sonst nicht messbar -
+		# `tests/probe_lap_ffb.gd` faehrt damit in der echten Szene an den
+		# Anschlag, ohne dass sich am Modell etwas aendert (wie
+		# `script_throttle`/`script_brake`).
+		lock_pressure = clampf(float(get_meta("script_lock")), 0.0, 1.0)
 	_animate_wheels(delta, forward_vel)
 
 	var engage := 1.0 - clampf(clutch_in, 0.0, 1.0)

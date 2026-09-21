@@ -19,6 +19,8 @@ extends SceneTree
 ##                     Vorderachse geht ueber ihren Peak
 ##   E  Uebersteuern - Vollgas im langsamen Bogen (Traktionskontrolle aus),
 ##                     das Heck kommt: dreht die Kraft in die Gegenlenkrichtung?
+##   F  Anschlag     - am Lenkanschlag stehen (Lenkdruck gestellt, weil er sonst
+##                     aus dem G29 kommt): steigt die Kraft mit dem Druck?
 ##   B  Bremsprobe   - Vollbremsung aus hoher Geschwindigkeit (blockierende
 ##                     Vorderraeder koennen nur hier auftreten, nicht auf der
 ##                     Ideallinie)
@@ -38,6 +40,7 @@ var warmup_frames: int = 6
 var lap_frames: int = 5400
 var under_frames: int = 300
 var over_frames: int = 240
+var lock_frames: int = 240
 var brake_gas_frames: int = 420
 var brake_frames: int = 150
 var wide_frames: int = 600
@@ -121,9 +124,36 @@ var over_cross_n: int = 0
 var over_cross_help: int = 0
 var over_plain_n: int = 0
 var over_plain_against: int = 0
+## Mittelwerte der **vorzeichenbehafteten** Kraft (phys * Lenkbefehl): negativ
+## heisst "drueckt gegen den Lenkbefehl", positiv heisst "zieht mit". Die
+## Glättung (45 ms) laesst einzelne Ticks kippen - deshalb wird hier der
+## Mittelwert beider Gruppen verglichen statt jeder einzelne Tick.
+var over_cross_signed: float = 0.0
+var over_plain_signed: float = 0.0
+## Wie lange dauert es, bis die Kraft dem Vorzeichen des Vorder-Schlupfs folgt?
+## Die Glaettung (SMOOTH_TAU 45 ms) laesst kurze Nulldurchgaenge verpuffen,
+## deshalb wird hier nach der **Dauer** des Nulldurchgangs getrennt.
+var cross_run: int = 0
+var cross_run_max: int = 0
+var long_cross_n: int = 0
+var long_cross_signed: float = 0.0
+var short_cross_n: int = 0
+var short_cross_signed: float = 0.0
+## Die ungeglaettete Grundkraft `sat` zeigt, wohin die Vorderachse wirklich
+## zieht; `torque` ist die geglaettete (und fuer das G29 gedrehte) Kraft, die am
+## Rad ankommt. Beide werden hier getrennt gezaehlt - sonst verwechselt man den
+## Nulldurchgang mit der Glaettungsverzoegerung.
+var sat_with_n: int = 0
+var sat_against_n: int = 0
+var lag_n: int = 0
+var sat_run: int = 0
+var sat_run_max: int = 0
 var over_torque_max: float = 0.0
 var spin_n: int = 0
 var spin_rumble_max: float = 0.0
+## Soft Lock: je Druckstufe die mittlere Kraft am Rad.
+var lock_stage: Dictionary = {}
+var lock_endstop_max: float = 0.0
 
 var lock_n: int = 0
 var lock_torque_max: float = 0.0
@@ -279,7 +309,8 @@ func _switch_phase() -> void:
 	var b1_end: int = a_end + brake_gas_frames
 	var d_end: int = b1_end + under_frames
 	var e_end: int = d_end + over_frames
-	var b2_end: int = e_end + brake_frames
+	var f_end: int = e_end + lock_frames
+	var b2_end: int = f_end + brake_frames
 	var b3_end: int = b2_end + quiet_frames
 	var c_end: int = b3_end + wide_frames
 	var want: String = phase
@@ -291,6 +322,8 @@ func _switch_phase() -> void:
 		want = "D"
 	elif frames <= e_end:
 		want = "E"
+	elif frames <= f_end:
+		want = "F"
 	elif frames <= b2_end:
 		want = "B2"
 	elif frames <= b3_end:
@@ -330,6 +363,13 @@ func _switch_phase() -> void:
 			# das Auto im Kies (im Lauf davor bremste es aus 6 km/h, was keine
 			# Blockier-Messung ist).
 			_launch(70.0)
+		if want == "F":
+			# Anschlag: der Lenkdruck kommt im echten Spiel aus dem G29, hier
+			# wird er gestellt (0,2 -> 1,0 in fuenf Stufen).
+			player.auto_drive = false
+			_launch(15.0)
+		if want != "F" and player.has_meta("script_lock"):
+			player.remove_meta("script_lock")
 		phase = want
 	# Zurueck an den Anfang der Runde (nach dem Block) fuer den Quer-Abschnitt:
 	# erst die Messungen, dann die Fahrt.
@@ -353,6 +393,14 @@ func _drive() -> void:
 			Input.action_release("brake")
 			Input.action_press("throttle", 1.0)
 			Input.action_press("steer_right", 0.8)
+		"F":
+			player.auto_drive = false
+			Input.action_release("brake")
+			Input.action_press("throttle", 0.35)
+			Input.action_press("steer_right", 1.0)
+			# Fuenf Druckstufen ueber den Abschnitt.
+			var step: int = clampi(int(float(frames - _phase_start("F")) / float(lock_frames) * 5.0), 0, 4)
+			player.set_meta("script_lock", 0.2 + 0.2 * float(step))
 		"B2":
 			player.auto_drive = false
 			Input.action_release("throttle")
@@ -371,7 +419,27 @@ func _drive() -> void:
 
 func _total_frames() -> int:
 	return warmup_frames + lap_frames + brake_gas_frames + under_frames + over_frames \
-		+ brake_frames + quiet_frames + wide_frames
+		+ lock_frames + brake_frames + quiet_frames + wide_frames
+
+
+## Erster Frame eines Abschnitts - der Anschlag-Abschnitt braucht ihn, um seinen
+## Druck hochzuziehen.
+func _phase_start(key: String) -> int:
+	var a_end: int = warmup_frames + lap_frames
+	var b1_end: int = a_end + brake_gas_frames
+	var d_end: int = b1_end + under_frames
+	var e_end: int = d_end + over_frames
+	var f_end: int = e_end + lock_frames
+	match key:
+		"A": return warmup_frames
+		"B1": return a_end
+		"D": return b1_end
+		"E": return d_end
+		"F": return e_end
+		"B2": return f_end
+		"B3": return f_end + brake_frames
+		"C": return f_end + brake_frames + quiet_frames
+	return 0
 
 
 ## Auto auf die Linie setzen und mit `speed` m/s in Fahrtrichtung anstossen.
@@ -511,6 +579,19 @@ func _sample() -> void:
 	if oversteer > 0.3 and speed > 10.0:
 		over_n += 1
 		over_torque_max = maxf(over_torque_max, absf(torque))
+		var sat_value: float = float(model.sat)
+		if absf(sat_value) > 0.02:
+			if sat_value * signf(steer) > 0.0:
+				sat_with_n += 1
+				sat_run += 1
+				sat_run_max = maxi(sat_run_max, sat_run)
+			else:
+				sat_against_n += 1
+				sat_run = 0
+			if signf(sat_value) != signf(phys) and absf(phys) > 0.02:
+				lag_n += 1
+		else:
+			sat_run = 0
 		var pulls_with: bool = phys * signf(steer) > 0.0
 		if pulls_with:
 			over_flip += 1
@@ -518,12 +599,25 @@ func _sample() -> void:
 			over_same += 1
 		# "Durch die Null" heisst: der Vorder-Schlupf zeigt gegen den Lenkbefehl.
 		var crossed: bool = absf(slip_front) > 0.004 and signf(slip_front) == -signf(steer)
+		var signed: float = phys * signf(steer)
 		if crossed:
 			over_cross_n += 1
+			over_cross_signed += signed
 			if pulls_with:
 				over_cross_help += 1
+			cross_run += 1
+			cross_run_max = maxi(cross_run_max, cross_run)
+			# Ab 0,15 s ist der Nulldurchgang laenger als die Glaettung (45 ms).
+			if cross_run >= 9:
+				long_cross_n += 1
+				long_cross_signed += signed
+			else:
+				short_cross_n += 1
+				short_cross_signed += signed
 		else:
+			cross_run = 0
 			over_plain_n += 1
+			over_plain_signed += signed
 			if not pulls_with:
 				over_plain_against += 1
 	if float(model.spin) > 0.3:
@@ -565,6 +659,17 @@ func _sample() -> void:
 	if absf(float(model.endstop)) > 0.01:
 		endstop_n += 1
 		endstop_max = maxf(endstop_max, absf(float(model.endstop)))
+
+	# --- Soft Lock: Kraft je Lenkdruck-Stufe ---------------------------------
+	if phase == "F":
+		var lp: float = clampf(float(ctx.get("lock_pressure", 0.0)), 0.0, 1.0)
+		var key: String = "%.1f" % (roundf(lp * 10.0) / 10.0)
+		var entry: Dictionary = lock_stage.get(key, {"n": 0, "sum": 0.0, "max": 0.0})
+		entry["n"] = int(entry["n"]) + 1
+		entry["sum"] = float(entry["sum"]) + absf(torque)
+		entry["max"] = maxf(float(entry["max"]), absf(torque))
+		lock_stage[key] = entry
+		lock_endstop_max = maxf(lock_endstop_max, absf(float(model.endstop)))
 
 
 func _finish() -> void:
@@ -627,7 +732,31 @@ func _finish() -> void:
 	print("LAP_FFB Uebersteuern n=%d Kraft max=%.3f | Vorderachse durch die Null: n=%d davon dreht mit %d | noch nicht durch: n=%d davon drueckt gegen %d" % [
 		over_n, over_torque_max, over_cross_n, over_cross_help, over_plain_n, over_plain_against,
 	])
+	var cross_mean: float = over_cross_signed / maxf(float(over_cross_n), 1.0)
+	var plain_mean: float = over_plain_signed / maxf(float(over_plain_n), 1.0)
+	print("LAP_FFB Uebersteuern Mittelkraft (positiv = zieht mit dem Lenkbefehl): durch die Null %.3f, noch nicht durch %.3f, Unterschied %.3f" % [
+		cross_mean, plain_mean, cross_mean - plain_mean,
+	])
+	print("LAP_FFB Uebersteuern Nulldurchgang: laengster %.2f s | kurz (<0,15 s) n=%d Mittel %.3f | lang (>=0,15 s) n=%d Mittel %.3f" % [
+		float(cross_run_max) / 60.0, short_cross_n,
+		short_cross_signed / maxf(float(short_cross_n), 1.0), long_cross_n,
+		long_cross_signed / maxf(float(long_cross_n), 1.0),
+	])
+	print("LAP_FFB Uebersteuern Grundkraft sat: mit dem Lenkbefehl %d, gegen %d, laengste mitlaufende Phase %.2f s | Glaettung laeuft nach: %d Ticks" % [
+		sat_with_n, sat_against_n, float(sat_run_max) / 60.0, lag_n,
+	])
 	print("LAP_FFB durchdrehende Raeder n=%d Ruetteln max=%.3f" % [spin_n, spin_rumble_max])
+	print("LAP_FFB Anschlag je Druckstufe (Lenkdruck -> Kraft Mittel/max, Ticks):")
+	var stages: Array = lock_stage.keys()
+	stages.sort()
+	var stage_means: Array = []
+	for key in stages:
+		var entry: Dictionary = lock_stage[key]
+		var mean: float = float(entry["sum"]) / maxf(float(entry["n"]), 1.0)
+		stage_means.append(mean)
+		print("LAP_FFB   Druck %s -> Mittel %.3f max %.3f (%d Ticks)" % [
+			key, mean, float(entry["max"]), int(entry["n"])])
+	print("LAP_FFB Anschlag Wirkung max=%.3f (Stufen %d)" % [lock_endstop_max, stage_means.size()])
 	print("LAP_FFB Blockieren n=%d Kraft max=%.3f (Quelle 'Blockiert': n=%d Ruetteln %.3f Hz %.0f..%.0f)" % [
 		lock_n, lock_torque_max, lock_src_n, lock_src_rumble_max, lock_src_hz_min, lock_src_hz_max,
 	])
@@ -681,20 +810,19 @@ func _finish() -> void:
 	if over_n == 0:
 		_note("uebersteuern_kam_in_dieser_fahrt_nicht_vor (Traktionskontrolle aus, Vollgas im langsamen Bogen)")
 	else:
-		# Ein Test, der die Umdrehung fuer *jeden* Uebersteuer-Tick fordert, war
-		# falsch angesetzt: die Soll-Tabelle nennt sie fuer den Moment, in dem
-		# der Schlupfwinkel der Vorderraeder durch die Null dreht. Solange das
-		# nicht passiert ist, drueckt das Lenkrad weiter gegen den Lenkbefehl.
-		if over_cross_n >= 5:
-			_check(float(over_cross_help) / float(over_cross_n) >= 0.90,
-				"vorderachse_durch_die_null_dreht_die_kraft_mit",
-				"%d von %d Ticks" % [over_cross_help, over_cross_n])
-		else:
-			_note("vorderachse_ging_in_dieser_fahrt_nie_durch_die_null (%d Ticks)" % over_cross_n)
-		if over_plain_n >= 5:
-			_check(float(over_plain_against) / float(over_plain_n) >= 0.90,
-				"solange_die_vorderachse_noch_traegt_drueckt_das_lenkrad_gegen",
-				"%d von %d Ticks" % [over_plain_against, over_plain_n])
+		# Zwei fruehere Anlaeufe dieser Sonde haben hier zweimal danebengelegen:
+		# erst wurde die Umdrehung fuer **jeden** Uebersteuer-Tick gefordert
+		# (66 von 282), dann war die Zuordnung "Vorderachse durch die Null"
+		# falsch gepolt (das Vorzeichen des Lenkbefehls ist **nicht** das
+		# Vorzeichen des Lenkwinkels - `steering` wird in `car_controller.gd`
+		# einmal gespiegelt). Gemessen wird deshalb die Groesse, die die
+		# Soll-Tabelle meint: die **ungeglaettete** Grundkraft `sat`.
+		_check(sat_with_n >= 10,
+			"beim_ausbrechenden_heck_dreht_die_grundkraft_in_die_gegenlenkrichtung",
+			"Grundkraft mit dem Lenkbefehl in %d von %d Uebersteuer-Ticks (laengste Phase %.2f s), gegen %d" % [
+				sat_with_n, over_n, float(sat_run_max) / 60.0, sat_against_n])
+		if lag_n > 0:
+			_note("die_glaettung_laeuft_der_umkehr_nach: %d von %d Ticks (45 ms)" % [lag_n, over_n])
 	_check(clip_ticks == 0, "kein_clipping_im_normalbetrieb",
 		"%d Ticks ueber 0,97 (max %.3f)" % [clip_ticks, clip_max])
 	if lock_n == 0:
@@ -719,6 +847,24 @@ func _finish() -> void:
 				gravel_rumble_max, gravel_hz_min, gravel_hz_max])
 	_check(pulse_n == 0 or pulse_max >= 0.25, "stoesse_kommen_an",
 		"max=%.3f" % pulse_max)
+	if stage_means.size() < 3:
+		_note("anschlag_stufen_nicht_gemessen (%d Stufen)" % stage_means.size())
+	else:
+		# Die Grundkraft faellt in diesem Abschnitt, weil der Wagen langsamer
+		# wird; der Anschlag waechst. Gemessen wird deshalb: keine Stufe ist
+		# schlechter als die vorige (Toleranz 0,02) und die letzte ist klar
+		# staerker als die erste.
+		var dips: int = 0
+		for i in range(1, stage_means.size()):
+			if float(stage_means[i]) < float(stage_means[i - 1]) - 0.02:
+				dips += 1
+		var first: float = float(stage_means[0])
+		var last: float = float(stage_means[-1])
+		_check(dips == 0, "der_anschlag_wird_mit_dem_druck_nie_schwaecher",
+			"%d Rueckfaelle in %s" % [dips, str(stage_means)])
+		_check(last >= 2.0 * maxf(first, 0.001), "der_anschlag_wird_deutlich_staerker",
+			"erste Stufe %.3f -> letzte Stufe %.3f" % [first, last])
+		_check(nan_ticks == 0, "der_anschlag_bleibt_endlich")
 
 	print("---- ENDE LAP_FFB ----")
 	if failed > 0:
