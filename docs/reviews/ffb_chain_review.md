@@ -77,7 +77,7 @@ Leerlauf, die v1-Kompatibilität und den Aufbau des Protokolls.
 ## 4. Was die Prüfung dauerhaft absichert
 
 ```text
-python tools/g29_ffb.py --check              # 8 Prüfungen, Exit 0/1, ohne Lenkrad
+python tools/g29_ffb.py --check              # 12 Prüfungen, Exit 0/1, ohne Lenkrad
 python tools/g29_ffb.py --dry-run            # Pakete, Rampe, Quellen, Endzustand
 powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/test_ffb_link.gd
 powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/test_ffb_settings.gd
@@ -121,3 +121,24 @@ nicht wieder eingebaut werden, ohne dass `--check` rot wird.
   Clip/Damage aus dem Paket ausgewertet, neues `--check` samt Geräte-Sonde,
   v2-Protokoll im Modulkopf dokumentiert.
 * `tools/ffb_send_test.py`: dokumentiert, dass dieser Sender bewusst v1 spricht.
+
+## 7. Nachtrag des Roots (Stand nach Welle 2 und 3)
+
+Die Zahlen **in diesem Bericht** sind der Stand der Welle 1 und bleiben so
+stehen; aktuell gilt:
+
+* `--check` hat heute **12 Prüfungen** (nicht 8/9): dazu kamen „Ereignis und
+  Tempo kommen an", „die ganze Lenkradfamilie wird gefunden" (G29/G920/G923,
+  `--name`) und „der Helfer antwortet dem Spiel" (Rückkanal `{"ack":1}`).
+* `tests/test_ffb_link.gd` fährt heute **14 s** mit Autopilot bis in die
+  schnellen Bögen und prüft dort die Kraft (**0,577** über 293 Ticks,
+  291/293 = 99 % gegen den Lenkbefehl), den Schaltstoß (0,60) und die
+  Herkunft — siehe `ffb_wave2_chain.md`.
+* `tests/test_ffb_model.gd` hat heute **34** Prüfungen,
+  `tests/test_ffb_settings.gd` **32**, dazu `tests/probe_review_root.gd` mit
+  **18** Gegenproben, `tools/ffb_end_to_end.ps1` (Spiel gegen den echten
+  Helfer, 10 Prüfungen) und `tools/ship_check.ps1` (ausgelieferter Build,
+  3 Prüfungen) — siehe `ffb_wave3_integration.md`.
+
+Mehr zu den späteren Wellen: `docs/reviews/ffb_wave2_chain.md`,
+`docs/reviews/ffb_wave3_integration.md`, `docs/reviews/ffb_f1_style.md`.

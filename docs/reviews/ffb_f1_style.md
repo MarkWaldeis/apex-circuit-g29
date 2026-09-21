@@ -56,7 +56,7 @@ Genau das prüfen die Wellen unten.
 
 ## 3. Messungen
 
-### 3.1 Modell (`tests/test_ffb_model.gd`, 27 Einzelprüfungen — alle PASS)
+### 3.1 Modell (`tests/test_ffb_model.gd`, 34 Einzelprüfungen — alle PASS)
 
 | Prüfung | Messwert |
 |---|---|
@@ -102,7 +102,10 @@ Genau das prüfen die Wellen unten.
 | Stärke | Paket `torque` 0,797 mit `gain` 0,75 kommt als 0,797 am Rad an — genau einmal skaliert |
 | Stoss-Kanal | `torque` 0,40 + `pulse` 0,40 → 0,680 am Rad (0,40 + 0,40 · 0,70), kein zweiter Weg |
 | Gegenprobe ohne Godot (`tools/review_chain_test.py`) | normale Fahrt + Loslassen, Vorzeichenwechsel mit Rampe, Müll-Pakete — PASS |
-| Selbstprüfung des Helfers (`python tools/g29_ffb.py --check`) | **9 Prüfungen, 0 Mängel, kein offener Warnhinweis** |
+| Selbstprüfung des Helfers (`python tools/g29_ffb.py --check`) | **12 Prüfungen, 0 Mängel, kein offener Warnhinweis** (u. a. Stärke genau einmal, Rampe, Stoß getrennt, Ereignis/Tempo, Lenkradfamilie G29/G920/G923, Antwort des Helfers) |
+| Spiel → **echter Helfer** (`tools/ffb_end_to_end.ps1`) | 1829 Pakete, Kraftspitze **0,584** (= Modellspitze, also verlustfrei), Rütteln 0,700 @ 42,2 Hz, Quellen `Asphalt, Blockiert, Kerb, Kies`, Ereignis `shift`, 0 Werte über 1,0 — **10 Prüfungen, 0 Mängel** |
+| Menüschalter kommt am Lenkrad an | derselbe Lauf mit **FFB AUS**: Kraft **0,000**, Rütteln 0,000, Quelle `aus` — der Schalter stellt nicht nur die Anzeige um |
+| Ausgelieferter Build (`tools/ship_check.ps1`) | der Desktop-Build (`ApexCircuit.exe` + `.pck`) läuft gegen den echten Helfer: FFB AN → 408 Pakete, Reibung 0,130, Dämpfung 0,310, Quelle `Asphalt`; FFB AUS → 0,000/0,000 (`aus`) — **3 Prüfungen, 0 Mängel** |
 | Herkunftsangabe | „Asphalt“, „Aufprall“ — das Paket sagt, woher die Kraft kommt |
 
 ---
@@ -188,7 +191,9 @@ Alle 15 headless-Testdateien des Projekts laufen grün (`test_car_orientation`,
 `test_lap_drive`, `test_gameplay_input`, `test_pedal_ui`, `test_ffb_model`,
 `test_ffb_settings`, `test_ffb_link`), zusätzlich `tests/probe_review_root.gd`
 (18 Gegenproben), `tools/review_chain_test.py` (3 Gegenproben) und
-`python tools/g29_ffb.py --check` (9 Prüfungen, 0 Mängel).
+`python tools/g29_ffb.py --check` (12 Prüfungen, 0 Mängel),
+`tools/ffb_end_to_end.ps1` (10 Prüfungen) und `tools/ship_check.ps1`
+(3 Prüfungen).
 
 ### Welle 1 — Modell/Realismus, Mangel des Roots selbst
 
@@ -197,3 +202,11 @@ Alle 15 headless-Testdateien des Projekts laufen grün (`test_car_orientation`,
 | **Blockierende Vorderräder machten das Lenkrad nur mäßig leicht** — der Plan (Kriterium 4) verlangt unter 20 % der Bogenkraft, weil ein blockierender Reifen keinen Nachlauf mehr erzeugt. Der Test prüfte nur „unter 45 %“, also bestand er eine zu schwache Kurve. | 0,285 statt 0,797 = **36 %** | Lastverteilung aus dem Reifenschräglauf gegen `PEAK_SLIP` und `LOCK_COLLAPSE` 0,82 → **0,143 = 18 %**, Rütteln 0,70 @ 34 Hz. Test prüft jetzt gegen die Zahl aus dem Plan (< 20 %, 20–35 Hz). |
 | **Gegenprobe dazu fehlte:** „Lenkrad wird leicht“ darf nicht heißen „jedes Bremsen macht taub“ | — | neue Prüfung `bremsen_allein_macht_das_lenkrad_nicht_tot`: geradeaus voll bremsen behält 58 % der Kraft, Trail-Braking 74 % — erst der volle Tritt **mit** Schräglauf blockiert. |
 | Alle `docs/reviews/`-Verweise zeigten auf eine Datei, die es nicht gibt (`ffb_chain_review.md`) | 3 tote Verweise in `ffb_link.gd`, `test_ffb_link.gd`, `README.md` | alle zeigen auf diesen Bericht. |
+
+### Welle 2 — Modell/Realismus, Kuppe und Bodenwelle
+
+| Fund | Messwert vorher | Nachher |
+|---|---|---|
+| **Eine Zeile des Plans war nie umgesetzt:** „Über eine Bodenwelle/Kuppe → kurzer Stoß + kurzes Leichtwerden“. Damals gab es weder eine senkrechte Last im Modell noch eine Prüfung dafür. | keine Messgröße, kein Effekt | `car_controller.gd` gibt die gefilterte senkrechte Last als `vertical_g` weiter (1,0 g = steht auf den Rädern). Kuppe (< 0,80 g): Kraft bis **40 % leichter** (0,790 → 0,471). Bodenwelle (> 1,35 g): Stoß + Rütteln 14–26 Hz, Quelle „Bodenwelle“. Auf der Runde gemessen: 0,16–2,05 g, 37 Kuppen-Ticks, 20 Wellen-Ticks; Modellprüfungen `kuppe_macht_das_lenkrad_leicht`, `normale_last_aendert_nichts`, `bodenwelle_gibt_einen_stoss`. |
+| Der Stoß war im Betrieb nicht zu sehen | — | Ursache gemessen: eine Welle fiel mit einem **stärkeren Schaltstoß** zusammen, und der Puls-Kanal nimmt nur das stärkste Ereignis. Deshalb hat die Welle jetzt einen **eigenen Rüttelkanal** (Quelle „Bodenwelle“), der nicht vom Schalten verdeckt wird. |
+| Ein Ereignis-Stoß hieß im HUD immer „Aufprall“ | `pulse >= 0.5 → "Aufprall"` | die Quelle nennt jetzt das Ereignis: `Schalten`, `Aufprall`, `Kontakt`, `Bodenwelle`, `Kerbschlag` |

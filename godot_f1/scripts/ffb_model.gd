@@ -140,9 +140,10 @@ func setup(ffb_settings = null) -> void:
 ## Einmaliges Ereignis (Schalten, Einschlag, Kerbschlag). `direction` ist in
 ## der Lenkradwelt (+ = rechts); 0 heisst "gegen den Lenkbefehl".
 func poke(kind: String, severity: float, direction: float = 0.0) -> void:
-	var s: float = clampf(severity, 0.0, 1.0)
+	var s: float = clampf(_safe(severity, 0.0), 0.0, 1.0)
 	if s <= 0.0:
 		return
+	direction = clampf(_safe(direction, 0.0), -1.0, 1.0)
 	_events.append(kind)
 	if s > _pulse:
 		_pulse = s
@@ -165,7 +166,7 @@ func take_events() -> Array:
 func update(delta: float, ctx: Dictionary) -> Dictionary:
 	last_ctx = ctx
 	var on: bool = settings == null or bool(settings.enabled)
-	var gain: float = 1.0 if settings == null else clampf(float(settings.gain), 0.0, 1.0)
+	var gain: float = 1.0 if settings == null else clampf(_safe(settings.gain, 1.0), 0.0, 1.0)
 	var effects_on: bool = settings == null or bool(settings.effects)
 	# Die drei Ruettel-Baender des offiziellen Spiels (On Track = Asphalt-
 	# Textur, Rumble Strip = Kerb, Off Track = Gras/Kies). Standard 100 %.
@@ -173,26 +174,32 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	var band_kerb: float = 1.0
 	var band_offtrack: float = 1.0
 	if settings != null:
-		band_ontrack = clampf(float(settings.ontrack_effects), 0.0, 1.0)
-		band_kerb = clampf(float(settings.kerb_effects), 0.0, 1.0)
-		band_offtrack = clampf(float(settings.offtrack_effects), 0.0, 1.0)
-	var damper_scale: float = 1.0 if settings == null else clampf(float(settings.damper), 0.0, 1.0)
+		band_ontrack = clampf(_safe(settings.ontrack_effects, 1.0), 0.0, 1.0)
+		band_kerb = clampf(_safe(settings.kerb_effects, 1.0), 0.0, 1.0)
+		band_offtrack = clampf(_safe(settings.offtrack_effects, 1.0), 0.0, 1.0)
+	var damper_scale: float = 1.0 if settings == null else clampf(_safe(settings.damper, 1.0), 0.0, 1.0)
 
-	var speed: float = maxf(float(ctx.get("speed", 0.0)), 0.0)
-	var steer: float = clampf(float(ctx.get("steer", 0.0)), -1.0, 1.0)
-	var steer_angle: float = float(ctx.get("steer_angle", 0.0))
-	var slip_front: float = float(ctx.get("slip_front", 0.0))
-	var lat_g: float = float(ctx.get("lateral_g", 0.0))
-	var downforce: float = maxf(float(ctx.get("downforce", 1.0)), 0.5)
-	var understeer: float = clampf(float(ctx.get("understeer", 0.0)), 0.0, 1.0)
-	var oversteer: float = clampf(float(ctx.get("oversteer", 0.0)), 0.0, 1.0)
-	var brake: float = clampf(float(ctx.get("brake", 0.0)), 0.0, 1.0)
-	var throttle: float = clampf(float(ctx.get("throttle", 0.0)), 0.0, 1.0)
-	var lock_pressure: float = clampf(float(ctx.get("lock_pressure", 0.0)), 0.0, 1.0)
-	var damage: float = clampf(float(ctx.get("damage", 0.0)), 0.0, 1.0)
+	# Jede Zahl kommt ueber `_num`: ein NAN oder unendlich aus der Physik darf
+	# nicht bis ans Lenkrad durchlaufen. Ohne diese Zeilen blieb ein einziger
+	# NAN-Tick fuer immer haengen (die Glaettung mittelt ihn weiter), das HUD
+	# zeigte "nan" und der Helfer bekam ein Paket, das er nicht mehr deuten
+	# kann. Gemessen in tests/probe_wave4_edge.gd.
+	var speed: float = maxf(_num(ctx, "speed", 0.0), 0.0)
+	var steer: float = clampf(_num(ctx, "steer", 0.0), -1.0, 1.0)
+	var steer_angle: float = _num(ctx, "steer_angle", 0.0)
+	var slip_front: float = _num(ctx, "slip_front", 0.0)
+	var slip_rear: float = _num(ctx, "slip_rear", 0.0)
+	var lat_g: float = _num(ctx, "lateral_g", 0.0)
+	var downforce: float = maxf(_num(ctx, "downforce", 1.0), 0.5)
+	var understeer: float = clampf(_num(ctx, "understeer", 0.0), 0.0, 1.0)
+	var oversteer: float = clampf(_num(ctx, "oversteer", 0.0), 0.0, 1.0)
+	var brake: float = clampf(_num(ctx, "brake", 0.0), 0.0, 1.0)
+	var throttle: float = clampf(_num(ctx, "throttle", 0.0), 0.0, 1.0)
+	var lock_pressure: float = clampf(_num(ctx, "lock_pressure", 0.0), 0.0, 1.0)
+	var damage: float = clampf(_num(ctx, "damage", 0.0), 0.0, 1.0)
 	## Senkrechte Last in g: 1.0 = Auto steht auf den Raedern, darunter hebt die
 	## Vorderachse ab (Kuppe), darueber ist die Feder gestaucht (Bodenwelle).
-	var vertical_g: float = clampf(float(ctx.get("vertical_g", 1.0)), -1.0, 4.0)
+	var vertical_g: float = clampf(_num(ctx, "vertical_g", 1.0), -1.0, 4.0)
 	var surface: Dictionary = ctx.get("surface", {})
 	var tc_on: bool = bool(ctx.get("traction_control", true))
 
@@ -285,7 +292,7 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 
 	# --- Daempfung, Reibung, Ruetteln ----------------------------------------
 	damper = clampf((0.10 + 0.30 * v_ratio + 0.12 * aero) * damper_scale, 0.0, 1.0)
-	var roughness: float = clampf(float(surface.get("rough", 0.0)), 0.0, 1.0)
+	var roughness: float = clampf(_num(surface, "rough", 0.0), 0.0, 1.0)
 	friction = clampf(0.09 + 0.30 * roughness + 0.10 * (1.0 - rolling) + 0.12 * flat, 0.0, 1.0)
 	var r := _rumble_for(speed, v_ratio, surface, lock, spin, flat, _bump, _impact,
 		effects_on, band_ontrack, band_kerb, band_offtrack)
@@ -317,6 +324,12 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 
 	# --- Glattung und Grenzen -------------------------------------------------
 	var tau: float = clampf(delta / maxf(SMOOTH_TAU, 0.001), 0.0, 1.0)
+	# Selbstheilung: falls doch einmal etwas Unendliches in die Glaettung
+	# geraten ist, wird sie hier zurueckgesetzt statt fuer immer NAN zu bleiben.
+	if not is_finite(_smooth_torque):
+		_smooth_torque = 0.0
+	if not is_finite(raw):
+		raw = 0.0
 	_smooth_torque = lerpf(_smooth_torque, clampf(raw, -1.2, 1.2), tau)
 	var commanded: float = clampf(_smooth_torque, -1.0, 1.0)
 	torque = commanded * gain
@@ -340,6 +353,28 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	clip = _clip_run
 
 	return last_state()
+
+
+## Holt eine Zahl aus `ctx` und ersetzt alles, was keine endliche Zahl ist,
+## durch den Ersatzwert. `NAN`, `INF` und fehlende Schluessel duerfen nicht bis
+## ans Lenkrad durchlaufen: ein einziges NAN blieb sonst in der Glaettung
+## haengen und vergiftete jeden weiteren Tick (HUD "nan", Paket unlesbar).
+func _num(ctx: Dictionary, key: String, fallback: float) -> float:
+	var value = ctx.get(key, fallback)
+	if typeof(value) != TYPE_FLOAT and typeof(value) != TYPE_INT:
+		return fallback
+	var number: float = float(value)
+	if not is_finite(number):
+		return fallback
+	return number
+
+
+## Dasselbe fuer einen einzelnen Wert (Einstellungen, gemerkte Groessen).
+func _safe(value, fallback: float) -> float:
+	if typeof(value) != TYPE_FLOAT and typeof(value) != TYPE_INT:
+		return fallback
+	var number: float = float(value)
+	return number if is_finite(number) else fallback
 
 
 func last_state() -> Dictionary:
@@ -389,7 +424,7 @@ func _rumble_for(speed: float, v_ratio: float, surface: Dictionary,
 	var hz: float = 24.0
 	var src: String = "-"
 	var kind: int = int(surface.get("surface", 0))
-	var surf_rumble: float = clampf(float(surface.get("rumble", 0.0)), 0.0, 1.0)
+	var surf_rumble: float = clampf(_num(surface, "rumble", 0.0), 0.0, 1.0)
 	if effects_on and surf_rumble > 0.01:
 		var speed_gain: float = 0.35 + 0.65 * clampf(speed / 45.0, 0.0, 1.2)
 		# Der Band-Regler skaliert nur sein eigenes Rütteln - Kerb leise machen
