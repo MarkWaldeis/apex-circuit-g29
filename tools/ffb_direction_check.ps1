@@ -53,14 +53,24 @@ function Stop-StrayProbe {
 ## Ergebnisse waren wertlos). Ein Helfer, der vor weniger als 5 Minuten
 ## gestartet wurde, gehoert zu einem laufenden Lauf - dann bricht dieser Aufruf
 ## ab, statt zu toeten. Alte Waisen werden weiterhin aufgeraeumt.
+## Ein Prozess gehoert zu einem LAUFENDEN Lauf, wenn er frisch gestartet wurde
+## ODER sein Elternprozess noch lebt (ein langer Prueflauf darf seinen eigenen
+## Helfer nicht als Waise erschlagen - gemessen am 21.09.2026).
+function Test-LiveRun($proc) {
+    if ($null -eq $proc.CreationDate) { return $false }
+    if (((Get-Date) - $proc.CreationDate).TotalSeconds -lt 300) { return $true }
+    if (-not $proc.ParentProcessId) { return $false }
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.ParentProcessId)" -ErrorAction SilentlyContinue
+    return $null -ne $parent
+}
+
 $foreignHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
-$youngHelpers = @($foreignHelpers | Where-Object {
-        $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+$youngHelpers = @($foreignHelpers | Where-Object { Test-LiveRun $_ })
 if ($youngHelpers.Count -gt 0) {
     $ids = ($youngHelpers | ForEach-Object { "$($_.ProcessId)" }) -join ', '
     Write-Host (("[direction] ABBRUCH: es laeuft schon ein Helfer (PID {0}, gestartet " +
-        "vor weniger als 5 Minuten) - parallele Laeufe messen sich gegenseitig " +
+        "frisch oder Elternprozess lebt) - parallele Laeufe messen sich gegenseitig " +
         "kaputt. Bitte warten oder spaeter starten.") -f $ids)
     exit 125
 }

@@ -114,13 +114,25 @@ $leftoverHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'
 ## weg). Ein Helfer, der vor weniger als 5 Minuten gestartet wurde, gehoert zu
 ## einem laufenden Lauf - dann bricht dieser Aufruf ab, statt zu toeten. Alte
 ## Waisen (aelter als 5 Minuten) werden weiterhin aufgeraeumt.
-$youngHelpers = @($leftoverHelpers | Where-Object {
-        $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+# Ein Prozess gehoert zu einem LAUFENDEN Lauf, wenn er frisch gestartet wurde
+# ODER sein Elternprozess noch lebt. Nur das Alter zu pruefen reicht nicht: ein
+# Prueflauf, der laenger als 5 Minuten dauert, haette seinen eigenen Helfer
+# sonst als Waise behandelt und erschlagen (gemessen am 21.09.2026 bei einem
+# 9-Minuten-Lauf). Eine echte Waise hat einen toten Elternprozess.
+function Test-LiveRun($proc) {
+    if ($null -eq $proc.CreationDate) { return $false }
+    if (((Get-Date) - $proc.CreationDate).TotalSeconds -lt 300) { return $true }
+    if (-not $proc.ParentProcessId) { return $false }
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.ParentProcessId)" -ErrorAction SilentlyContinue
+    return $null -ne $parent
+}
+
+$youngHelpers = @($leftoverHelpers | Where-Object { Test-LiveRun $_ })
 if ($youngHelpers.Count -gt 0) {
     $ids = ($youngHelpers | ForEach-Object { "$($_.ProcessId)" }) -join ', '
     Write-Host (("[ship] ABBRUCH: es laeuft schon ein Prueflauf (Helfer PID {0}, " +
-        "gestartet vor weniger als 5 Minuten). Parallele Laeufe messen sich " +
-        "gegenseitig kaputt - bitte warten oder diesen Aufruf spaeter starten.") -f $ids)
+        "frisch gestartet oder Elternprozess lebt). Parallele Laeufe messen " +
+        "sich gegenseitig kaputt - bitte warten oder spaeter starten.") -f $ids)
     exit 125
 }
 foreach ($h in $leftoverHelpers) {

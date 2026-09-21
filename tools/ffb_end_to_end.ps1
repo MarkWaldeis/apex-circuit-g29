@@ -56,15 +56,26 @@ $settingsQuoted = "user://ffb_e2e_settings.json"
 ## Helfer und Spiel weg). Prozesse, die vor weniger als 5 Minuten gestartet
 ## wurden, gelten als "laufender Lauf" - dann bricht dieses Skript mit Exit 125
 ## ab, statt zu toeten. Alte Waisen werden wie bisher aufgeraeumt.
+## Ein Prozess gehoert zu einem LAUFENDEN Lauf, wenn er frisch gestartet wurde
+## ODER sein Elternprozess noch lebt. Nur das Alter zu pruefen reicht nicht: ein
+## Prueflauf ueber mehr als 5 Minuten haette seinen eigenen Helfer sonst als
+## Waise erschlagen (gemessen am 21.09.2026 bei einem 9-Minuten-Lauf).
+function Test-LiveRun($proc) {
+    if ($null -eq $proc.CreationDate) { return $false }
+    if (((Get-Date) - $proc.CreationDate).TotalSeconds -lt 300) { return $true }
+    if (-not $proc.ParentProcessId) { return $false }
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.ParentProcessId)" -ErrorAction SilentlyContinue
+    return $null -ne $parent
+}
+
 $staleGames = @(Get-CimInstance Win32_Process -Filter "Name like '%Apex%'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*Apex Circuit.exe*' -or $_.CommandLine -like '*ApexCircuit.exe*' })
 if ($staleGames.Count -gt 0) {
-    $young = @($staleGames | Where-Object {
-            $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+    $young = @($staleGames | Where-Object { Test-LiveRun $_ })
     if ($young.Count -gt 0) {
         $ids = ($young | ForEach-Object { "$($_.ProcessId)" }) -join ', '
         Write-Host (("[e2e] ABBRUCH: es laeuft schon ein Spiel (PID {0}, gestartet " +
-            "vor weniger als 5 Minuten) - parallele Laeufe messen sich gegenseitig " +
+            "frisch oder Elternprozess lebt) - parallele Laeufe messen sich gegenseitig " +
             "kaputt. Bitte warten oder spaeter starten.") -f $ids)
         exit 125
     }
@@ -76,12 +87,11 @@ foreach ($g in $staleGames) {
 $staleHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
 if ($staleHelpers.Count -gt 0) {
-    $youngHelpers = @($staleHelpers | Where-Object {
-            $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+    $youngHelpers = @($staleHelpers | Where-Object { Test-LiveRun $_ })
     if ($youngHelpers.Count -gt 0) {
         $ids = ($youngHelpers | ForEach-Object { "$($_.ProcessId)" }) -join ', '
         Write-Host (("[e2e] ABBRUCH: es laeuft schon ein Helfer (PID {0}, gestartet " +
-            "vor weniger als 5 Minuten) - parallele Laeufe messen sich gegenseitig " +
+            "frisch oder Elternprozess lebt) - parallele Laeufe messen sich gegenseitig " +
             "kaputt. Bitte warten oder spaeter starten.") -f $ids)
         exit 125
     }
