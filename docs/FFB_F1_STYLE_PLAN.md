@@ -1096,3 +1096,50 @@ schwankt. Die Stufe steht jetzt auf `torque 0.000` (gemessen `Rad: -0.010 ..
 `der_fuehltest_laesst_die_gerade_ruhen` fest. Die Demo sagt dem Fahrer
 ausserdem, dass ein frei gelassenes Rad bei Dauerlast bis an den Anschlag
 wandert — das ist der fehlende Fahrer, nicht eine falsche Kraft.
+
+---
+
+## 14. Welle 11: die echte Runde auf der echten Strecke
+
+Bis hierher waren fast alle Zahlen der Soll-Tabelle aus **synthetischen**
+Szenarien gemessen (das Modell wird direkt mit einem `ctx` gefüttert). Neu:
+`godot_f1/tests/probe_lap_ffb.gd` fährt das **echte Spielerauto auf der echten
+Strecke** und liest jeden Tick genau die Zahlen, die `ffb_link.gd` an den
+Helfer schickt. Bericht: `docs/reviews/ffb_wave11_lap.md`.
+
+**Ergebnis einer vollständigen Runde** (1439/1440 Punkte, Spitze 283 km/h,
+Standard `Stärke 75 %`):
+
+| Situation | gemessen | Soll §2 |
+|---|---|---|
+| Geradeaus ab 198 km/h | Kraft max **0,031**, Dämpfung min **0,242** | ruhig, Grundgewicht ✅ |
+| Bogen ab 3 g (407 Ticks) | **2300 von 2414** Ticks drücken gegen den Lenkbefehl (95 %), Kraft Mittel **0,455** / max **0,584** | schwer, gegen den Lenkbefehl: Richtung ✅, Härte am unteren Rand |
+| Asphalt | Rütteln max **0,131** @ 22–42 Hz | 0,05–0,12 ✅ |
+| Kerb | **0,534** @ 21–27 Hz | hart und schnell ✅ |
+| Kies | **0,273** @ 8–12 Hz | grobes Mahlen ✅ |
+| Blockierende Vorderräder | Kraft max **0,175**, Rattern **0,700 @ 29–34 Hz** | leicht/tot + Rattern ✅ |
+| Clipping | **0 von 6690** Ticks über 0,97 | kein Clipping ✅ |
+
+**Der Stärke-Regler ist die ehrliche Antwort auf „zu leicht"** — dieselbe
+Strecke, derselbe Fahrer, nur die Stärke geändert:
+
+```text
+Stärke  75 %: Bogen ab 3 g  Kraft Mittel 0,455  max 0,584   Clipping-Ticks 0
+Stärke 100 %: Bogen ab 3 g  Kraft Mittel 0,607  max 0,779   Clipping-Ticks 0
+```
+
+**Was diese Messung gefunden hat:** KI-Auto **und** Autopilot des Spielerautos
+fuhren nach 46 s einmal weit hinaus und blieben **45 s lang bei 0 km/h im Kies
+liegen** (13,9 m Querabstand, Nase zur Bande) — die Ideallinie liegt hinter der
+Wand, Gas geben hieß dort: in die Wand fahren. Der Rundentest sah es nie, weil
+er nach 40 s endet. Behoben in `car_controller.gd` (`_watch_stuck`): wer
+autonom fährt und mehr als 8 m neben der Linie steht, wird nach 2,5 s
+Stillstand (oder 8 s, wenn er zwar fährt, aber draußen bleibt) auf die Linie
+zurückgesetzt. Der Fahrer am Lenkrad wird **nie** angefasst. Nachgemessen:
+Standphase 45,0 s → **2,6 s**, vollständige Runde. Prüfung:
+`godot_f1/tests/test_stuck_rejoin.gd`.
+
+**Was auch diese Welle nicht beweist:** sie ist eine Runde mit einer Fahrweise;
+Kerb und Kies wurden nur bei 60–100 km/h berührt, Untersteuern und der
+Soft Lock kamen in dieser Fahrt nicht vor (weiter nur synthetisch und im
+Fühltest belegt). Und über das **Gefühl** sagt keine Zahl etwas.

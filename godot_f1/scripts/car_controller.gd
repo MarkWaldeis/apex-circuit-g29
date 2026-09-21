@@ -48,6 +48,8 @@ var _line_hint: int = -1
 ## Last point index on the ideal line, so aiming at it stays a window search.
 var _ideal_hint: int = -1
 var surface_name: String = "Asphalt"
+## Querabstand zur Mittellinie in Metern (aus `scripts/surfaces.gd`).
+var surface_offset: float = 0.0
 var surface_drag: float = 0.0
 ## 0..1 how much the ground rattles the car (kerb, gravel, grass). The camera
 ## and the wheel read this; it is 0 on clean asphalt.
@@ -87,6 +89,21 @@ const VOID_Y := -3.0
 const COMPRESS_G := 1.35
 var _rejoin_cd: float = 0.0
 var rejoin_count: int = 0
+## Weit draussen im Kies liegen bleiben: siehe `_watch_stuck()`.
+var _stuck_time: float = 0.0
+## Ab diesem Querabstand ist das Auto nicht mehr "weit gefahren", sondern
+## neben der Strecke (Asphalt + Kerb enden bei 6,85 m, der Kiesapron bei
+## 16,85 m; die Wand steht bei 16 m). Ein Meter Abstand zum Kerb, damit ein
+## kurz stehengebliebenes Auto am Streckenrand nicht sofort umgesetzt wird.
+const STUCK_OFFSET := 8.0
+## Darunter gilt das Auto als stehend (Rad dreht nicht, es kommt nicht weg).
+const STUCK_SPEED := 2.0
+## So lange darf ein autonom fahrendes Auto neben der Strecke stehen, bevor es
+## zurueck auf die Linie gesetzt wird.
+const STUCK_AFTER := 2.5
+## Und so lange, wenn es zwar faehrt, aber draussen bleibt (z. B. parallel zur
+## Strecke im Kies).
+const STUCK_AFTER_MOVING := 8.0
 ## How often the car had to be put back on its wheels. A non-zero value while
 ## driving normally is a physics bug, not a driving mistake.
 var reset_count: int = 0
@@ -572,6 +589,9 @@ func _physics_process(delta: float) -> void:
 	if not surface.is_empty():
 		_line_hint = int(surface["index"])
 		surface_name = String(surface["name"])
+	# Der Querabstand ist die einzige Groesse, die "neben der Strecke" von
+	# "weit gefahren" unterscheidet (scripts/surfaces.gd).
+	surface_offset = float(surface.get("offset", 0.0)) if not surface.is_empty() else 0.0
 	surface_rumble = float(surface.get("rumble", 0.0))
 	var surface_grip: float = float(surface.get("grip", 1.0))
 
@@ -757,6 +777,33 @@ func _physics_process(delta: float) -> void:
 	# tumbling into the "car is upside down" reset.
 	if global_position.y < VOID_Y and _rejoin_cd <= 0.0:
 		rejoin_to_line()
+	_watch_stuck(delta)
+
+
+## Ein Auto, das im Kies liegen bleibt, kommt von allein nicht mehr weg.
+##
+## Gemessen am 21.09.2026 mit `tests/probe_lap_ffb.gd`: KI-Auto **und**
+## Autopilot des Spielerautos fahren nach rund 46 s einmal weit hinaus, bleiben
+## bei 13,9 m Querabstand mit 0 km/h im Kies liegen - und stehen dort bis zum
+## Ende der Messung, 45 s lang, ohne dass etwas passiert. Der Rundentest
+## (`test_lap_drive.gd`) sah das nie, weil er nach 40 s endet. Ein Auto, das
+## neben der Strecke steht, ist kein Rennen: wer autonom faehrt, wird nach
+## `STUCK_AFTER` Sekunden auf die Linie zurueckgesetzt.
+##
+## Nur fuer autonome Autos: wer selbst am Lenkrad sitzt, entscheidet selbst, ob
+## er rueckwaerts faehrt oder den Reset benutzt. Ein zurueckgesetztes Auto ist
+## sichtbar (`rejoin_count`) und wird deshalb auch geprueft.
+func _watch_stuck(delta: float) -> void:
+	var autonomous: bool = is_ai or auto_drive
+	var far: bool = absf(surface_offset) >= STUCK_OFFSET
+	if not autonomous or not far or _rejoin_cd > 0.0:
+		_stuck_time = 0.0
+		return
+	_stuck_time += delta
+	var stopped: bool = linear_velocity.length() < STUCK_SPEED
+	if (stopped and _stuck_time >= STUCK_AFTER) or _stuck_time >= STUCK_AFTER_MOVING:
+		rejoin_to_line()
+		_stuck_time = 0.0
 	if global_transform.basis.y.dot(Vector3.UP) < 0.25:
 		_reset()
 
