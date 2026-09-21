@@ -56,6 +56,24 @@ Loslassen.
 
 Zwei Dinge, die der Fühltest selbst macht, damit er kein Wunschbild zeigt:
 
+### Warum die Werkseinstellung bei 75 % bleibt
+
+Ein Prüflauf hat vorgeschlagen, die Bogenkraft auf **90 %** zu stellen (dann
+trifft der Bogenmittelwert die 0,58 besser, weil 0,636 × 0,9 ≈ 0,57). Dagegen
+sprechen die Quellen aus §1: für ein G29 empfehlen alle drei Guides höchstens
+**60 %** (racinggames: „no higher than 70"), Brian Koponen setzt **43 %** und
+schreibt, die Werkseinstellung mache das Rad „too heavy and dull", und SIMGASM
+sagt für Zahnradlenkräder ausdrücklich, man solle die Stärke so wählen, dass
+**nichts clippt**. 75 % liegt schon am oberen Rand dieser Empfehlungen; 90 %
+wäre über allen dreien und schiebt die Spitze auf 0,808 — also in den Bereich,
+in dem starke Signale nicht mehr unterscheidbar werden (genau das „heavy but
+dead" aus dem Sim-Racing-Manual).
+
+Deshalb: **Standard bleibt 75 %**, und die Leiter im Menü (30/45/60/75/90/100 %)
+erlaubt jedem, darüber oder darunter zu gehen, ohne dass er etwas umbaut. Wer
+es schwerer will, hat es mit zwei Klicks — aber die Voreinstellung bleibt in
+dem Bereich, den die Quellen für dieses Lenkrad nennen.
+
 * **Er prüft sich beim Laufen.** Jede Station vergleicht die *gemessene*
 Radbewegung mit der erwarteten Richtung und meldet am Ende
 `DEMO_RESULT PASS/FAIL`; eine Station, die die Gegenrichtung zeigt, lässt ihn
