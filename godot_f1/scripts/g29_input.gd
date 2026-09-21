@@ -62,6 +62,24 @@ var steer_invert: bool = false
 var steer_deadzone: float = DEADZONE_DEFAULT
 var steer_locked: bool = false
 
+## ---- Lenkbereich / Soft Lock ----------------------------------------------
+## Das G29 dreht in G HUB 900 Grad; ein Formel-1-Lenkrad faehrt 360-400. Das
+## Spiel bildet den eingestellten Bereich auf die 900 Grad ab und macht den
+## Anschlag selbst - genau die Loesung des offiziellen Spiels ("has a proper
+## soft lock", siehe docs/FFB_F1_STYLE_PLAN.md).
+##
+## `steer_soft` ist der Lenkbefehl bis zum Anschlag (+ = rechts), `steer_lock`
+## der Druck darueber hinaus (0 = frei, 1 = voll gegen die Wand). Der
+## Anschlag rechnet in **Grad**, nicht im kalibrierten Weg: die Achse des G29
+## laeuft ueber 900 Grad (+/-1 = +/-450), also entspricht eine Drehung von 400
+## Grad dem Faktor 400/900. Deshalb steht in der Anleitung, den Betriebsbereich
+## in G HUB auf 900 zu lassen.
+var ffb_settings
+var steer_soft: float = 0.0
+var steer_lock: float = 0.0
+## Lenkradwinkel in Grad (geschaetzt aus der Achse, siehe oben).
+var steer_angle_deg: float = 0.0
+
 ## ---- calibration ----------------------------------------------------------
 var cal_phase: int = 0        ## 0 idle, 1 rest sampling, 2 waiting, 5 done
 var cal_hint: String = ""
@@ -359,11 +377,40 @@ func _apply_steer() -> void:
 		s = clampf(dev / _steer_span, -1.0, 1.0)
 	if steer_invert:
 		s = -s
+	steer = _apply_deadzone(s)
+	_apply_soft_lock()
+
+
+## Lenkbereich anwenden (Soft Lock).
+##
+## Ohne Einstellungen (Tests, Diagnose) bleibt alles wie vorher: der ganze Weg
+## lenkt, kein Anschlag. Mit Einstellungen lenkt nur der eingestellte
+## Lenkbereich (400 von 900 Grad), und darueber steigt der Druck bis 1.0.
+func _apply_soft_lock() -> void:
+	var half_range: float = 450.0
+	var half_lock: float = 450.0
+	if ffb_settings != null:
+		if ffb_settings.has_method("wheel_half_range_deg"):
+			half_range = maxf(float(ffb_settings.wheel_half_range_deg()), 30.0)
+		if ffb_settings.has_method("lock_half_deg"):
+			half_lock = clampf(float(ffb_settings.lock_half_deg()), 30.0, half_range)
+	# Die Achse laeuft ueber den ganzen Betriebsbereich (-1 .. +1 = 900 Grad),
+	# unabhaengig davon, wie weit die Kalibrierung gekommen ist.
+	var dev: float = clampf(_raw_axis(steer_axis) - _steer_rest, -1.0, 1.0)
+	if steer_invert:
+		dev = -dev
+	steer_angle_deg = dev * half_range
+	steer_soft = _apply_deadzone(clampf(steer_angle_deg / half_lock, -1.0, 1.0))
+	steer_lock = clampf((absf(steer_angle_deg) - half_lock) / maxf(half_range - half_lock, 10.0), 0.0, 1.0)
+
+
+## Dieselbe Totzone wie fuer den Lenkbefehl - der geradeaus laufende Wagen darf
+## auch am Anschlag nicht zappeln.
+func _apply_deadzone(v: float) -> float:
+	var s: float = clampf(v, -1.0, 1.0)
 	if absf(s) < steer_deadzone:
-		s = 0.0
-	else:
-		s = signf(s) * ((absf(s) - steer_deadzone) / maxf(1.0 - steer_deadzone, 0.01))
-	steer = clampf(s, -1.0, 1.0)
+		return 0.0
+	return signf(s) * ((absf(s) - steer_deadzone) / maxf(1.0 - steer_deadzone, 0.01))
 
 
 ## ---- calibration ----------------------------------------------------------

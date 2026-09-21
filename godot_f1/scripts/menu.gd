@@ -8,7 +8,7 @@ extends CanvasLayer
 
 const UI := preload("res://scripts/ui_theme.gd")
 
-enum Screen { NONE, START, PAUSE, SETTINGS, CALIBRATE }
+enum Screen { NONE, START, PAUSE, SETTINGS, CALIBRATE, FFB }
 
 const AXIS_COUNT := 8
 
@@ -46,6 +46,19 @@ var _cal_axis_rows: Array = []
 ## that show what the game really receives and let the driver move a pedal to
 ## another axis without running the whole calibration again.
 var _pedal_rows: Dictionary = {}
+## Force-Feedback-Seite: die Knoepfe und die Live-Anzeige.
+var _ffb_rows: Dictionary = {}
+var _ffb_live: Label
+var _ffb_note: Label
+var _ffb_gain_button: Button
+var _ffb_damper_button: Button
+var _ffb_rotation_button: Button
+var _ffb_enabled_button: Button
+var _ffb_effects_button: Button
+var _ffb_ontrack_button: Button
+var _ffb_kerb_button: Button
+var _ffb_offtrack_button: Button
+var _ffb_invert_button: Button
 var _note_serial: int = 0
 
 
@@ -101,6 +114,8 @@ func _on_back() -> void:
 	match screen:
 		Screen.CALIBRATE:
 			_cancel_calibration()
+		Screen.FFB:
+			_show_screen(Screen.SETTINGS)
 		Screen.SETTINGS:
 			_show_screen(_return_to)
 		Screen.PAUSE:
@@ -133,6 +148,7 @@ func _build_ui() -> void:
 	_screens[Screen.PAUSE] = _build_pause()
 	_screens[Screen.SETTINGS] = _build_settings()
 	_screens[Screen.CALIBRATE] = _build_calibrate()
+	_screens[Screen.FFB] = _build_ffb()
 	for key in _screens.keys():
 		var scr: Control = _screens[key]
 		scr.visible = false
@@ -339,6 +355,8 @@ func _build_settings() -> Control:
 	defaults.pressed.connect(_reset_to_defaults)
 	_steer_toggle = _make_button(right, "Lenkrad invertieren: NEIN", false, 0, 26)
 	_steer_toggle.pressed.connect(_toggle_steer_invert)
+	var ffb_button := _make_button(right, "Force Feedback (Lenkrad-Gefühl) …", false, 0, 26)
+	ffb_button.pressed.connect(_open_ffb)
 	_spacer(right, 10)
 	# Fahrhilfen: der Wagen fährt sich mit Automatik und Traktionskontrolle
 	# ruhiger, ohne ist er der ehrliche Formel-1-Wagen. Beides geht auch im
@@ -364,6 +382,247 @@ func _build_settings() -> Control:
 
 	_first_focus[Screen.SETTINGS] = throttle
 	return scr
+
+
+## Die Force-Feedback-Seite: genau die Regler, die auch das offizielle Spiel
+## hat (Stärke, Dämpfung, Effekte, Lenkbereich) - mit einer Live-Anzeige, die
+## zeigt, was gerade wirklich ans Lenkrad geht. Details und Messwerte stehen in
+## docs/FFB_F1_STYLE_PLAN.md.
+func _build_ffb() -> Control:
+	var parts := _new_screen("Ffb", Vector2(1100, 820))
+	var scr: Control = parts[0]
+	var col: Control = parts[1]
+
+	_heading(col, "Force Feedback", 52)
+	_sub(col, "Das Lenkrad-Gefühl wie im offiziellen Formel-1-Spiel", 22)
+	_spacer(col, 10)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 46)
+	col.add_child(row)
+
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 10)
+	left.custom_minimum_size = Vector2(560, 0)
+	row.add_child(left)
+
+	_ffb_enabled_button = _make_button(left, "Force Feedback: AN", true, 0, 26)
+	_ffb_enabled_button.pressed.connect(_cycle_ffb_enabled)
+	_ffb_gain_button = _make_button(left, "Stärke: 75 %", false, 0, 26)
+	_ffb_gain_button.pressed.connect(_cycle_ffb_gain)
+	_ffb_damper_button = _make_button(left, "Dämpfung: MITTEL", false, 0, 26)
+	_ffb_damper_button.pressed.connect(_cycle_ffb_damper)
+	_ffb_effects_button = _make_button(left, "Rütteln (Kerb/Gelände): AN", false, 0, 26)
+	_ffb_effects_button.pressed.connect(_cycle_ffb_effects)
+	_ffb_ontrack_button = _make_button(left, "On Track Effects: 100 %", false, 0, 26)
+	_ffb_ontrack_button.pressed.connect(_cycle_ffb_ontrack)
+	_ffb_kerb_button = _make_button(left, "Rumble Strip Effects: 100 %", false, 0, 26)
+	_ffb_kerb_button.pressed.connect(_cycle_ffb_kerb)
+	_ffb_offtrack_button = _make_button(left, "Off Track Effects: 100 %", false, 0, 26)
+	_ffb_offtrack_button.pressed.connect(_cycle_ffb_offtrack)
+	_ffb_rotation_button = _make_button(left, "Lenkbereich: 400°", false, 0, 26)
+	_ffb_rotation_button.pressed.connect(_cycle_ffb_rotation)
+	_ffb_invert_button = _make_button(left, "Kraftrichtung: normal", false, 0, 26)
+	_ffb_invert_button.pressed.connect(_toggle_ffb_invert)
+
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 10)
+	right.custom_minimum_size = Vector2(430, 0)
+	row.add_child(right)
+
+	_spacer(right, 4)
+	var live_title := Label.new()
+	live_title.text = "Was gerade ans Lenkrad geht"
+	UI.label(live_title, 18, UI.TEXT_DIM)
+	right.add_child(live_title)
+	_ffb_live = Label.new()
+	UI.label(_ffb_live, 20, UI.ACCENT_BRIGHT)
+	_ffb_live.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right.add_child(_ffb_live)
+
+	_spacer(right, 10)
+	var back := _make_button(right, "Zurück", false, 0, 28)
+	back.pressed.connect(_on_back)
+
+	var hint := Label.new()
+	hint.text = ("Im Logitech G HUB: Betriebsbereich 900°, Zentrierfeder AUS, "
+		+ "Dämpfung so niedrig wie möglich — sonst kommt von den feinen Signalen "
+		+ "nichts an. Den Kraft-Helfer startet „Apex Circuit FFB starten.cmd“ "
+		+ "(oder „python tools/g29_ffb.py“); er ist optional, das Spiel läuft "
+		+ "auch ohne ihn. Fühlt es sich verkehrt herum an, drehe die "
+		+ "Kraftrichtung um.\n\n"
+		+ "Stärke, Lenkbereich und die drei Rüttel-Regler (On Track / Rumble "
+		+ "Strip / Off Track) sind dieselben wie im offiziellen Spiel; "
+		+ "400° ist dort die Formel-1-Einstellung. Jedes Rüttel-Band wirkt "
+		+ "für sich: den Kerb leiser stellen lässt das Kies-Mahlen stehen. "
+		+ "Das Spiel bildet diesen "
+		+ "Bereich auf die 900° des G29 ab und baut den Anschlag selbst "
+		+ "(Soft Lock) — man spürt die Wand.")
+	UI.label(hint, 16, UI.TEXT_DIM)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(hint)
+
+	_ffb_note = Label.new()
+	UI.label(_ffb_note, 18, UI.ACCENT_BRIGHT)
+	_ffb_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_ffb_note)
+
+	_refresh_ffb_buttons()
+	_first_focus[Screen.FFB] = _ffb_enabled_button
+	return scr
+
+
+func _open_ffb() -> void:
+	_refresh_ffb_buttons()
+	_show_screen(Screen.FFB)
+
+
+func _ffb_settings():
+	if main == null:
+		return null
+	return main.get("ffb_settings")
+
+
+func _refresh_ffb_buttons() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	if _ffb_enabled_button:
+		_ffb_enabled_button.text = "Force Feedback: %s" % s.enabled_label()
+	if _ffb_gain_button:
+		_ffb_gain_button.text = "Stärke: %s" % s.gain_label()
+	if _ffb_damper_button:
+		_ffb_damper_button.text = "Dämpfung: %s" % s.damper_label()
+	if _ffb_effects_button:
+		_ffb_effects_button.text = "Rütteln (Kerb/Gelände): %s" % s.effects_label()
+	if _ffb_ontrack_button:
+		_ffb_ontrack_button.text = "On Track Effects (Asphalt): %s" % s.ontrack_label()
+	if _ffb_kerb_button:
+		_ffb_kerb_button.text = "Rumble Strip Effects (Kerb): %s" % s.kerb_label()
+	if _ffb_offtrack_button:
+		_ffb_offtrack_button.text = "Off Track Effects (Kies): %s" % s.offtrack_label()
+	if _ffb_rotation_button:
+		_ffb_rotation_button.text = "Lenkbereich: %s" % s.rotation_label()
+	if _ffb_invert_button:
+		_ffb_invert_button.text = "Kraftrichtung: %s" % ("umgekehrt" if s.invert else "normal")
+
+
+func _ffb_live_text() -> String:
+	var car = player
+	if car == null:
+		return "—"
+	var link = car.get("ffb")
+	if link == null:
+		return "kein Lenkradkanal"
+	var st: Dictionary = link.last_state
+	var percent: float = absf(float(st.get("torque", 0.0))) * 100.0
+	var text := "Kraft %3.0f %%   Dämpfung %2.0f %%   Rütteln %2.0f %% @ %2.0f Hz\nSignal: %s" % [
+		percent,
+		float(st.get("damper", 0.0)) * 100.0,
+		float(st.get("rumble", 0.0)) * 100.0,
+		float(st.get("rumble_hz", 0.0)),
+		str(st.get("source", "-"))]
+	if float(st.get("clip", 0.0)) > 0.15:
+		text += "   ⚠ AM ANSCHLAG (Kraft kürzen)"
+	var s = _ffb_settings()
+	if s != null and not bool(s.enabled):
+		text = "Force Feedback ist AUS.\n" + text
+	return text
+
+
+func _update_ffb_live() -> void:
+	if _ffb_live:
+		_ffb_live.text = _ffb_live_text()
+
+
+func _cycle_ffb_enabled() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.toggle_enabled()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Force Feedback %s." % s.enabled_label(), 3.0)
+
+
+func _cycle_ffb_gain() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.cycle_gain()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Stärke %s — im offiziellen Spiel liegt der Bereich bei 40-70 %%. "
+		% s.gain_label(), 4.0)
+
+
+func _cycle_ffb_damper() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.cycle_damper()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Dämpfung %s — hoch heißt ruhig, aber taub; niedrig heißt "
+		% s.damper_label() + "lebendig, aber zappelig.", 4.0)
+
+
+func _cycle_ffb_effects() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.toggle_effects()
+	_refresh_ffb_buttons()
+
+
+## Die drei Bänder des offiziellen Spiels. Jeder Regler wirkt nur auf sein
+## eigenes Rütteln: Kerb leiser machen lässt das Kies-Mahlen stehen - genau
+## wie "Rumble Strip Effects" und "Off Track Effects" im F1-Menü.
+func _cycle_ffb_ontrack() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.cycle_ontrack_effects()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "On Track Effects %s — die feine Asphalt-Textur bei Tempo."
+		% s.ontrack_label(), 4.0)
+
+
+func _cycle_ffb_kerb() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.cycle_kerb_effects()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Rumble Strip Effects %s — das harte, schnelle Rütteln auf dem Kerb."
+		% s.kerb_label(), 4.0)
+
+
+func _cycle_ffb_offtrack() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.cycle_offtrack_effects()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Off Track Effects %s — das grobe Mahlen auf Kies und Gras."
+		% s.offtrack_label(), 4.0)
+
+
+func _cycle_ffb_rotation() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.cycle_rotation()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Lenkbereich %s. Wichtig: im G HUB auf 900° lassen, "
+		% s.rotation_label() + "das Spiel macht den Anschlag selbst.", 4.0)
+
+
+func _toggle_ffb_invert() -> void:
+	var s = _ffb_settings()
+	if s == null:
+		return
+	s.invert = not bool(s.invert)
+	s.save_profile()
+	_refresh_ffb_buttons()
+	_note(_ffb_note, "Kraftrichtung %s." % ("umgekehrt" if s.invert else "normal"), 3.0)
 
 
 func _build_calibrate() -> Control:
@@ -815,6 +1074,8 @@ func _process(_delta: float) -> void:
 	elif screen == Screen.CALIBRATE:
 		_update_readout()
 		_poll_calibration()
+	elif screen == Screen.FFB:
+		_update_ffb_live()
 	elif screen == Screen.START:
 		_refresh_start_status()
 

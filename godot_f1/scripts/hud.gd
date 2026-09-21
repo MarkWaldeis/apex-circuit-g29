@@ -14,6 +14,7 @@ var _hint: Label
 var _mapping: Label
 var _warn: Label
 var _cal: Label
+var _force: Label
 var _leds: HBoxContainer
 var _bars: Dictionary = {}   ## "throttle"/"brake"/"clutch" -> ColorRect fill
 var _pedal_panel: VBoxContainer
@@ -105,6 +106,17 @@ func _ready() -> void:
 	_hint.offset_right = 720
 	_hint.text = "Esc = Menü   C = Kamera   R = Reset   Enter = Auto-Pilot   Paddles/Q-E = schalten"
 
+	# Kraftanzeige wie das "Force Meter" im offiziellen Spiel: wie viel Kraft
+	# gerade am Lenkrad liegt und woraus sie kommt. Sie sitzt oben rechts,
+	# ausserhalb des Blicks auf die Strecke.
+	_force = _label(root, 13, Color(0.66, 0.72, 0.78))
+	_force.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_force.offset_left = -320
+	_force.offset_top = 26
+	_force.offset_right = -24
+	_force.offset_bottom = 48
+	_force.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
 
 func _build_pedal_panel(root: Control) -> void:
 	var panel := VBoxContainer.new()
@@ -172,6 +184,51 @@ func _process(_delta: float) -> void:
 	_speed.visible = not cockpit_view
 	_leds.visible = not cockpit_view
 	_update_pedals()
+	_update_force()
+
+
+## Kraftanzeige: Betrag der Grundkraft in Prozent, das dominante Signal und ein
+## Hinweis, wenn das Signal am Anschlag haengt (dann ist das Lenkrad stark,
+## aber taub - genau das, was im offiziellen Spiel "clipping" heisst).
+func _update_force() -> void:
+	if _force == null:
+		return
+	var link = car.get("ffb")
+	if link == null:
+		_force.text = ""
+		return
+	# Ein totes Lenkrad ist der schlimmste Fehlerfall: das Spiel laeuft, das
+	# Lenkrad steht still, und der Fahrer sucht den Fehler in der Physik. Das
+	# HUD nennt deshalb den Grund, statt einfach "0 %" zu zeigen.
+	var ffb_settings = car.get("ffb_settings")
+	if ffb_settings != null and not bool(ffb_settings.enabled):
+		_force.text = "LENKRADKRAFT AUS — Esc, Einstellungen, Force Feedback einschalten"
+		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
+		return
+	if not bool(link.get("enabled")):
+		_force.text = "LENKRADKANAL AUS (APEX_FFB=0) — kein Force Feedback"
+		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
+		return
+	# Der Helfer antwortet auf jedes Paket (siehe ffb_link.gd/_read_acks). Erst
+	# wenn wirklich schon gesendet wurde und trotzdem nie eine Antwort kam, ist
+	# das eine belastbare Aussage - sonst warnt das HUD schon beim Laden.
+	if int(link.get("sent_packets")) > 120 and not bool(link.helper_alive()):
+		_force.text = "KEIN HELFER — „Apex Circuit FFB starten.cmd“ starten"
+		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
+		return
+	var st: Dictionary = link.last_state
+	var percent: float = absf(float(st.get("torque", 0.0))) * 100.0
+	var rumble: float = float(st.get("rumble", 0.0))
+	var text: String = "Lenkkraft %3.0f %%" % percent
+	if rumble > 0.05:
+		text += "   Rütteln %2.0f %% @ %2.0f Hz" % [rumble * 100.0, float(st.get("rumble_hz", 0.0))]
+	text += "   %s" % str(st.get("source", "-"))
+	if float(st.get("clip", 0.0)) > 0.15:
+		text = "AM ANSCHLAG — " + text
+		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
+	else:
+		_force.add_theme_color_override("font_color", Color(0.66, 0.72, 0.78))
+	_force.text = text
 
 
 func _update_pedals() -> void:

@@ -150,14 +150,52 @@ Die Aerodynamik bremst auch: `F = 0,5 · ρ · CdA · v²` mit CdA = 1,15 m² wi
 als echte Kraft aufgebracht, deshalb ist die Spitze eine Zahl und nicht
 „so schnell das Getriebe eben zieht“.
 
-**Rückmeldung.** Am Lenkrad gibt es den Effekt-Kanal (`scripts/ffb_link.gd` →
-UDP 127.0.0.1:5601 → `tools/g29_ffb.py` → DirectInput). Die Kette ist
-messtechnisch belegt (`tests/test_ffb_link.gd`, Mitschnitt: 1245 Pakete, 0
-kaputt). Ob am Ende wirklich Kraft am Lenkrad ankommt, hängt an der Hardware:
-ohne **Netzteil** kann das G29 keine Kraft erzeugen, und Godot selbst hat keine
-Force-Feedback-Schnittstelle. Im Bild ist die Rückmeldung immer da: das HUD
-zeigt sie, und der Kopf im Cockpit lehnt sich in die Kurve, nickt beim Bremsen
-und rüttelt über Kerbs (`scripts/cockpit_camera.gd`).
+**Rückmeldung.** Am Lenkrad gibt es den Effekt-Kanal (`scripts/ffb_model.gd`
+rechnet, `scripts/ffb_link.gd` → UDP 127.0.0.1:5601 → `tools/g29_ffb.py` →
+DirectInput). Seit dem Lenkrad-Paket ist das keine grobe Abschätzung mehr,
+sondern ein Nachlauf-Modell wie im offiziellen Spiel: die Kraft kommt aus der
+Vorderachse (Querlast × Nachlauf), **bricht ein, wenn die Vorderachse
+untersteuert oder blockiert**, dreht im tiefen Slide in die
+Gegenlenkrichtung, rüttelt auf dem Kerb schnell und auf Kies grob, wird über
+einer Kuppe kurz leicht, stößt bei einer Bodenwelle, beim Schalten und beim
+Einschlag — und drückt am Lenkanschlag (Soft Lock) zurück. Die Stärke aus dem
+Menü wirkt genau einmal (im Modell); der Helfer verstärkt nicht ein zweites Mal.
+Der Helfer antwortet außerdem auf jedes Paket mit einem Lebenszeichen
+(`{"ack":1,"mode":"wheel"}`); daran erkennt das Spiel, ob überhaupt jemand
+zuhört. Ein totes Lenkrad bleibt damit nicht stumm: das HUD schreibt
+„LENKRADKRAFT AUS“ (Schalter im Menü), „LENKRADKANAL AUS (APEX_FFB=0)“ oder
+„KEIN HELFER — Apex Circuit FFB starten.cmd“ statt einfach 0 %.
+Alles zusammen steht in `../docs/FFB_F1_STYLE_PLAN.md`, die Einzelprüfungen in
+`tests/test_ffb_model.gd` (34 Checks), die Gegenproben in
+`tests/probe_review_root.gd` (18 Checks) und die Messung auf der Strecke in
+`tests/probe_ffb.gd`.
+
+Der Kanal hängt an der Hardware: ohne **Netzteil** kann das G29 keine Kraft
+erzeugen **und liefert auch keine Achsendaten**, und Godot selbst hat keine
+Force-Feedback-Schnittstelle. Die Kette selbst ist ohne Hardware prüfbar:
+`tests/test_ffb_link.gd` (14 s echte Fahrt: v2-Pakete, 60 Hz, Kraft im Bogen,
+Stoß, Wertebereiche, Lebenszeichen des Helfers), `python tools/g29_ffb.py --check`
+(12 Prüfungen ohne Lenkrad: Stärke genau einmal, Rampe, Stoß, Loslassen,
+Ereignis/Tempo, Antwort an das Spiel) und
+`python tools/g29_ffb.py --dry-run` (Rampe, Wertebereiche am Rad).
+`powershell -File tools/ffb_end_to_end.ps1` lässt das **echte Spiel** gegen den
+**echten Helfer** fahren (1829 Pakete, Kraftspitze **0,584** — genau der
+Modellwert, also verlustfrei —, Rütteln 0,700 @ 42 Hz, Quellen und
+Schalt-Ereignis angekommen, 10 Prüfungen, 0 Mängel) — die Naht zwischen beiden
+Hälften. Die Spitze kommt aus der `[ffb-peak]`-Zeile des Helfers (Maximum aus
+jedem Sample des 200-Hz-Loops); die frühere 2-Sekunden-Stichprobe meldete
+denselben Lauf einmal mit 0,560 und einmal mit 0,250.
+Im Bild ist die Rückmeldung immer da: das HUD zeigt Kraft, Dämpfung, Rütteln
+und die Quelle („AM ANSCHLAG“, wenn es clippt), und der Kopf im Cockpit lehnt
+sich in die Kurve, nickt beim Bremsen und rüttelt über Kerbs
+(`scripts/cockpit_camera.gd`).
+
+Einstellbar ist alles unter **`Esc` → Einstellungen → Force Feedback**:
+Stärke (30–100 %), Dämpfung, Rütteln an/aus, die drei Rüttel-Bänder des
+offiziellen Spiels (**On Track / Rumble Strip / Off Track Effects**, je
+0–100 % in 10-%-Schritten, getrennt wirksam), Lenkbereich
+(360/400/450/900°) und Kraftrichtung. Details und die Quellen aus dem
+offiziellen Spiel stehen in `docs/FFB_F1_STYLE_PLAN.md`.
 
 ```
 godot --headless --path godot_f1 --script tests/test_car_orientation.gd
@@ -172,6 +210,8 @@ godot --headless --path godot_f1 --script tests/test_racing_line.gd
 godot --headless --path godot_f1 --script tests/test_gearbox.gd
 godot --headless --path godot_f1 --script tests/test_crash_surfaces.gd
 godot --headless --path godot_f1 --script tests/test_ffb_link.gd
+godot --headless --path godot_f1 --script tests/test_ffb_model.gd
+godot --headless --path godot_f1 --script tests/test_ffb_settings.gd
 ```
 
 Zum Nachmessen des Fahrgefühls (schreibt nur Zahlen, keine Dateien):
@@ -183,9 +223,14 @@ godot --headless --path godot_f1 --script tests/probe_thrust.gd
 godot --headless --path godot_f1 --script tests/probe_scrape.gd
 godot --headless --path godot_f1 --script tests/probe_brake_crash.gd
 godot --headless --path godot_f1 --script tests/probe_barrier_geometry.gd
+godot --headless --path godot_f1 --script tests/probe_ffb.gd
+godot --headless --path godot_f1 --script tests/probe_review_root.gd
 ```
 
-`probe_feel` misst 0–100 km/h, Endgeschwindigkeit, Bremsverzögerung in g und
+`probe_review_root` ist die **Gegenprobe** zum Lenkrad-Modell: sie sucht
+Widersprüche zum Plan (Richtung, Anschlag, Clipping, Rüttelbänder,
+Fuzz-Ticks) statt den eigenen Code zu bestätigen. `probe_feel` misst
+0–100 km/h, Endgeschwindigkeit, Bremsverzögerung in g und
 die Querbeschleunigung der KI. `probe_grip` misst die Grip-Kurve auf einer
 leeren Fläche, `probe_thrust` den Zusammenhang zwischen `engine_force` und
 echter Beschleunigung (rund Faktor 1,58).

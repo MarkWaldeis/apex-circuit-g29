@@ -23,8 +23,11 @@ if (-not $godot) {
     $godot = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\Godot_v4.7.2-stable_win64.exe"
 }
 
-$ffbArgs = @("$project\tools\g29_ffb.py", "--verbose")
-if ($Shared) { $ffbArgs += "--shared" }
+# Start-Process zerlegt den Argument-String selbst; der Projektpfad enthaelt
+# ein Leerzeichen ("Mark Waldeis"), also muss der Skriptpfad gequotet sein.
+# Ohne die Anfuehrungszeichen startete Python mit "C:\Users\Mark" als Skript.
+$ffbArgs = "-u `"$project\tools\g29_ffb.py`" --verbose"
+if ($Shared) { $ffbArgs += " --shared" }
 
 Write-Host "[live] starting force feedback bridge"
 $bridge = Start-Process -FilePath $python -ArgumentList $ffbArgs -WindowStyle Hidden -PassThru `
@@ -33,11 +36,11 @@ $bridge = Start-Process -FilePath $python -ArgumentList $ffbArgs -WindowStyle Hi
 Start-Sleep -Seconds 2
 
 Write-Host "[live] sending $Force force for $Seconds s"
-$sender = Start-Process -FilePath $python -ArgumentList @("$project\tools\ffb_send_test.py", "$Seconds", "$Force") `
+$sender = Start-Process -FilePath $python -ArgumentList "`"$project\tools\ffb_send_test.py`" $Seconds $Force" `
     -WindowStyle Hidden -PassThru
 
 Write-Host "[live] running the game probe"
-& $godot --headless --path "$project\godot_f1" --script tests/probe_steer_live.gd 2>&1 |
+& powershell -File "$PSScriptRoot\run_godot.ps1" --headless --path godot_f1 --script tests/probe_steer_live.gd 2>&1 |
     Select-String -Pattern "STEER_LIVE|G29 data arrived|G29 connected"
 
 $sender.WaitForExit()

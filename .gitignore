@@ -3,6 +3,7 @@
 export/
 *.tmp
 *.log
+*.err
 .DS_Store
 Thumbs.db
 __pycache__/

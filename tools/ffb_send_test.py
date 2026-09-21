@@ -1,5 +1,9 @@
 """Send a square-wave force command to tools/g29_ffb.py (test only).
 
+Dieser Sender schickt bewusst das ALTE Protokoll v1 (`force`, `damp`, `fric`):
+so bleibt belegt, dass ein alter Sender den neuen Helfer nicht lahmlegt.
+Das Spiel selbst sendet v2 (`torque`, `damper`, `friction`, `rumble_hz`).
+
 Used by tools/ffb_live_check.ps1 to prove, on the real wheel, that force
 feedback and the game's own steering readout work at the same time.
 

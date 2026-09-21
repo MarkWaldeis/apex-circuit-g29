@@ -25,6 +25,10 @@ var gearbox
 var tyres
 var crash
 var feedback
+## Force-Feedback-Einstellungen (Staerke, Daempfung, Lenkbereich). `main.gd`
+## legt sie an und reicht sie herein, damit Menue, G29, Auto und HUD an genau
+## demselben Objekt drehen.
+var ffb_settings
 ## The channel to the real wheel: `tools/g29_ffb.py` turns these numbers into
 ## DirectInput forces on the G29. Harmless when nothing is listening.
 var ffb
@@ -53,6 +57,16 @@ var surface_rumble: float = 0.0
 var slip: float = 0.0
 var lateral_g: float = 0.0
 var downforce: float = 0.0
+## 0..1, wie weit der Fahrer das Lenkrad ueber den Lenkanschlag hinaus dreht.
+## Der Anschlag steckt im Modell (`ffb_model.gd`), sichtbar ist er hier.
+var lock_pressure: float = 0.0
+## Senkrechte Last in g, gefiltert: 1.0 = Auto steht auf den Raedern, darunter
+## entlastet (Kuppe, Lenkrad wird leicht), darueber gestaucht (Bodenwelle,
+## kurzer Stoss). Das Modell macht daraus die Kraft.
+var vertical_g: float = 1.0
+var _prev_vel_y: float = 0.0
+var _vert_ready: bool = false
+var _bump_cd: float = 0.0
 ## Aerodynamic drag this tick, in Newton, and the acceleration the car feels
 ## in its own frame (used by the camera and by the HUD).
 var aero_drag_n: float = 0.0
@@ -66,6 +80,11 @@ var _wheel_radius_avg: float = 0.365
 ## Below this height there is no track, apron or terrain left - the car is in
 ## the void and has to be put back on the line.
 const VOID_Y := -3.0
+## Ab dieser senkrechten Last (g) gilt die Feder als gestaucht: das gibt einen
+## kurzen Stoss ans Lenkrad (Bodenwelle, Randstein, harte Fuge). Alles darunter
+## ist normales Fahren oder eine Entlastung (Kuppe) - die macht das Lenkrad
+## leicht, statt zu stossen.
+const COMPRESS_G := 1.35
 var _rejoin_cd: float = 0.0
 var rejoin_count: int = 0
 ## How often the car had to be put back on its wheels. A non-zero value while
@@ -116,14 +135,16 @@ func setup(line, wheel_input, start: Transform3D) -> void:
 	tyres.setup(self, line)
 	crash = CrashModel.new()
 	crash.setup(self, surfaces)
-	feedback = WheelFeedback.new()
-	feedback.setup(self, wheel_input)
 	# Only the player's car drives the wheel: two cars sending force at the same
 	# time would fight over the same G29.
 	ffb = null
 	if not is_ai:
 		ffb = FfbLink.new()
-		ffb.setup()
+		ffb.setup(ffb_settings)
+	# HUD, Kamera und Gamepad-Vibration lesen dasselbe Modell wie das echte
+	# Lenkrad. Ein KI-Auto hat keinen Lenkradkanal und rechnet selbst.
+	feedback = WheelFeedback.new()
+	feedback.setup(self, wheel_input, ffb.model if ffb else null)
 	if crash and crash.has_signal("crashed") and not crash.crashed.is_connected(_on_crash):
 		crash.crashed.connect(_on_crash)
 	global_transform = start
@@ -495,6 +516,26 @@ func _on_crash(severity: float, kind: String) -> void:
 		ffb.poke("crash" if kind == "wall" else "contact", severity)
 
 
+## Was das echte Lenkrad als Lenkbefehl liefert.
+##
+## Mit eingestelltem Lenkbereich (F1 faehrt 400 Grad statt der 900 des G29)
+## liefert `g29_input` zwei Werte: `steer_soft` ist der Ausschlag bis zum
+## Anschlag, `steer_lock` der Druck darueber hinaus. Ein Test-Stub ohne diese
+## Eigenschaften faellt auf das alte `steer` zurueck.
+func _wheel_steer() -> float:
+	if g29 == null:
+		return 0.0
+	if "steer_soft" in g29:
+		return float(g29.steer_soft)
+	return float(g29.steer)
+
+
+func _wheel_lock() -> float:
+	if g29 == null or not ("steer_lock" in g29):
+		return 0.0
+	return clampf(float(g29.steer_lock), 0.0, 1.0)
+
+
 func _physics_process(delta: float) -> void:
 	if gearbox == null or surfaces == null or tyres == null or crash == null or feedback == null:
 		return
@@ -542,8 +583,9 @@ func _physics_process(delta: float) -> void:
 		throttle_in = Input.get_action_strength("throttle")
 		brake_in = Input.get_action_strength("brake")
 		if g29 and g29.connected:
-			if abs(g29.steer) > 0.04:
-				steer_in = g29.steer
+			var ws: float = _wheel_steer()
+			if absf(ws) > 0.04:
+				steer_in = ws
 			throttle_in = max(throttle_in, g29.throttle)
 			brake_in = max(brake_in, g29.brake)
 			clutch_in = g29.clutch
@@ -573,6 +615,8 @@ func _physics_process(delta: float) -> void:
 	var steer_cmd: float = clampf(steer_in, -1.0, 1.0)
 	steering = lerp(steering, -steer_cmd * steer_limit, clampf(delta * 10.0, 0.0, 1.0))
 	last_steer = steer_cmd
+	# Wie weit draengt der Fahrer ueber den Lenkanschlag hinaus? (0 = frei)
+	lock_pressure = _wheel_lock()
 	_animate_wheels(delta, forward_vel)
 
 	var engage := 1.0 - clampf(clutch_in, 0.0, 1.0)
@@ -649,25 +693,59 @@ func _physics_process(delta: float) -> void:
 
 	# --- what the driver feels and what the tub took -------------------------
 	crash.update(delta, surface, forward_vel)
-	feedback.update(delta, {
+	# Was macht die Strecke senkrecht mit dem Auto? Genau das fehlt sonst am
+	# Lenkrad: im F1-Spiel wird die Kraft **ueber einer Kuppe kurz leicht** (die
+	# Vorderachse wird entlastet), und eine Bodenwelle gibt einen kurzen Stoss.
+	# Beides kommt aus einer Groesse, die die Physik schon liefert: der
+	# senkrechten Beschleunigung. 1.0 g = das Auto steht auf seinen Raedern,
+	# darunter hebt es ab (Kuppe), darueber wird die Feder gestaucht (Welle).
+	# Die Zahl wird gefiltert (die Aufhaengung ist hart, roh zappelt sie) und
+	# ein Stoss nur bei steigender Flanke ausgeloest, mit Sperrzeit.
+	var raw_vert_g: float = 1.0
+	if _vert_ready:
+		raw_vert_g = (linear_velocity.y - _prev_vel_y) / maxf(delta, 0.0001) / 9.81 + 1.0
+	_vert_ready = true
+	_prev_vel_y = linear_velocity.y
+	vertical_g += (clampf(raw_vert_g, -1.0, 4.0) - vertical_g) * clampf(delta / 0.08, 0.0, 1.0)
+	_bump_cd = maxf(_bump_cd - delta, 0.0)
+	var compress: float = clampf((vertical_g - COMPRESS_G) / 0.9, 0.0, 1.0)
+	if compress > 0.0 and _bump_cd <= 0.0 and spd > 12.0:
+		_bump_cd = 0.35
+		if feedback:
+			feedback.poke("bump", clampf(0.25 + 0.45 * compress, 0.0, 1.0))
+		if ffb:
+			ffb.poke("bump", clampf(0.25 + 0.45 * compress, 0.0, 1.0))
+	# Everything the driver feels comes from this one context: what the front
+	# axle is doing, what is under it and what the driver is asking for. The
+	# real wheel (`ffb`, UDP to tools/g29_ffb.py) and the in-game feedback
+	# (HUD, camera, gamepad) read the same numbers.
+	var feel: Dictionary = {
+		"steer": last_steer,
+		"steer_angle": steering,
 		"speed": spd,
+		"lateral_g": lateral_g,
+		"vertical_g": vertical_g,
+		"yaw_rate": angular_velocity.y,
 		"surface": surface,
 		"slip": slip,
-		"lateral_g": lateral_g,
+		"slip_front": float(tyre.get("slip_front", 0.0)),
+		"slip_rear": float(tyre.get("slip_rear", 0.0)),
+		"front_grip": float(tyre.get("front_grip", 1.0)),
+		"rear_grip": float(tyre.get("rear_grip", 1.0)),
+		"downforce": downforce,
+		"understeer": float(tyre.get("understeer", 0.0)),
+		"oversteer": float(tyre.get("oversteer", 0.0)),
+		"throttle": throttle_in,
+		"brake": brake_in,
+		"lock_pressure": lock_pressure,
+		"traction_control": bool(assists.get("traction_control", true)),
 		"crash": crash.last_impact_ms,
 		"damage": crash.damage,
-	})
+	}
+	feedback.update(delta, feel)
 	# Force feedback for the real wheel (tools/g29_ffb.py listens on UDP).
 	if ffb:
-		ffb.update(delta, {
-			"steer_angle": steering,
-			"lateral_g": lateral_g,
-			"speed": spd,
-			"surface": surface,
-			"slip_front": float(tyre.get("slip_front", 0.0)),
-			"understeer": float(tyre.get("understeer", 0.0)),
-			"damage": crash.damage,
-		})
+		ffb.update(delta, feel)
 
 	_rejoin_cd = maxf(_rejoin_cd - delta, 0.0)
 	# Past the runoff apron there is no collision surface at all. Without this

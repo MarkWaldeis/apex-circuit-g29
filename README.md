@@ -11,12 +11,50 @@ GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
 * **Pedale von Hand korrigieren**: die Zeilen *Gas / Bremse / Kupplung* unter den Achsenbalken zeigen live, was das Spiel wirklich als Gas, Bremse und Kupplung verwendet. Falsch erkannte Achse? Ein Klick auf **Gas ⟷ Bremse tauschen** oder auf **Achse aN ändern** — belegte Achsen werden dabei übersprungen, die Wahl wird sofort gespeichert.
 * **Lenkrad-Kalibrierung** inklusive Drehrichtung.
 * **Cockpit-Ansicht**, in der sich das Lenkrad im Spiel mit dem echten G29 mitdreht, mit Schaltblitzen und Pedalanzeige im HUD.
+* **Echtes Force Feedback am G29** wie im offiziellen F1-Spiel: das Lenkrad
+  wird im schnellen Bogen schwer, wird leicht, wenn die Vorderachse
+  untersteuert oder blockiert, zieht im ausbrechenden Heck in die
+  Gegenlenkrichtung, rüttelt auf dem Kerb (schnell) und auf Kies (grob),
+  gibt einen Stoß beim Schalten und beim Einschlag — und hat einen
+  fühlbaren Lenkanschlag (Soft Lock) bei 360/400/450/900°. Der ganze Plan
+  mit Quellen und Messwerten steht in `docs/FFB_F1_STYLE_PLAN.md`.
+  Gemessen auf einer Runde: Kraft Mittel 10 %, Spitze 59 % der
+  Lenkradstärke, auf der Geraden bei Tempo praktisch ruhig (Sprung pro Tick
+  0,0005), 0 % der Ticks im Anschlag. Was noch **nicht** gemessen ist: die
+  Kraft am eigenen Lenkrad — das G29 meldet sich ohne Netzteil am PC an,
+  liefert aber keine Achsendaten und keine Kraft. Der ehrliche Stand steht
+  am Ende von `docs/FFB_F1_STYLE_PLAN.md` und in
+  `docs/reviews/ffb_f1_style.md`.
 * Der Wagen fährt vorwärts in die richtige Richtung (Nase = Fahrtrichtung), Vorderräder lenken sichtbar mit, Hinterräder treiben an.
 * **Lenkrichtung stimmt**: rechts am Lenkrad ist rechts im Spiel — Cockpit-Lenkrad, sichtbare Vorderräder und die Fahrphysik drehen alle in dieselbe Richtung (`godot_f1/tests/test_cockpit_wheel.gd`).
 
 ## Schnellstart
 
 Doppelklick auf **Apex Circuit** auf dem Desktop, oder auf `Apex Circuit starten.lnk` im Projektordner.
+
+Für die Kraft am Lenkrad zusätzlich **`Apex Circuit FFB starten.cmd`**
+doppelklicken (Fenster offen lassen). Ohne dieses Fenster läuft das Spiel
+unverändert, nur eben ohne Kraft — Godot selbst kann am G29 kein
+Force Feedback erzeugen.
+
+Unterstützt werden **G29, G920 und G923** — der Helfer sucht die ganze
+Logitech-Familie (ein anderes Rad: `python tools/g29_ffb.py --name <Name>`).
+Im Logitech G HUB einstellen: **Betriebsbereich 900°, Zentrierfeder AUS**,
+Dämpfung so niedrig wie möglich. Das Spiel bildet den eingestellten
+Lenkbereich (Standard 400°, wie im offiziellen Spiel) auf diese 900° ab und
+baut den Anschlag selbst.
+
+Die Rüttel-Regler heißen wie im offiziellen Spiel (**On Track Effects**,
+**Rumble Strip Effects**, **Off Track Effects** — je 0–100 %) und wirken
+getrennt: den Kerb leiser stellen lässt das grobe Kies-Mahlen stehen.
+
+**Wichtig für Änderungen am Spiel:** der Doppelklick-Start läuft auf dem
+**Export**, nicht auf den Godot-Quellen. Nach Änderungen also
+`export_windows.cmd` ausführen (schreibt `ApexCircuit\ApexCircuit.exe` und
+`.pck`) und beide Dateien als `Apex Circuit.exe` / `Apex Circuit.pck` in den
+Desktop-Ordner `Apex Circuit\` kopieren. Sonst spielt der Desktop-Start eine
+alte Version — genau das war der Fall: der Desktop-Build war vom 17.09. und
+enthielt das ganze Force Feedback noch nicht.
 
 Die eigentlichen Dateien liegen in:
 
@@ -56,6 +94,58 @@ godot --path godot_f1
 | `docs/` | Inventar (Excel) |
 
 ## Wenn das Lenkrad nicht reagiert
+
+### Kraft kommt nicht an
+
+Alles, was mit Force Feedback zu tun hat, steht unter **`Esc` → Einstellungen
+→ Force Feedback (Lenkrad-Gefühl)**: Stärke, Dämpfung, Rütteln an/aus,
+Lenkbereich und Kraftrichtung. Die Live-Anzeige dort (und oben rechts im
+Rennen) zeigt, wie viel Kraft gerade wirklich ans Lenkrad geht und woher sie
+kommt — steht dort „AM ANSCHLAG“, ist die Stärke zu hoch und das Lenkrad
+wird taub statt stark.
+
+Steht dort statt einer Zahl einer dieser Sätze, nennt das Spiel den Grund,
+statt still zu bleiben:
+
+* **„LENKRADKRAFT AUS“** — im Menü ist das Force Feedback abgeschaltet
+  (`Esc` → Einstellungen → Force Feedback, Schalter auf AN).
+* **„LENKRADKANAL AUS (APEX_FFB=0)“** — der Kanal wurde per
+  Umgebungsvariable abgeschaltet.
+* **„KEIN HELFER — Apex Circuit FFB starten.cmd“** — das Spiel sendet, aber
+  niemand antwortet: das Helfer-Fenster ist zu. Der Helfer meldet sich auf
+  jedem Paket zurück (`{"ack":1}`), deshalb kann das Spiel das überhaupt
+  erkennen. (Die Warnung erscheint erst nach rund zwei Sekunden Fahrt, damit
+  sie beim Laden der Szene nicht fälschlich aufleuchtet.)
+
+Prüfen lässt sich die Kette ohne Spiel und ohne Lenkrad:
+
+```
+python tools/g29_ffb.py --check             # Kette prüfen: Stärke genau einmal, Rampe, Puls, Loslassen (Exit 0/1)
+python tools/g29_ffb.py --dry-run          # Pakete, Rampe, Wertebereiche
+python tools/g29_ffb.py --selftest         # Gerät + Effekte, kurzer Teststoß
+python tools/g29_ffb.py --demo             # alle Fahrsituationen am Lenkrad fühlen
+python tools/g29_ffb.py --name G923        # anderes Rad als G29/G920/G923 suchen
+powershell -File tools/ffb_end_to_end.ps1  # echtes Spiel gegen den echten Helfer, ohne Lenkrad
+powershell -File tools/ship_check.ps1      # läuft der AUSGELIEFERTE Build (Desktop-Start) richtig?
+powershell -File tools/ffb_direction_check.ps1   # dreht eine positive Kraft nach rechts?
+```
+
+`--check` braucht kein Lenkrad und keinen zweiten Rechner: es schickt die
+Pakete selbst durch denselben Weg, den das Spiel im Betrieb nimmt, und meldet
+PASS/FAIL je Prüfung. Was es abdeckt und welche Mängel es gefunden hat, steht
+in `docs/reviews/ffb_f1_style.md`.
+
+`ffb_end_to_end.ps1` fährt zweimal: mit **FFB AN** (die Kraft muss ankommen)
+und mit **FFB AUS** (es darf keine ankommen). Der zweite Lauf ist der Beweis,
+dass der Schalter im Menü wirklich bis ans Lenkrad durchschlägt. Beide Läufe
+bringen ihre eigene Einstellungsdatei mit (`APEX_FFB_SETTINGS`), damit sie
+nicht davon abhängen, was zuletzt im Menü eingestellt war.
+
+`ship_check.ps1` prüft die **ausgelieferte** `Apex Circuit.exe` — der
+Desktop-Start läuft auf dem Export, nicht auf den Godot-Quellen. Es startet
+den Build headless gegen den echten Helfer und misst, ob er den neuen Stand
+enthält (Kennzeichen: er kennt `APEX_FFB_SETTINGS` und schaltet bei „FFB AUS“
+alle Kanäle auf 0).
 
 Windows erkennt das G29 auch dann, wenn es **keine** Daten liefert — typisch, wenn das Netzteil nicht angeschlossen ist. Prüfen:
 

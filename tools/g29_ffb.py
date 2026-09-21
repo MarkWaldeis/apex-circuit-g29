@@ -1,24 +1,46 @@
-"""Echtes Force Feedback fuer das Logitech G29 (DirectInput, ohne Zusatzpakete).
+"""Echtes Force Feedback fuer das Logitech G29/G920/G923 (DirectInput, ohne
+Zusatzpakete).
 
 Warum es dieses Programm gibt
 -----------------------------
-Godot 4 hat keine Force-Feedback-Schnittstelle, und das G29 hat keine
+Godot 4 hat keine Force-Feedback-Schnittstelle, und diese Lenkraeder haben keine
 Rumble-Motoren, auf die `Input.start_joy_vibration` wirken koennte. Das Spiel
-kann die Kraft also nicht selbst erzeugen. Der G29 haengt aber als
+kann die Kraft also nicht selbst erzeugen. Das Lenkrad haengt aber als
 DirectInput-Geraet am PC, und DirectInput kann sehr wohl Kraftbefehle an das
 Lenkrad schicken. Genau das macht dieses Programm: es liest die Fahrzeugwerte,
 die das Spiel per UDP schickt, und uebersetzt sie in echte Kraefte am Lenkrad.
 
+Gesucht wird die ganze Logitech-Familie der drei Raeder, die der Auftrag nennt:
+**G29, G920, G923** (die G923 "TrueForce"-Zusatzkanaele brauchen wir nicht; sie
+spielt die Standard-DirectInput-Effekte genau wie die anderen zwei). Wer ein
+anderes Rad hat, gibt seinen Namen mit `--name` an.
+
 Protokoll (vom Spiel gesendet, UTF-8 JSON, ein Objekt pro Paket):
 
-    {"v":1,"force":0.0,"damp":0.0,"fric":0.0,"rumble":0.0,"pulse":0.0,
-     "event":"shift","speed":42.5,"surface":"Asphalt","damage":0.0}
+    v2 (das Spiel):
+    {"v":2,"torque":-0.42,"damper":0.29,"friction":0.14,"rumble":0.55,
+     "rumble_hz":31.0,"pulse":0.0,"pulse_dir":0.0,"spring":0.0,"gain":1.0,
+     "event":"kerb","speed":48.3,"source":"Kerb","clip":0.0,"damage":0.0}
 
-    force   -1.0 .. +1.0  Grundkraft (Zentrierung, Untersteuern, Aufprall)
-    damp     0.0 ..  1.0  geschwindigkeitsabhaengige Daempfung
-    fric     0.0 ..  1.0  Reibung (Kerb, Kies, Gras)
-    rumble   0.0 ..  1.0  Ruetteln (Kerb, Ausritt)
-    pulse    0.0 ..  1.0  einmaliger Stoss (Schalten, Aufprall)
+    torque      -1.0 .. +1.0  Grundkraft, + = drueckt nach rechts. Die Staerke
+                              aus dem Menue steckt hier schon drin; der Helfer
+                              skaliert sie NICHT ein zweites Mal (frueher tat er
+                              das: 75 % Einstellung kamen als 56 % am Rad an).
+    damper       0.0 ..  1.0  geschwindigkeitsabhaengige Daempfung
+    friction     0.0 ..  1.0  Reibung (Stand, Kerb, Kies, Gras)
+    rumble       0.0 ..  1.0  Amplitude des Ruettelns
+    rumble_hz    5.0 .. 60.0  Frequenz dazu (Kerb schnell, Kies grob)
+    pulse        0.0 ..  1.0  einmaliger Stoss (Schalten, Aufprall); er sitzt
+                              sofort auf der Kraft und klingt in 0,12 s ab
+    pulse_dir   -1.0 .. +1.0  Richtung des Stosses (+ = rechts)
+    spring       0.0 ..  1.0  Rest-Zentrierfeder, Standard 0 (das Zentrieren
+                              macht der Nachlauf des Spiels)
+    source/clip/damage        Herkunft der Kraft, Anteil "am Anschlag" und
+                              Schaden - nur fuer Anzeige und Diagnose
+
+    v1 (alte Sender, z.B. tools/ffb_send_test.py): "force", "damp", "fric".
+    Beide Varianten werden gelesen, damit ein alter Sender den Helfer nicht
+    lahmlegt.
 
 Standardmaessig hoert das Programm auf 127.0.0.1:5601. Kommt 0,5 s lang kein
 Paket (Spiel beendet, Menue), fallen die Kraefte zurueck, damit das Lenkrad
@@ -30,10 +52,15 @@ Aufrufe
     python tools/g29_ffb.py --selftest      # Geraet pruefen, Effekte laden, kurz Kraft geben
     python tools/g29_ffb.py --list          # zeigen, welche Lenkraeder DirectInput sieht
     python tools/g29_ffb.py --invert        # Kraftrichtung umdrehen
+    python tools/g29_ffb.py --name G923     # anderes Rad als G29/G920/G923 suchen
+    python tools/g29_ffb.py --dry-run       # Kette ohne Lenkrad: Pakete, Rampe, Grenzen
+    python tools/g29_ffb.py --check        # Kette ohne Lenkrad PRUEFEN (Exit 0/1)
+    python tools/g29_ffb.py --demo          # alle Fahrsituationen am echten Rad fuehlen
+    python tools/g29_ffb.py --sign-check    # messen, wohin eine positive Kraft dreht
 
-Das G29 braucht sein Netzteil: ohne Netzteil meldet es sich an, liefert aber
-keine Achsendaten und kann auch keine Kraft erzeugen. `--selftest` sagt das
-ausdruecklich, statt Erfolg vorzutaeuschen.
+Das G29/G920/G923 braucht sein Netzteil: ohne Netzteil meldet es sich an,
+liefert aber keine Achsendaten und kann auch keine Kraft erzeugen. `--selftest`
+sagt das ausdruecklich, statt Erfolg vorzutaeuschen.
 """
 
 from __future__ import annotations
@@ -41,8 +68,10 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import os
 import socket
 import sys
+import threading
 import time
 from ctypes import wintypes
 
@@ -85,6 +114,45 @@ DIERR_DEVICEFULL = -2147220994
 DIERR_UNPLUGGED = -2147220996
 
 MAX_PATH = 260
+
+## --- Verhalten der Kraefte ---------------------------------------------------
+## Ein Lenkrad ist keine Treppe. Das Spiel schickt 60 Pakete je Sekunde, der
+## Helfer rechnet mit 200 Hz weiter: die Kraft wird zwischen den Paketen
+## nachgezogen, statt in Stufen zu springen. Ein Schlag darf schnell kommen
+## (Wand, Kerb, Schalten), das Nachlassen dauert etwas.
+TORQUE_RISE = 40.0      ## Kraft pro Sekunde, wenn sie steigt (0.2/Sample bei 200 Hz)
+TORQUE_FALL = 8.0       ## Kraft pro Sekunde, wenn sie faellt
+PULSE_MIX = 0.70        ## wie stark ein Puls (Schalten, Aufprall) auf die Kraft geht
+PULSE_DECAY = 0.12      ## s, bis ein Puls wieder weg ist
+IDLE_SPRING = 0.0       ## Feder im Leerlauf: aus (das Zentrieren macht der Nachlauf)
+ACK_PERIOD = 0.1        ## s zwischen zwei Lebenszeichen an das Spiel
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def _approach(current: float, target: float, dt: float, tau: float) -> float:
+    """Erstes Ordnung: naehert sich dem Ziel mit Zeitkonstante `tau`."""
+    g = _clamp(dt / max(tau, 1e-4), 0.0, 1.0)
+    return current + (target - current) * g
+
+
+def _slew(current: float, target: float, dt: float,
+          rise: float = TORQUE_RISE, fall: float = TORQUE_FALL) -> float:
+    """Mit begrenzter Steilheit auf das Ziel zu - kein Sprung, kein Treppchen."""
+    up = rise * dt
+    down = fall * dt
+    if target > current:
+        return min(target, current + up)
+    return max(target, current - down)
+
+
+def _read_float(value, fallback: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 class GUID(ctypes.Structure):
@@ -284,10 +352,42 @@ class WheelError(RuntimeError):
     pass
 
 
-class G29ForceFeedback:
-    """Oeffnet das G29 ueber DirectInput und haelt die vier Effekte."""
+## Die Raeder, die der Auftrag nennt. Gesucht wird nach diesen Namensteilen,
+## nicht nach einem einzelnen: ein fest auf "G29" gestellter Filter hat ein
+## angeschlossenes G920/G923 schlicht nicht gefunden ("kein Lenkrad gefunden,
+## dessen Name 'G29' enthaelt"), obwohl es dieselben DirectInput-Effekte
+## annimmt. Alle drei melden sich als "Logitech G29/G920/G923 Driving Force
+## Racing Wheel"; `--name` ueberschreibt die Liste fuer alles andere.
+WHEEL_NAME_NEEDLES = ("g29", "g920", "g923")
 
-    def __init__(self, name_filter: str = "G29", verbose: bool = False,
+
+def wheel_name_matches(product: str, instance: str = "",
+                       needles: tuple = WHEEL_NAME_NEEDLES) -> bool:
+    """Traegt dieses DirectInput-Geraet einen der gesuchten Namen?"""
+    haystack = f"{product} {instance}".lower()
+    return any(needle and needle in haystack for needle in needles)
+
+
+def wheel_name_needles(name_filter=None) -> tuple:
+    """`None` oder "" -> die ganze Familie; sonst die genannten Namensteile.
+
+    Mehrere Namen duerfen mit Komma getrennt werden ("g29,g923"), damit sich
+    auch eine eigene Liste bequem auf der Kommandozeile angeben laesst.
+    """
+    if name_filter is None:
+        return WHEEL_NAME_NEEDLES
+    if isinstance(name_filter, (list, tuple)):
+        parts = [str(p) for p in name_filter]
+    else:
+        parts = str(name_filter).split(",")
+    wanted = tuple(p.strip().lower() for p in parts if p and p.strip())
+    return wanted or WHEEL_NAME_NEEDLES
+
+
+class G29ForceFeedback:
+    """Oeffnet das Lenkrad ueber DirectInput und haelt die vier Effekte."""
+
+    def __init__(self, name_filter=None, verbose: bool = False,
                  exclusive: bool = False) -> None:
         self.verbose = verbose
         self.exclusive = exclusive
@@ -302,6 +402,13 @@ class G29ForceFeedback:
         self.eff_rumble = ctypes.c_void_p()
         self.eff_spring = ctypes.c_void_p()
         self._hwnd = None
+        # Was zuletzt ans Geraet geschickt wurde: ein Effekt wird nur dann neu
+        # hochgeladen, wenn sich sein Wert wirklich geaendert hat. Bei 200 Hz
+        # sind das sonst tausend DirectInput-Aufrufe je Sekunde ohne Wirkung.
+        self._constant_sent = False
+        self._damper_sent = False
+        self._friction_sent = False
+        self._spring_sent = False
         self._axis_offsets = (DWORD * 1)(0)
         self._direction = (LONG * 1)(0)
         self.caps_flags = 0
@@ -435,7 +542,7 @@ class G29ForceFeedback:
                 print(f"[ffb]   objekt {o['name']!r} offset={o['offset']} "
                       f"type=0x{o['type']:08X} maxforce={o['ff_max_force']}{mark}")
 
-    def _open_device(self, name_filter: str) -> None:
+    def _open_device(self, name_filter=None) -> None:
         """Geraet im Enum-Callback erzeugen.
 
         CreateDevice MUSS hier drin passieren: die Instanz-GUID eines
@@ -443,10 +550,13 @@ class G29ForceFeedback:
         gespeichert und danach benutzt, antwortet Windows mit
         DIERR_DEVICENOTREG (0x80040154) - genau der Fehler, der hier zuerst
         auftrat.
+
+        Gesucht wird nach der ganzen Familie (G29/G920/G923), nicht nach einem
+        einzelnen Namen: derselbe DirectInput-Code bedient alle drei.
         """
         callback_type = ctypes.WINFUNCTYPE(
             wintypes.BOOL, ctypes.POINTER(DIDEVICEINSTANCEW), ctypes.c_void_p)
-        needle = name_filter.lower()
+        needles = wheel_name_needles(name_filter)
         seen: list[str] = []
         found: list[str] = []
         create = _method(self.dinput, 3, HRESULT, ctypes.POINTER(GUID),
@@ -456,7 +566,7 @@ class G29ForceFeedback:
             inst = inst_ptr.contents
             product = inst.tszProductName
             seen.append(product)
-            if needle not in f"{product} {inst.tszInstanceName}".lower():
+            if not wheel_name_matches(product, inst.tszInstanceName, needles):
                 return True
             device = ctypes.c_void_p()
             hr = create(self.dinput, ctypes.byref(inst.guidInstance),
@@ -477,8 +587,10 @@ class G29ForceFeedback:
             print(f"[ffb] DirectInput-Gamecontroller: {', '.join(seen) or '(keine)'}")
         if not found:
             raise WheelError(
-                f"kein Lenkrad gefunden, dessen Name '{name_filter}' enthaelt "
-                f"(DirectInput sieht: {', '.join(seen) or 'nichts'})")
+                f"kein Lenkrad gefunden, dessen Name einen von "
+                f"{', '.join(repr(n) for n in needles)} enthaelt "
+                f"(DirectInput sieht: {', '.join(seen) or 'nichts'}). "
+                f"Anderes Rad? Dann den Namen mit --name angeben.")
         self.name = found[0]
         if self.verbose:
             print(f"[ffb] Geraet: {self.name}")
@@ -736,51 +848,79 @@ class G29ForceFeedback:
         return ctypes.cast(state, ctypes.POINTER(LONG)).contents.value
 
     def apply(self, force: float, damp: float, fric: float, rumble: float,
-              pulse: float, invert: bool = False, spring: float = 0.35) -> None:
+              pulse: float, invert: bool = False, spring: float = 0.0,
+              rumble_hz: float = 24.0, gain: float = 1.0,
+              pulse_dir: float = 0.0) -> None:
+        """Kraefte ans Lenkrad geben.
+
+        `force` ist die Grundkraft (-1..+1, + = nach rechts), `pulse` ein
+        zusaetzlicher kurzer Stoss in Richtung `pulse_dir`. `gain` ist der
+        manuelle Trimm aus `--gain` und skaliert beides - die Staerke aus dem
+        Spiel steckt schon in `force` und wird hier **nicht** noch einmal
+        angewendet.
+        """
         sign = -1.0 if invert else 1.0
-        magnitude = int(max(-1.0, min(1.0, force)) * 10000 * sign)
-        burst = int(max(0.0, min(1.0, pulse)) * 7000 * sign)
-        if abs(burst) > abs(magnitude):
-            magnitude += burst
-        magnitude = int(max(-10000, min(10000, magnitude)))
+        g = _clamp(gain, 0.0, 1.0)
+        burst = _clamp(pulse, 0.0, 1.0) * g * PULSE_MIX * _clamp(pulse_dir, -1.0, 1.0)
+        total = _clamp(_clamp(force, -1.0, 1.0) * g + burst, -1.0, 1.0)
+        magnitude = int(total * 10000 * sign)
         self._set_constant(magnitude)
-        self._set_damper(int(max(0.0, min(1.0, damp)) * 7000))
-        self._set_friction(int(max(0.0, min(1.0, fric)) * 7000))
-        self._set_spring(int(max(0.0, min(1.0, spring)) * 9000))
-        self._set_rumble(int(max(0.0, min(1.0, rumble)) * 8000))
+        self._set_damper(int(_clamp(damp, 0.0, 1.0) * 7000))
+        self._set_friction(int(_clamp(fric, 0.0, 1.0) * 7000))
+        self._set_spring(int(_clamp(spring, 0.0, 1.0) * 9000))
+        self._set_rumble(int(_clamp(rumble, 0.0, 1.0) * 8000), rumble_hz)
 
     def _set_constant(self, magnitude: int) -> None:
         if not self.eff_constant:
             return
+        if magnitude == self._constant.lMagnitude and self._constant_sent:
+            return
         self._constant.lMagnitude = magnitude
+        self._constant_sent = True
         self._update(self.eff_constant, self._constant)
 
     def _set_damper(self, coefficient: int) -> None:
         if not self.eff_damper:
             return
+        if coefficient == self._damper.lPositiveCoefficient and self._damper_sent:
+            return
         self._damper.lPositiveCoefficient = coefficient
         self._damper.lNegativeCoefficient = -coefficient
+        self._damper_sent = True
         self._update(self.eff_damper, self._damper)
 
     def _set_friction(self, coefficient: int) -> None:
         if not self.eff_friction:
             return
+        if coefficient == self._friction.lPositiveCoefficient and self._friction_sent:
+            return
         self._friction.lPositiveCoefficient = coefficient
         self._friction.lNegativeCoefficient = -coefficient
+        self._friction_sent = True
         self._update(self.eff_friction, self._friction)
 
-    def _set_rumble(self, magnitude: int) -> None:
+    def _set_rumble(self, magnitude: int, hz: float = 24.0) -> None:
+        """Ruetteln mit Frequenz. Das Geraet kennt `dwPeriod` in Mikrosekunden:
+        ein Kerb bei 38 Hz ist damit etwas anderes als Kies bei 11 Hz, und
+        beides ist etwas anderes als der feste Wert von frueher."""
         if not self.eff_rumble:
             return
+        period = int(_clamp(1_000_000.0 / max(hz, 1.0), 1000.0, 250000.0))
+        if magnitude == self._periodic.dwMagnitude and period == self._periodic.dwPeriod:
+            return
         self._periodic.dwMagnitude = magnitude
+        self._periodic.dwPeriod = period
         self._update(self.eff_rumble, self._periodic)
 
     def _set_spring(self, coefficient: int) -> None:
         if not self.eff_spring:
             return
+        if coefficient == self._spring.lPositiveCoefficient and self._spring_sent:
+            return
         self._spring.lOffset = 0
         self._spring.lPositiveCoefficient = coefficient
         self._spring.lNegativeCoefficient = -coefficient
+        self._spring_sent = True
         self._update(self.eff_spring, self._spring)
 
     def _update(self, effect, params) -> None:
@@ -846,9 +986,10 @@ def list_devices() -> int:
 
 
 def selftest(seconds: float, invert: bool, verbose: bool,
-             exclusive: bool = True) -> int:
+             exclusive: bool = True, name_filter=None) -> int:
     try:
-        wheel = G29ForceFeedback(verbose=verbose, exclusive=exclusive)
+        wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
+                                 exclusive=exclusive)
     except WheelError as exc:
         print(f"SELFTEST FAIL: {exc}")
         return 1
@@ -896,40 +1037,147 @@ def selftest(seconds: float, invert: bool, verbose: bool,
 
 def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                idle_release: float, exclusive: bool = True,
-               spring: float = 0.35) -> int:
-    try:
-        wheel = G29ForceFeedback(verbose=verbose, exclusive=exclusive)
-    except WheelError as exc:
-        print(f"[ffb] kein Lenkrad: {exc}")
-        return 1
-    print(f"[ffb] {wheel.name} bereit, Effekte: "
-          f"{', '.join(wheel.effects_created) or '(keine)'}")
-    if wheel.effects_failed:
-        print(f"[ffb] nicht verfuegbar: {'; '.join(wheel.effects_failed)}")
-    if not wheel.effects_created:
-        print("[ffb] ohne Effekte beendet sich der Helfer")
-        wheel.close()
-        return 1
+               spring: float = 0.0, gain: float = 1.0,
+               dry_run: bool = False, run_seconds: float = 0.0,
+               report: dict = None, quiet: bool = False,
+               wheel_override=None, name_filter=None) -> int:
+    """Pakete lesen und Kraft ans Lenkrad geben.
+
+    `report` (optional) wird mit den Messwerten des Laufs gefuellt, damit
+    `--check` die Kette ohne Hardware pruefen kann, statt sie nur zu drucken:
+    Spitzenkraft, groesster Sprung, Anzahl guter/kaputter/v1-Pakete, Quellen,
+    Clipping und ob die Kraft am Ende wirklich losgelassen wurde.
+
+    `wheel_override` setzt einen Ersatz fuer das G29 ein (siehe
+    `_MagnitudeProbe`). Damit laeuft der echte Loop samt Rampe und Puls, nur
+    ohne Hardware - das ist die Messung, die `--check` benutzt.
+    """
+    wheel = None
+    if wheel_override is not None:
+        wheel = wheel_override
+    elif not dry_run:
+        try:
+            wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
+                                     exclusive=exclusive)
+        except WheelError as exc:
+            print(f"[ffb] kein Lenkrad: {exc}")
+            return 1
+        if not quiet:
+            print(f"[ffb] {wheel.name} bereit, Effekte: "
+                  f"{', '.join(wheel.effects_created) or '(keine)'}")
+        if wheel.effects_failed:
+            print(f"[ffb] nicht verfuegbar: {'; '.join(wheel.effects_failed)}")
+        if not wheel.effects_created:
+            print("[ffb] ohne Effekte beendet sich der Helfer")
+            wheel.close()
+            return 1
+    else:
+        if not quiet:
+            print("[ffb] Trockenlauf: kein Lenkrad, nur die Rechnung "
+                  "(zum Pruefen der Kette ohne Hardware)")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("127.0.0.1", port))
+    # Zwei Helfer am selben Port wuerden sich die Pakete teilen: Windows gibt
+    # sie dem zuletzt gebundenen Socket. Ein zweimal gestarteter Helfer soll
+    # deshalb klar sagen, dass schon einer laeuft, statt den ersten still
+    # abzuhaengen. (Fallback fuer Nicht-Windows: SO_REUSEADDR wie bisher.)
+    _exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+    if _exclusive is not None:
+        sock.setsockopt(socket.SOL_SOCKET, _exclusive, 1)
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError as exc:
+        # Laeuft schon ein Helfer (oder hat Windows den Port nach einem
+        # abgestuerzten Lauf noch nicht freigegeben), darf das Programm nicht
+        # mit einem Traceback sterben: das sieht aus wie ein Fehler im Spiel.
+        sock.close()
+        print(f"[ffb] Port {port} ist belegt ({exc}). Laeuft schon ein Helfer? "
+              f"Anderer Port mit --port oder APEX_FFB_PORT.")
+        return 1
     sock.setblocking(False)
 
     period = 1.0 / max(rate, 20.0)
-    state = {"force": 0.0, "damp": 0.0, "fric": 0.0, "rumble": 0.0, "pulse": 0.0}
+    # Ziel (was das Spiel will) und Ist (was gleich am Lenkrad liegt). Zwischen
+    # beiden liegt die Rampe, damit der Zahnradantrieb nicht springt.
+    target = {"torque": 0.0, "damper": 0.0, "fric": 0.0, "rumble": 0.0,
+              "rumble_hz": 24.0, "pulse": 0.0, "pulse_dir": 0.0, "spring": spring}
+    live = dict(target)
     last_packet = 0.0
-    pulse_until = 0.0
     packets = 0
+    stale_now = False
     last_report = time.time()
-    print(f"[ffb] hoert auf 127.0.0.1:{port} ({rate:.0f} Hz)")
+    started = time.time()
+    # Messwerte fuer den Trockenlauf: der groesste Sprung, den das Lenkrad
+    # wirklich zu sehen bekommt, gegen den groessten Sprung im Paket.
+    max_step = 0.0
+    max_target_jump = 0.0
+    extremes = {"torque": [0.0, 0.0], "damper": [0.0, 0.0],
+                "fric": [0.0, 0.0], "rumble": [0.0, 0.0]}
+    last_target_torque = 0.0
+    # Diagnose aus dem Paket: woher die Kraft kommt und ob sie am Anschlag haengt.
+    last_source = "-"
+    source_counts = {}
+    # Ereignis und Tempo gehoeren zur selben Diagnose: "was ist gerade
+    # passiert" (Schalten, Einschlag) und "wie schnell war der Wagen dabei".
+    # Ueber das Protokoll kamen beide schon an, gelesen hat sie niemand.
+    last_event = ""
+    event_counts = {}
+    speed_peak = 0.0
+    speed_last = 0.0
+    clip_max = 0.0
+    damage_max = 0.0
+    # Echte Spitzen statt Stichproben: `--verbose` druckt alle 2 s eine Zeile,
+    # eine Kurve mit 3,5 g haelt aber nur rund eine Sekunde. Wer die Kraft an
+    # so einer Zeile abliest, misst den Zufall (genau das passierte: derselbe
+    # Lauf meldete einmal 0,560, einmal 0,250). Diese Zahlen entstehen aus
+    # jedem Sample des Loops (200 Hz) und werden mitgedruckt.
+    hz_peak = 0.0
+    over_one = 0
+    good_packets = 0
+    malformed = 0
+    v1_packets = 0
+    v2_packets = 0
+    # Was das Spiel als Staerke meldet - nur zur Anzeige. Die Kraft selbst
+    # kommt schon skaliert an (ffb_model.gd ist die einzige Stelle, die
+    # skaliert); `gain` hier ist ausschliesslich der manuelle Trimm von
+    # `--gain`.
+    reported_gain = gain
+    # Lebenszeichen an das Spiel: ohne sie kann das HUD nicht wissen, ob
+    # ueberhaupt ein Helfer lauscht. Das Spiel sendet sonst ins Leere, das
+    # Lenkrad bleibt still, und der Fahrer sucht den Fehler in der Physik.
+    acks_sent = 0
+    last_ack = 0.0
+    if not quiet:
+        print(f"[ffb] hoert auf 127.0.0.1:{port} ({rate:.0f} Hz)")
+
+    def peak_line() -> str:
+        """Eine Zeile mit den echten Spitzenwerten des ganzen Laufs.
+
+        `[ffb]` (alle 2 s) ist eine Stichprobe, `[ffb-peak]` ist das Maximum
+        aus jedem Sample des Loops. Die Ende-zu-Ende-Pruefung liest diese
+        Zeilen, damit ein kurzer Kurvenscheitel nicht zufaellig durchs Raster
+        faellt.
+        """
+        return (f"[ffb-peak] torque={max(abs(extremes['torque'][0]), abs(extremes['torque'][1])):.3f} "
+                f"rumble={extremes['rumble'][1]:.3f} hz={hz_peak:.1f} over={over_one} "
+                f"packets={packets} speed={speed_peak:.1f} clip={clip_max:.3f}")
     try:
         while True:
             now = time.time()
+            # Der Puls klingt ab, BEVOR neue Pakete gelesen werden: so bekommt
+            # ein Stoss, der in diesem Sample ankommt, seine volle Staerke ans
+            # Lenkrad (vorher lief die Abklingstufe zuerst und nahm ihm 12 %,
+            # gemessen in tools/g29_ffb.py --check).
+            live["pulse"] = max(live["pulse"] - period / PULSE_DECAY, 0.0)
+            if live["pulse"] <= 0.0:
+                live["pulse_dir"] = 0.0
             got = None
+            peer = None
             while True:
                 try:
-                    data, _ = sock.recvfrom(4096)
+                    data, peer = sock.recvfrom(4096)
                 except (BlockingIOError, OSError):
                     break
                 got = data
@@ -940,52 +1188,592 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                     msg = None
                 if isinstance(msg, dict):
                     packets += 1
+                    good_packets += 1
                     last_packet = now
-                    for key in ("force", "damp", "fric", "rumble"):
-                        try:
-                            state[key] = float(msg.get(key, 0.0))
-                        except (TypeError, ValueError):
-                            state[key] = 0.0
+                    # v2: torque; v1 (alte Sender): force. Beides wird gelesen,
+                    # damit ein alter Sender den Helfer nicht lahmlegt.
+                    if "torque" in msg:
+                        v2_packets += 1
+                    else:
+                        v1_packets += 1
+                    torque = msg.get("torque", msg.get("force", 0.0))
+                    target["torque"] = _read_float(torque)
+                    target["damper"] = _read_float(msg.get("damper", msg.get("damp", 0.0)))
+                    target["fric"] = _read_float(msg.get("friction", msg.get("fric", 0.0)))
+                    target["rumble"] = _read_float(msg.get("rumble", 0.0))
+                    target["rumble_hz"] = _clamp(_read_float(msg.get("rumble_hz", 24.0)), 5.0, 60.0)
                     try:
-                        impulse = float(msg.get("pulse", 0.0))
+                        target["spring"] = _clamp(float(msg.get("spring", spring)), 0.0, 1.0)
                     except (TypeError, ValueError):
-                        impulse = 0.0
+                        target["spring"] = spring
+                    if "gain" in msg:
+                        # Keine zweite Skalierung: die Staerke aus dem Spiel
+                        # steckt schon im gesendeten `torque`. Wuerde der
+                        # Helfer noch einmal damit multiplizieren, waeren die
+                        # Stufen quadratisch (75 % -> 56 % Kraft, 45 % -> 20 %).
+                        try:
+                            reported_gain = _clamp(float(msg["gain"]), 0.0, 1.0)
+                        except (TypeError, ValueError):
+                            pass
+                    # Die Pakete tragen auch, woher die Kraft kommt (source),
+                    # wie stark sie am Anschlag haengt (clip) und wie kaputt
+                    # das Auto ist (damage). Ohne diese Zeilen waeren sie
+                    # blinde Passagiere.
+                    last_source = str(msg.get("source", "-"))
+                    source_counts[last_source] = source_counts.get(last_source, 0) + 1
+                    event = msg.get("event", "")
+                    if isinstance(event, str) and event:
+                        last_event = event
+                        event_counts[event] = event_counts.get(event, 0) + 1
+                    speed_last = _read_float(msg.get("speed", 0.0))
+                    if speed_last > speed_peak:
+                        speed_peak = speed_last
+                    clip_max = max(clip_max, _clamp(_read_float(msg.get("clip", 0.0)), 0.0, 1.0))
+                    damage_max = max(damage_max, _clamp(_read_float(msg.get("damage", 0.0)), 0.0, 1.0))
+                    max_target_jump = max(max_target_jump,
+                                          abs(target["torque"] - last_target_torque))
+                    last_target_torque = target["torque"]
+                    impulse = _clamp(_read_float(msg.get("pulse", 0.0)), 0.0, 1.0)
                     if impulse > 0.02:
-                        state["pulse"] = max(state["pulse"], impulse)
-                        pulse_until = now + 0.10
+                        pdir = _clamp(_read_float(msg.get("pulse_dir", 0.0)), -1.0, 1.0)
+                        if impulse >= live["pulse"]:
+                            live["pulse"] = impulse
+                            live["pulse_dir"] = pdir
+                            target["pulse_dir"] = pdir
+                    # Lebenszeichen zurueck an den Absender (10 Hz reichen).
+                    # Das Spiel liest die Antwort auf demselben Socket, mit dem
+                    # es sendet (`ffb_link.gd`), und zeigt im HUD, wenn keiner
+                    # antwortet.
+                    if peer and now - last_ack >= ACK_PERIOD:
+                        last_ack = now
+                        try:
+                            sock.sendto(json.dumps({
+                                "v": 2, "ack": 1,
+                                "mode": "dry" if dry_run else "wheel",
+                                "torque": round(live["torque"], 3),
+                            }).encode("utf-8"), peer)
+                            acks_sent += 1
+                        except OSError:
+                            # Antwortet niemand (Socket schon zu), ist das kein
+                            # Fehler: der naechste Versuch trifft wieder.
+                            pass
+                else:
+                    malformed += 1
 
             stale = (now - last_packet) > idle_release
+            stale_now = stale
             if stale:
                 # Kein Spiel (mehr) am anderen Ende: Lenkrad loslassen.
-                wheel.apply(0.0, 0.10, 0.05, 0.0, 0.0, invert, spring=0.12)
-            else:
-                if now > pulse_until:
-                    state["pulse"] = max(0.0, state["pulse"] - 4.0 * period)
-                wheel.apply(state["force"], state["damp"], state["fric"],
-                            state["rumble"], state["pulse"], invert, spring)
+                target["torque"] = 0.0
+                target["damper"] = 0.10
+                target["fric"] = 0.05
+                target["rumble"] = 0.0
+                target["spring"] = 0.0
+                target["pulse"] = 0.0
+
+            before = live["torque"]
+            live["torque"] = _slew(live["torque"], _clamp(target["torque"], -1.0, 1.0), period)
+            max_step = max(max_step, abs(live["torque"] - before))
+            live["damper"] = _approach(live["damper"], _clamp(target["damper"], 0.0, 1.0), period, 0.12)
+            live["fric"] = _approach(live["fric"], _clamp(target["fric"], 0.0, 1.0), period, 0.12)
+            live["rumble"] = _approach(live["rumble"], _clamp(target["rumble"], 0.0, 1.0), period, 0.05)
+            live["rumble_hz"] = _approach(live["rumble_hz"], target["rumble_hz"], period, 0.10)
+            if wheel is not None:
+                wheel.apply(live["torque"], live["damper"], live["fric"],
+                            live["rumble"], live["pulse"], invert, live["spring"],
+                            live["rumble_hz"], gain, live["pulse_dir"])
+            for key in extremes:
+                extremes[key][0] = min(extremes[key][0], live[key])
+                extremes[key][1] = max(extremes[key][1], live[key])
+            hz_peak = max(hz_peak, live["rumble_hz"])
+            if abs(live["torque"]) > 1.0:
+                over_one += 1
+
+            if run_seconds > 0.0 and now - started >= run_seconds:
+                if report is not None:
+                    report.update({
+                        "packets": good_packets,
+                        "malformed": malformed,
+                        "v1_packets": v1_packets,
+                        "v2_packets": v2_packets,
+                        "max_step": max_step,
+                        "max_target_jump": max_target_jump,
+                        "peak_torque": max(abs(extremes["torque"][0]),
+                                           abs(extremes["torque"][1])),
+                        "peak_damper": extremes["damper"][1],
+                        "peak_rumble": extremes["rumble"][1],
+                        "last_live_torque": live["torque"],
+                        "released": stale_now and abs(live["torque"]) < 1e-6,
+                        "sources": dict(source_counts),
+                        "events": dict(event_counts),
+                        "last_event": last_event,
+                        "peak_speed": speed_peak,
+                        "last_speed": speed_last,
+                        "clip_max": clip_max,
+                        "damage_max": damage_max,
+                        "reported_gain": reported_gain,
+                        "acks_sent": acks_sent,
+                        "hz_peak": hz_peak,
+                        "over_one": over_one,
+                    })
+                if not quiet:
+                    print(f"[ffb-dry] {packets} Pakete in {now - started:.1f} s, "
+                          f"Rate {rate:.0f} Hz")
+                    for key in ("torque", "damper", "fric", "rumble"):
+                        print(f"[ffb-dry] {key:7s} {extremes[key][0]:+.3f} .. "
+                              f"{extremes[key][1]:+.3f}")
+                    print(f"[ffb-dry] groesster Sprung im Paket  {max_target_jump:.3f} "
+                          f"(das Spiel sendet mit 60 Hz)")
+                    print(f"[ffb-dry] groesster Sprung am Rad    {max_step:.3f} "
+                          f"pro Sample ({1.0 / period:.0f} Hz) - Rampe aktiv")
+                    print(f"[ffb-dry] Quellen der Kraft          {source_counts or '-'}")
+                    print(f"[ffb-dry] Ereignisse                 {event_counts or '-'} "
+                          f"bei bis {speed_peak:.0f} km/h")
+                    print(f"[ffb-dry] Staerke laut Paket         {reported_gain:.0%} "
+                          f"(skaliert die Kraft NICHT ein zweites Mal)")
+                    print(f"[ffb-dry] Lebenszeichen ans Spiel    {acks_sent}")
+                    print(peak_line())
+                    print(f"[ffb-dry] am Ende                    "
+                          f"torque={live['torque']:+.3f} "
+                          f"({'losgelassen' if stale_now else 'noch gehalten'})")
+                return 0
 
             if verbose and now - last_report > 2.0:
                 last_report = now
-                print(f"[ffb] {packets} Pakete, force={state['force']:+.2f} "
-                      f"rumble={state['rumble']:.2f} pulse={state['pulse']:.2f}"
-                      + (" [idle]" if stale else ""))
+                print(peak_line())
+                print(f"[ffb] {packets} Pakete, torque={live['torque']:+.2f} "
+                      f"damp={live['damper']:.2f} fric={live['fric']:.2f} "
+                      f"rumble={live['rumble']:.2f}@{live['rumble_hz']:.0f}Hz "
+                      f"pulse={live['pulse']:.2f} Staerke={reported_gain:.0%} "
+                      f"Quelle={last_source} Clip={clip_max:.0%} "
+                      f"Ereignis={last_event or '-'} Tempo={speed_last:.0f}km/h"
+                      + (" [idle]" if stale_now else ""))
             time.sleep(period)
     except KeyboardInterrupt:
         print("\n[ffb] beendet")
     finally:
+        if wheel is not None:
+            wheel.apply(0.0, 0.0, 0.0, 0.0, 0.0, invert)
+            wheel.close()
+    return 0
+
+
+## ---- Kette ohne Lenkrad pruefen ------------------------------------------
+## Diese Pruefung deckt genau die Fehler ab, die sonst erst am Lenkrad
+## auffallen wuerden: eine doppelt angewendete Staerke (frueher kamen 75 %
+## als 56 % am Rad an, 30 % als 9 %), ein Puls, der zusaetzlich auf die Kraft
+## geht, ein kaputtes Paket, das den Helfer aus dem Tritt bringt, und eine
+## Kraft, die nach dem Schliessen des Spiels stehen bleibt.
+##
+##   python tools/g29_ffb.py --check        # Exit 0 = alles gut, 1 = Mangel
+
+
+def _packet(**fields) -> bytes:
+    """Ein Paket wie das Spiel es schickt."""
+    return json.dumps(fields).encode("utf-8")
+
+
+def _free_port(preferred: int = 5611) -> int:
+    """Einen freien UDP-Port finden, damit die Pruefung neben dem Spiel laeuft."""
+    for candidate in (preferred, preferred + 1, preferred + 2, 0):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.bind(("127.0.0.1", candidate))
+            return int(sock.getsockname()[1])
+        except OSError:
+            continue
+        finally:
+            sock.close()
+    return 0
+
+
+def _send_script(port: int, script, rate: float = 60.0) -> None:
+    """`script` ist eine Folge von (Payload, Sekunden); None = Sendepause."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        for payload, seconds in script:
+            end = time.time() + seconds
+            while time.time() < end:
+                if payload is not None:
+                    sock.sendto(payload, ("127.0.0.1", port))
+                time.sleep(1.0 / rate)
+    finally:
+        sock.close()
+
+
+class _MagnitudeProbe:
+    """Ersatz fuer das G29, der mitschreibt, welche Kraft `apply` ausgibt.
+
+    Rampe und Puls entstehen erst in `apply` - ohne diese Sonde wuerde eine
+    Messung im Trockenlauf genau das uebersehen, was am Lenkrad ankommt.
+    """
+
+    def __init__(self) -> None:
+        wheel = G29ForceFeedback.__new__(G29ForceFeedback)
+        self.wheel = wheel
+        self.magnitudes: list = []
+        wheel._set_constant = lambda magnitude: self.magnitudes.append(magnitude)
+        wheel._set_damper = lambda coefficient: None
+        wheel._set_friction = lambda coefficient: None
+        wheel._set_spring = lambda coefficient: None
+        wheel._set_rumble = lambda magnitude, hz=24.0: None
+        wheel.close = lambda: None
+
+    def peak(self) -> float:
+        """Groesste Kraft, die wirklich ans Lenkrad ging (Anteil von 1.0)."""
+        return max((abs(m) for m in self.magnitudes), default=0) / 10000.0
+
+
+def _measure(script, run_seconds: float, rate: float = 200.0,
+             probe: _MagnitudeProbe = None) -> dict:
+    """Den echten Bruecken-Loop mit einem synthetischen Sender messen."""
+    port = _free_port()
+    report: dict = {}
+    sender = threading.Thread(target=_send_script, args=(port, script), daemon=True)
+    sender.start()
+    run_bridge(port, rate, False, False, 0.5, dry_run=probe is None,
+               run_seconds=run_seconds, report=report, quiet=True,
+               wheel_override=probe.wheel if probe else None)
+    sender.join(timeout=5.0)
+    if probe is not None:
+        report["peak_wheel"] = probe.peak()
+    return report
+
+
+def _ack_probe(rate: float = 200.0, wait: float = 2.5) -> tuple:
+    """Antwortet der Helfer dem Spiel?
+
+    Gegenrichtung zu `_measure`: hier laeuft der echte Bruecken-Loop in einem
+    Thread, und die Sonde ist der Sender (wie das Spiel). Ohne diesen
+    Rueckkanal kann das HUD nicht sagen, ob ueberhaupt ein Helfer lauscht -
+    ein totes Lenkrad waere unsichtbar, weil UDP nichts bestaetigt.
+
+    Rueckgabe: (bekommen, modus, beschreibung)
+    """
+    port = _free_port()
+    report: dict = {}
+    worker = threading.Thread(
+        target=run_bridge,
+        args=(port, rate, False, False, 0.5),
+        kwargs=dict(dry_run=True, quiet=True, run_seconds=wait + 1.5,
+                    report=report),
+        daemon=True,
+    )
+    worker.start()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(("127.0.0.1", 0))
+        sock.settimeout(0.2)
+        payload = _packet(v=2, torque=0.5, damper=0.0, friction=0.0, rumble=0.0,
+                          rumble_hz=24.0, pulse=0.0, pulse_dir=0.0, spring=0.0,
+                          gain=1.0, event="", speed=100.0, source="Test")
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            sock.sendto(payload, ("127.0.0.1", port))
+            try:
+                data, _peer = sock.recvfrom(4096)
+            except (socket.timeout, OSError):
+                continue
+            try:
+                msg = json.loads(data.decode("utf-8", "replace"))
+            except ValueError:
+                continue
+            if isinstance(msg, dict) and int(msg.get("ack", 0)) == 1:
+                return True, str(msg.get("mode", "")), (
+                    f"Antwort {msg} nach {wait - (deadline - time.time()):.2f} s")
+        return False, "", f"keine Antwort innerhalb {wait:.1f} s"
+    finally:
+        sock.close()
+
+
+def check_chain(rate: float = 200.0) -> int:
+    """Die Kette Paket -> Kraft ohne Lenkrad pruefen (0 = alles gut)."""
+    failed = 0
+    checks = 0
+
+    def check(ok: bool, label: str, detail: str = "") -> None:
+        nonlocal failed, checks
+        checks += 1
+        print(("PASS " if ok else "FAIL ") + label + " " + detail)
+        if not ok:
+            failed += 1
+
+    # 1) Die Staerke steckt schon im gesendeten `torque`. Das `gain`-Feld im
+    #    Paket ist nur die Meldung "so stark steht das Menue", es darf die
+    #    Kraft nicht ein zweites Mal skalieren.
+    v2 = _packet(v=2, torque=0.797, damper=0.2, friction=0.1, rumble=0.0,
+                 rumble_hz=30.0, pulse=0.0, pulse_dir=0.0, spring=0.0, gain=0.75,
+                 source="Asphalt", clip=0.0, damage=0.0)
+    probe = _MagnitudeProbe()
+    r = _measure([(v2, 1.0), (None, 1.4)], 2.6, rate, probe)
+    peak = float(r.get("peak_torque", 0.0))
+    at_wheel = float(r.get("peak_wheel", 0.0))
+    check(abs(at_wheel - 0.797) < 0.01, "staerke_wird_genau_einmal_angewendet",
+          f"Paket 0.797 mit gain 0.75 -> Rad {at_wheel:.3f} (nicht 0.598)")
+    check(bool(r.get("released", False)), "kraft_faellt_nach_dem_letzten_paket",
+          f"0,5 s ohne Paket -> torque={float(r.get('last_live_torque', 0.0)):+.3f}")
+    check(float(r.get("max_step", 1.0)) <= TORQUE_RISE / rate + 1e-6,
+          "rampe_begrenzt_den_sprung",
+          f"groesster Sprung {float(r.get('max_step', 0.0)):.3f} pro Sample, "
+          f"erlaubt {TORQUE_RISE / rate:.3f} "
+          f"({1000.0 / TORQUE_RISE:.0f} ms fuer vollen Ausschlag)")
+    check(int(r.get("sources", {}).get("Asphalt", 0)) > 30,
+          "das_paket_sagt_woher_die_kraft_kommt", str(r.get("sources", {})))
+
+    # 2) Ein alter Sender (v1: force/damp/fric) darf den Helfer nicht lahmlegen.
+    v1 = _packet(v=1, force=0.5, damp=0.2, fric=0.1, rumble=0.0, pulse=0.0,
+                 event="test", speed=40.0, surface="Asphalt", damage=0.0)
+    r = _measure([(v1, 1.0), (None, 1.4)], 2.6, rate)
+    check(abs(float(r.get("peak_torque", 0.0)) - 0.5) < 0.01
+          and int(r.get("v1_packets", 0)) > 30, "alter_sender_wird_weiter_gelesen",
+          f"v1 force=0.5 -> {float(r.get('peak_torque', 0.0)):.3f} "
+          f"({int(r.get('v1_packets', 0))} Pakete)")
+
+    # 3) Muell und aus dem Ruder gelaufene Werte: kein Absturz, harte Grenzen.
+    junk = [(b"not json", 0.3), (b"\x00\x01\x02", 0.3),
+            (_packet(v=2, torque=99.0, damper=5.0, friction=-2.0, rumble=-3.0,
+                     rumble_hz=1000.0, pulse=9.0, pulse_dir=-9.0, source="Muell"), 0.6),
+            (None, 1.2)]
+    probe = _MagnitudeProbe()
+    r = _measure(junk, 2.6, rate, probe)
+    check(int(r.get("malformed", 0)) >= 2, "kaputte_pakete_werden_verworfen",
+          f"{int(r.get('malformed', 0))} verworfen, "
+          f"{int(r.get('packets', 0))} gelesen, kein Absturz")
+    check(0.99 <= float(r.get("peak_wheel", 0.0)) <= 1.001
+          and float(r.get("peak_damper", 0.0)) <= 1.001
+          and float(r.get("peak_rumble", 0.0)) <= 1.001,
+          "werte_werden_auf_die_grenzen_geklemmt",
+          f"torque={float(r.get('peak_wheel', 0.0)):.3f} "
+          f"damper={float(r.get('peak_damper', 0.0)):.3f} "
+          f"rumble={float(r.get('peak_rumble', 0.0)):.3f}")
+
+    # 4) Der Puls ist ein eigener Kanal und sitzt sofort auf der Kraft (die
+    #    Rampe wird bewusst umgangen, sonst waere ein Schaltstoss kein Stoss).
+    pul = _packet(v=2, torque=0.0, damper=0.0, friction=0.0, rumble=0.0,
+                  rumble_hz=24.0, pulse=0.4, pulse_dir=1.0, spring=0.0,
+                  gain=1.0, source="Schalten")
+    probe = _MagnitudeProbe()
+    r = _measure([(pul, 1.0), (None, 1.4)], 2.6, rate, probe)
+    burst = float(r.get("peak_wheel", 0.0))
+    check(abs(burst - 0.4 * PULSE_MIX) < 0.01, "puls_sitzt_sofort_auf_der_kraft",
+          f"pulse=0.40 -> Rad {burst:.3f} = {burst / 0.4:.0%} des Pulses (ohne Rampe)")
+
+    # 5) Gegenprobe zur Trennung der Kanaele: `torque` ist laut Protokoll die
+    #    GRUNDKRAFT und enthaelt den Stoss NICHT. Ein Paket mit 0.4 Kraft plus
+    #    Puls kommt deshalb als 0.4 + Puls an und nicht als 0.4 + 2 Pulse. Das
+    #    Spiel haelt diese Trennung ein; geprueft wird sie dort, wo das Modell
+    #    liegt (`godot_f1/tests/test_ffb_model.gd`,
+    #    "einschlag_laesst_die_grundkraft_unveraendert").
+    both = _packet(v=2, torque=0.4, damper=0.0, friction=0.0, rumble=0.0,
+                   rumble_hz=24.0, pulse=0.4, pulse_dir=1.0, spring=0.0,
+                   gain=1.0, source="Test")
+    r = _measure([(both, 0.6), (None, 0.4)], 1.0, rate, _MagnitudeProbe())
+    expected = 0.4 + 0.4 * PULSE_MIX
+    peak = float(r.get("peak_wheel", 0.0))
+    check(abs(peak - expected) < 0.01, "grundkraft_und_stoss_kommen_getrennt",
+          f"torque 0.40 + pulse 0.40 -> {peak:.3f} (erwartet {expected:.3f})")
+
+    # 6) `event` und `speed` waren die letzten blinden Passagiere im Paket:
+    #    gesendet, aber vom Helfer nie gelesen. Wer am Lenkrad sitzt und sich
+    #    fragt "was war das gerade", braucht genau diese zwei Zahlen.
+    tagged = _packet(v=2, torque=0.30, damper=0.10, friction=0.10, rumble=0.0,
+                     rumble_hz=24.0, pulse=0.3, pulse_dir=-1.0, spring=0.0,
+                     gain=1.0, event="shift", speed=212.5, source="Asphalt",
+                     clip=0.0, damage=0.0)
+    r = _measure([(tagged, 0.5), (None, 0.3)], 0.9, rate, _MagnitudeProbe())
+    got_speed = float(r.get("peak_speed", 0.0))
+    check(r.get("last_event") == "shift" and abs(got_speed - 212.5) < 0.2,
+          "ereignis_und_tempo_kommen_an",
+          f"event={r.get('last_event')!r} Tempo {got_speed:.1f} km/h "
+          f"(erwartet 'shift' / 212.5)")
+
+    # 7) Der Auftrag nennt drei Raeder (G29/G920/G923). Ein fest auf "G29"
+    #    gestellter Filter hat die anderen zwei nicht gefunden - dieselbe
+    #    DirectInput-Arbeit, ein anderer Produktname, und der Helfer brach mit
+    #    "kein Lenkrad gefunden" ab. Geprueft wird die Namensauswahl selbst,
+    #    ohne Hardware: die drei echten Produktnamen muessen treffen, ein
+    #    Gamepad und ein leerer Name nicht.
+    family_hits = [
+        ("G29", "Logitech G29 Driving Force Racing Wheel"),
+        ("G920", "Logitech G920 Driving Force Racing Wheel"),
+        ("G923", "Logitech G923 Racing Wheel for PC"),
+    ]
+    family_ok = all(wheel_name_matches(n, "", WHEEL_NAME_NEEDLES)
+                    for n, _instance in family_hits)
+    junk_ok = not wheel_name_matches("Xbox Wireless Controller") \
+        and not wheel_name_matches("")
+    own = wheel_name_needles("G923")
+    own_ok = own == ("g923",) and wheel_name_matches(family_hits[2][1], "", own) \
+        and not wheel_name_matches(family_hits[0][1], "", own)
+    check(family_ok and junk_ok and own_ok,
+          "die_ganze_lenkradfamilie_wird_gefunden",
+          f"G29/G920/G923 = {family_ok}, Fremdgeraet ausgeschlossen = {junk_ok}, "
+          f"--name G923 nur G923 = {own_ok} (Standard: "
+          f"{'/'.join(n.upper() for n in WHEEL_NAME_NEEDLES)})")
+
+    # 8) Rueckkanal: der Helfer antwortet dem Spiel. Daran haengt der
+    #    HUD-Hinweis "KEIN HELFER" - und damit die einzige Moeglichkeit, von
+    #    innen zu sehen, dass die Kraft gar keinen Empfaenger hat.
+    ack_ok, ack_mode, ack_detail = _ack_probe(rate)
+    check(ack_ok and ack_mode == "dry", "der_helfer_antwortet_dem_spiel",
+          f"Modus {ack_mode or '-'}: {ack_detail}")
+
+    print(f"FFB_CHECK {'PASS' if failed == 0 else 'FAIL'} {checks} Pruefungen, "
+          f"{failed} Mangel")
+    return 1 if failed else 0
+
+
+## Der Fuehltest: die Stationen, die das Spiel am Lenkrad erzeugt, ohne Spiel.
+##
+## Jede Zeile ist eine Fahrsituation aus docs/FFB_F1_STYLE_PLAN.md, mit genau
+## den Zahlen, die `ffb_model.gd` dort auch liefert. Wer das laufen laesst,
+## fuehlt den Plan am eigenen Lenkrad - und kann sagen, welche Station zu
+## schwach oder zu stark ist.
+DEMO_STAGES = [
+    (1.6, "Geradeaus, Schrittgeschwindigkeit: lose, nur Reibung",
+     {"torque": 0.00, "damper": 0.12, "fric": 0.14, "rumble": 0.00, "rumble_hz": 20.0}),
+    (2.0, "Geradeaus 250 km/h: Grundgewicht, kein Zappeln",
+     {"torque": 0.00, "damper": 0.32, "fric": 0.10, "rumble": 0.06, "rumble_hz": 30.0}),
+    (2.6, "Schneller Bogen, 3 g bei 250 km/h: schwer, drueckt zurueck",
+     {"torque": -0.62, "damper": 0.30, "fric": 0.10, "rumble": 0.08, "rumble_hz": 30.0}),
+    (2.6, "Vorderachse geht weg (Untersteuern): Lenkrad wird leicht",
+     {"torque": -0.22, "damper": 0.30, "fric": 0.10, "rumble": 0.12, "rumble_hz": 32.0}),
+    (2.0, "Kerb bei 120 km/h: hartes, schnelles Ruetteln",
+     {"torque": -0.45, "damper": 0.25, "fric": 0.30, "rumble": 0.85, "rumble_hz": 38.0}),
+    (2.0, "Kies: grobes Mahlen, langsamer als der Kerb",
+     {"torque": -0.38, "damper": 0.22, "fric": 0.45, "rumble": 0.45, "rumble_hz": 12.0}),
+    (2.0, "Vollbremsung, Vorderraeder blockieren: leicht + Rattern",
+     {"torque": -0.12, "damper": 0.22, "fric": 0.16, "rumble": 0.60, "rumble_hz": 28.0}),
+    (0.5, "Schaltstoss",
+     {"torque": -0.30, "damper": 0.25, "fric": 0.12, "rumble": 0.05, "rumble_hz": 26.0,
+      "pulse": 0.45, "pulse_dir": -1.0}),
+    (0.5, "Einschlag in die Wand",
+     {"torque": -0.20, "damper": 0.30, "fric": 0.20, "rumble": 0.30, "rumble_hz": 30.0,
+      "pulse": 1.00, "pulse_dir": -1.0}),
+    (1.6, "Loslassen",
+     {"torque": 0.00, "damper": 0.06, "fric": 0.05, "rumble": 0.00, "rumble_hz": 20.0}),
+]
+
+
+def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
+         gain: float, name_filter=None) -> int:
+    """Fuehltest am echten Lenkrad, ohne das Spiel zu starten."""
+    try:
+        wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
+                                 exclusive=exclusive)
+    except WheelError as exc:
+        print(f"DEMO FAIL: {exc}")
+        return 1
+    print(f"[demo] {wheel.name}")
+    print(f"[demo] Effekte: {', '.join(wheel.effects_created) or '(keine)'}")
+    if not wheel.effects_created:
+        print("[demo] ohne Effekte gibt es nichts zu fuehlen - Ende")
+        wheel.close()
+        return 1
+    print("[demo] Haende locker lassen: das Lenkrad bewegt sich von selbst.")
+    period = 1.0 / max(rate, 20.0)
+    live = {"torque": 0.0, "damper": 0.0, "fric": 0.0, "rumble": 0.0,
+            "rumble_hz": 24.0, "pulse": 0.0, "pulse_dir": 0.0, "spring": 0.0}
+    try:
+        for seconds, label, stage in DEMO_STAGES:
+            print(f"[demo] {label}  ({seconds:.1f} s)")
+            target = dict(live)
+            for key, value in stage.items():
+                target[key] = value
+            if "pulse" in stage:
+                live["pulse"] = float(stage["pulse"])
+                live["pulse_dir"] = float(stage.get("pulse_dir", -1.0))
+            deadline = time.time() + seconds
+            while time.time() < deadline:
+                live["torque"] = _slew(live["torque"], float(target["torque"]), period)
+                for key, tau in (("damper", 0.12), ("fric", 0.12),
+                                 ("rumble", 0.05), ("rumble_hz", 0.10)):
+                    live[key] = _approach(live[key], float(target[key]), period, tau)
+                live["pulse"] = max(live["pulse"] - period / PULSE_DECAY, 0.0)
+                wheel.apply(live["torque"], live["damper"], live["fric"],
+                            live["rumble"], live["pulse"], invert, live["spring"],
+                            live["rumble_hz"], gain, live["pulse_dir"])
+                time.sleep(period)
+    except KeyboardInterrupt:
+        print("\n[demo] abgebrochen")
+    finally:
         wheel.apply(0.0, 0.0, 0.0, 0.0, 0.0, invert)
         wheel.close()
+    print("[demo] fertig - Kraft losgelassen")
     return 0
+
+
+def sign_check(seconds: float, force: float, invert: bool, verbose: bool,
+               exclusive: bool, name_filter=None) -> int:
+    """Misst am echten Lenkrad, in welche Richtung eine positive Kraft dreht.
+
+    Ohne diese Messung ist die Kraftrichtung geraten. Das Spiel kalibriert
+    "rechts = +1"; hier wird nachgemessen, ob eine positive Kraft die Achse in
+    dieselbe Richtung bewegt. Das Lenkrad muss dafuer losgelassen werden.
+    """
+    try:
+        wheel = G29ForceFeedback(name_filter=name_filter, verbose=verbose,
+                                 exclusive=exclusive)
+    except WheelError as exc:
+        print(f"SIGN FAIL: {exc}")
+        return 1
+    if not wheel.effects_created:
+        print("SIGN FAIL: keine Effekte geladen")
+        wheel.close()
+        return 1
+
+    def hold(value: float) -> None:
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            wheel.apply(value, 0.05, 0.05, 0.0, 0.0, invert)
+            time.sleep(0.02)
+
+    rest = wheel.read_axis()
+    hold(force)
+    after_pos = wheel.read_axis()
+    hold(-force)
+    after_neg = wheel.read_axis()
+    wheel.apply(0.0, 0.0, 0.0, 0.0, 0.0, invert)
+    time.sleep(0.3)
+    wheel.close()
+
+    print(f"Achse ruhe      : {rest}")
+    print(f"Achse +{force:+.2f} Kraft: {after_pos}")
+    print(f"Achse -{force:+.2f} Kraft: {after_neg}")
+    if rest is None or after_pos is None or after_neg is None:
+        print("SIGN TEILWEISE: keine Achsendaten (Netzteil?) - Richtung unbekannt")
+        return 2
+    d_pos = after_pos - rest
+    d_neg = after_neg - rest
+    if d_pos == 0 and d_neg == 0:
+        print("SIGN TEILWEISE: Achse bewegt sich nicht - Lenkrad festgehalten "
+              "oder Kraft zu klein")
+        return 2
+    if d_pos > d_neg:
+        print(f"SIGN PASS: positive Kraft dreht die Achse nach + "
+              f"({d_pos:+d} vs {d_neg:+d}) - das ist dieselbe Richtung wie "
+              f"'rechts = +1' im Spiel.")
+        return 0
+    print(f"SIGN ANDERS: positive Kraft dreht die Achse nach - "
+          f"({d_pos:+d} vs {d_neg:+d}) - dann muss der Helfer mit --invert "
+          f"laufen (oder das Spiel dreht das Vorzeichen).")
+    return 3
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Logitech-G29-Force-Feedback fuer Apex Circuit")
-    parser.add_argument("--port", type=int, default=5601,
-                        help="UDP-Port, auf dem das Spiel sendet (Standard 5601)")
+        description="Logitech-Force-Feedback (G29/G920/G923) fuer Apex Circuit")
+    default_port = int(os.environ.get("APEX_FFB_PORT", "5601") or 5601)
+    parser.add_argument("--port", type=int, default=default_port,
+                        help="UDP-Port, auf dem das Spiel sendet (Standard 5601, "
+                             "oder die Umgebungsvariable APEX_FFB_PORT)")
     parser.add_argument("--rate", type=float, default=200.0,
                         help="Ansteuerungsrate in Hz (Standard 200)")
     parser.add_argument("--invert", action="store_true", help="Kraftrichtung umdrehen")
+    parser.add_argument("--name", default=None, metavar="NAME",
+                        help="Lenkrad suchen, dessen Name NAME enthaelt "
+                             "(Standard: die ganze Familie G29/G920/G923; "
+                             "mehrere mit Komma trennen)")
     # Das G29 nimmt Kraftbefehle nur an, wenn es exklusiv uebernommen ist
     # (sonst DIERR_NOTEXCLUSIVEACQUIRED beim Download). Deshalb ist exklusiv
     # die Voreinstellung; --shared schaltet es ab, wenn ein anderes Programm
@@ -1002,14 +1790,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selftest-seconds", type=float, default=1.2)
     parser.add_argument("--idle-release", type=float, default=0.5,
                         help="Sekunden ohne Paket, bis die Kraft faellt")
-    parser.add_argument("--spring", type=float, default=0.35,
-                        help="Zentrierfeder 0..1 (Standard 0.35)")
+    parser.add_argument("--spring", type=float, default=0.0,
+                        help="Zentrierfeder 0..1 (Standard 0: das Zentrieren "
+                             "macht der Nachlauf des Spiels)")
+    parser.add_argument("--gain", type=float, default=1.0,
+                        help="manueller Trimm 0..1 auf alles, was ankommt "
+                             "(Standard 1.0; die Staerke aus dem Spiel steckt "
+                             "schon in der gesendeten Kraft)")
+    parser.add_argument("--demo", action="store_true",
+                        help="Fuehltest ohne Spiel: alle Stationen einmal "
+                             "am echten Lenkrad abfahren")
+    parser.add_argument("--sign-check", action="store_true",
+                        help="messen, in welche Richtung eine positive Kraft dreht")
+    parser.add_argument("--sign-seconds", type=float, default=0.6)
+    parser.add_argument("--sign-force", type=float, default=0.25)
+    parser.add_argument("--dry-run", action="store_true",
+                        help="ohne Lenkrad rechnen: Pakete lesen, Rampe pruefen, "
+                             "Wertebereiche ausgeben (Hardware-Check ohne Hardware)")
+    parser.add_argument("--dry-run-seconds", type=float, default=8.0,
+                        help="Laufzeit des Trockenlaufs (Standard 8 s)")
+    parser.add_argument("--check", action="store_true",
+                        help="Kette ohne Lenkrad PRUEFEN: Staerke genau einmal, "
+                             "Rampe, Puls, kaputte Pakete, Kraft faellt am Ende "
+                             "(Exit 0 = alles gut)")
     args = parser.parse_args(argv)
     if args.list:
         return list_devices()
     if args.matrix:
         try:
-            wheel = G29ForceFeedback(verbose=args.verbose, exclusive=args.exclusive)
+            wheel = G29ForceFeedback(name_filter=args.name, verbose=args.verbose,
+                                     exclusive=args.exclusive)
         except WheelError as exc:
             print(f"MATRIX FAIL: {exc}")
             return 1
@@ -1018,9 +1828,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.selftest:
         return selftest(args.selftest_seconds, args.invert, args.verbose,
-                        args.exclusive)
+                        args.exclusive, args.name)
+    if args.sign_check:
+        return sign_check(args.sign_seconds, args.sign_force, args.invert,
+                          args.verbose, args.exclusive, args.name)
+    if args.check:
+        return check_chain(args.rate)
+    if args.demo:
+        return demo(args.rate, args.invert, args.verbose, args.exclusive,
+                    args.gain, args.name)
     return run_bridge(args.port, args.rate, args.invert, args.verbose,
-                      args.idle_release, args.exclusive, args.spring)
+                      args.idle_release, args.exclusive, args.spring, args.gain,
+                      args.dry_run, args.dry_run_seconds if args.dry_run else 0.0,
+                      name_filter=args.name)
 
 
 if __name__ == "__main__":

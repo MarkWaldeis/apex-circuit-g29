@@ -11,6 +11,7 @@ const IdealLine = preload("res://scripts/ideal_line.gd")
 const RacingLineDisplay = preload("res://scripts/racing_line_display.gd")
 const Barriers = preload("res://scripts/barriers.gd")
 const StatusHUD = preload("res://scripts/status_hud.gd")
+const FfbSettings = preload("res://scripts/ffb_settings.gd")
 
 var line = RacingLine.new()
 ## The ideal line and the ribbon that shows it: green where the throttle stays
@@ -21,6 +22,9 @@ var player
 var ai_car
 var cam
 var g29
+## Lenkrad-Einstellungen fuer alle: G29 (Lenkbereich), Auto (Staerke,
+## Daempfung), Menue (schreibt) und HUD (zeigt).
+var ffb_settings
 var menu
 var hud
 var status
@@ -34,8 +38,13 @@ func _ready() -> void:
 		return
 	ideal = IdealLine.new()
 	ideal.build(line)
+	ffb_settings = FfbSettings.new()
+	ffb_settings.load_profile()
+	# Ein Testlauf darf die eingestellte Staerke des Fahrers nicht ueberschreiben.
+	ffb_settings.auto_save = DisplayServer.get_name() != "headless"
 	g29 = G29Input.new()
 	g29.name = "G29"
+	g29.ffb_settings = ffb_settings
 	add_child(g29)
 	# Pedals/wheel must keep being read while the menu pauses the race
 	# (calibration happens with the race frozen).
@@ -159,6 +168,8 @@ func _spawn_car(livery: String, is_ai: bool, auto: bool, xform: Transform3D):
 	car.livery = livery
 	car.is_ai = is_ai
 	car.auto_drive = auto
+	# Vor setup(): das Auto baut darin seinen Lenkradkanal auf.
+	car.ffb_settings = ffb_settings
 	add_child(car)
 	car.setup(line, g29, xform)
 	# The AI drives the ideal line (apex, corner speed, brake points); the
