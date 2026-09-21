@@ -2480,6 +2480,36 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
         print("[demo] Achse liefert keine Daten - die Richtungsmessung faellt aus "
               "(das Rad kann trotzdem Kraft geben).")
     period = 1.0 / max(rate, 20.0)
+
+    def _recentre(limit: float = 2.5) -> None:
+        """Das Rad zur Ruhelage zurueckfahren, bevor die naechste Station kommt.
+
+        Ohne das wandert ein unbeaufsichtigtes Rad nach der ersten starken
+        Station an den Anschlag und **bleibt** dort: alle folgenden Stationen
+        zeigen dann nur noch "Anschlag" statt ihrer eigenen Staerke (gemessen
+        am 21.09.2026 im Demo-Lauf: ab Station 4 durchgehend -1,000). Mit der
+        Rueckstellung ist jede Station wieder von der Mitte aus zu fuehlen.
+        Geregelt wird ueber die gemessene Achse: eine positive Kraft faehrt die
+        Achse zum Minimum (am G29 gemessen), also dreht das Vorzeichen.
+        """
+        if rest < 0.0:
+            return
+        end = time.time() + limit
+        while time.time() < end:
+            raw = wheel.read_axis()
+            if raw is None:
+                return
+            error = (rest - float(raw)) / 32767.0
+            if abs(error) < 0.05:
+                break
+            push = -_clamp(error * 2.0, -0.40, 0.40)
+            if invert:
+                push = -push          # apply() dreht bei --invert zusaetzlich
+            wheel.apply(push, 0.05, 0.02, 0.0, 0.0, invert, 0.0, 24.0, gain, 0.0)
+            time.sleep(period)
+        wheel.apply(0.0, 0.0, 0.0, 0.0, 0.0, invert)
+        time.sleep(0.15)
+
     live = {"torque": 0.0, "damper": 0.0, "fric": 0.0, "rumble": 0.0,
             "rumble_hz": 24.0, "pulse": 0.0, "pulse_dir": 0.0, "spring": 0.0}
     ## Stationen, deren Radbewegung wirklich gemessen wurde, und die, in denen
@@ -2533,6 +2563,10 @@ def demo(rate: float, invert: bool, verbose: bool, exclusive: bool,
                         "OK  " if ok else "FAIL", expectation, side))
                     if not ok:
                         wheel_failures.append(label)
+            # Vor der naechsten Station wieder in die Mitte: sonst wandert das
+            # unbeaufsichtigte Rad an den Anschlag und die folgenden Stationen
+            # sind nicht mehr zu unterscheiden (gemessen im Demo-Lauf).
+            _recentre()
     except KeyboardInterrupt:
         print("\n[demo] abgebrochen")
     finally:
