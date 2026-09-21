@@ -54,6 +54,20 @@ Bodenwelle, durchdrehende Räder, Schaltstoß in der Kurve und auf der Geraden
 Unwucht nach mittlerem Schaden (0,383 @ 28 Hz), Rangieren am Anschlag und
 Loslassen.
 
+Zwei Dinge, die der Fühltest selbst macht, damit er kein Wunschbild zeigt:
+
+* **Er prüft sich beim Laufen.** Jede Station vergleicht die *gemessene*
+Radbewegung mit der erwarteten Richtung und meldet am Ende
+`DEMO_RESULT PASS/FAIL`; eine Station, die die Gegenrichtung zeigt, lässt ihn
+**fehlschlagen**.
+* **Er stellt das Rad zwischen den Stationen zurück in die Mitte.** Ohne das
+blieb ein unbeaufsichtigtes Rad nach der ersten starken Station am Anschlag
+stehen (gemessen: ab Station 4 durchgehend −1,000) und alle folgenden Stationen
+zeigten nur noch „Anschlag" — Kerb, Kies, Gras und Blockieren wären nicht mehr
+zu unterscheiden gewesen. Der starke Dauerzug (Vollbremsung, Einschlag,
+Unwucht, Rangieren) geht weiterhin bis an den Anschlag; das ist richtig, weil
+niemand gegenhält.
+
 ---
 
 ## 1. Recherche: was das offizielle Spiel am Lenkrad macht
