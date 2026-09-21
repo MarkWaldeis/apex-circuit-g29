@@ -68,6 +68,13 @@ spaetestens nach **8 s**, wenn es zwar faehrt, aber draussen bleibt. Ein Fahrer
 am Lenkrad wird **nie** angefasst: er entscheidet selbst, ob er rueckwaerts
 faehrt oder den Reset benutzt.
 
+Dabei zaehlt **Fortschritt**: kommt das Auto von allein mindestens einen halben
+Meter naeher an die Strecke, beginnt die Uhr von vorn. Ein Auto, das sich
+gerade zurueckarbeitet, wird also nicht mitten in der Bewegung auf die Linie
+gesetzt (in der Messung: ein Auto, das in Schritten von 14,0 m auf 8,4 m
+zurueckkam, wurde **nicht** umgesetzt; dasselbe Auto, das anschliessend knapp
+ausserhalb der Grenze stehen blieb, wurde nach 2,5 s geholt).
+
 Nachgemessen mit derselben Sonde:
 
 ```text
@@ -87,6 +94,8 @@ PASS kein_sofortiges_umsetzen_am_streckenrand 0 Wiedereingliederung(en) in 4 s
 PASS das_ki_auto_faehrt_wieder_weiter 35.98 m/s
 PASS der_fahrer_wird_nie_umgesetzt 0 Wiedereingliederung(en)
 PASS der_fahrer_steht_noch_wo_er_war 14.01 m statt 12.00 m
+PASS wer_sich_selbst_naehert_wird_nicht_umgesetzt 0 Wiedereingliederung(en)
+PASS auch_knapp_ausserhalb_wird_geholt 1 Wiedereingliederung(en) bei 0.00 m
 STUCK_REJOIN PASS
 ```
 

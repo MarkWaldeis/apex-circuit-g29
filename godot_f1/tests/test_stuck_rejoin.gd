@@ -32,6 +32,7 @@ var ai_rejoin_before: int = 0
 var player_rejoin_before: int = 0
 var player_off_placed: float = 0.0
 var ai_off_placed: float = 0.0
+var return_start: int = 0
 
 
 func _initialize() -> void:
@@ -150,10 +151,53 @@ func _on_phys() -> void:
 		_check(absf(player_off - player_off_placed) < 4.0,
 			"der_fahrer_steht_noch_wo_er_war",
 			"%.2f m statt %.2f m" % [player_off, player_off_placed])
+		# --- Dritte Frage: ein Auto, das sich selbst zurueckarbeitet ---------
+		# Ein Auto, das Meter um Meter naeher an die Strecke kommt, ist nicht
+		# festgefahren und darf nicht umgesetzt werden.
+		return_start = frames
+		_strand(ai, 14.0, true)
+		ai.auto_drive = true
+		ai_rejoin_before = int(ai.rejoin_count)
+		return
+
+	if return_start > 0 and frames > return_start and (frames - return_start) % 40 == 0:
+		var step: int = (frames - return_start) / 40
+		if step >= 1 and step <= 7:
+			_strand(ai, 14.0 - 0.8 * float(step), true)
+			return
+
+	if return_start > 0 and frames == return_start + 300:
+		var off: float = _offset_of(ai)
+		print("STUCK zurueckarbeitendes Auto: Abstand=%.2f m Wiedereingliederungen=%d (darf 0 sein)" % [
+			off, int(ai.rejoin_count) - ai_rejoin_before])
+		_check(int(ai.rejoin_count) - ai_rejoin_before == 0,
+			"wer_sich_selbst_naehert_wird_nicht_umgesetzt",
+			"%d Wiedereingliederung(en)" % (int(ai.rejoin_count) - ai_rejoin_before))
+		return
+
+	# Danach: stehen bleiben. Ein Auto, das wirklich nicht mehr wegkommt, muss
+	# auch dann geholt werden, wenn es nur knapp ausserhalb der Grenze steht.
+	if return_start > 0 and frames == return_start + 400:
+		_strand(ai, 9.5, true)
+		ai.auto_drive = true
+		ai_rejoin_before = int(ai.rejoin_count)
+		return
+	if return_start > 0 and frames > return_start + 400 and frames < return_start + 640:
+		# Festhalten: sonst faehrt der Autopilot von selbst wieder los.
+		ai.linear_velocity = Vector3.ZERO
+		ai.angular_velocity = Vector3.ZERO
+		return
+	if return_start > 0 and frames == return_start + 640:
+		var off2: float = _offset_of(ai)
+		var rejoins2: int = int(ai.rejoin_count) - ai_rejoin_before
+		print("STUCK knapp ausserhalb und stehend: Abstand=%.2f m Wiedereingliederungen=%d" % [
+			off2, rejoins2])
+		_check(rejoins2 >= 1, "auch_knapp_ausserhalb_wird_geholt",
+			"%d Wiedereingliederung(en) bei %.2f m" % [rejoins2, off2])
 		_finish()
 		return
 
-	if player_placed_frame > 0 and frames > player_placed_frame + 400:
+	if return_start > 0 and frames > return_start + 1100:
 		_check(false, "die_messung_haette_enden_muessen",
 			"Frame %d erreicht, ohne dass die Pruefung lief" % frames)
 		_finish()

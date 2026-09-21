@@ -91,6 +91,10 @@ var _rejoin_cd: float = 0.0
 var rejoin_count: int = 0
 ## Weit draussen im Kies liegen bleiben: siehe `_watch_stuck()`.
 var _stuck_time: float = 0.0
+## Der beste (kleinste) Querabstand seit dem letzten Fortschritt. Ein Auto, das
+## sich von allein wieder zur Strecke arbeitet, darf nicht umgesetzt werden -
+## erst wenn es wirklich nicht mehr naeher kommt, laeuft die Uhr.
+var _stuck_best: float = INF
 ## Ab diesem Querabstand ist das Auto nicht mehr "weit gefahren", sondern
 ## neben der Strecke (Asphalt + Kerb enden bei 6,85 m, der Kiesapron bei
 ## 16,85 m; die Wand steht bei 16 m). Ein Meter Abstand zum Kerb, damit ein
@@ -795,10 +799,19 @@ func _physics_process(delta: float) -> void:
 ## sichtbar (`rejoin_count`) und wird deshalb auch geprueft.
 func _watch_stuck(delta: float) -> void:
 	var autonomous: bool = is_ai or auto_drive
-	var far: bool = absf(surface_offset) >= STUCK_OFFSET
+	var off: float = absf(surface_offset)
+	var far: bool = off >= STUCK_OFFSET
 	if not autonomous or not far or _rejoin_cd > 0.0:
 		_stuck_time = 0.0
+		_stuck_best = INF
 		return
+	# Kommt das Auto von allein naeher an die Strecke (mindestens einen halben
+	# Meter), ist es nicht festgefahren: die Uhr beginnt von vorn.
+	if off < _stuck_best - 0.5:
+		_stuck_best = off
+		_stuck_time = 0.0
+	else:
+		_stuck_best = minf(_stuck_best, off)
 	_stuck_time += delta
 	var stopped: bool = linear_velocity.length() < STUCK_SPEED
 	if (stopped and _stuck_time >= STUCK_AFTER) or _stuck_time >= STUCK_AFTER_MOVING:
