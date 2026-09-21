@@ -315,6 +315,23 @@ func _run() -> void:
 			_check(is_equal_approx(float(link.last_packet.get("gain", 0.0)), 1.0),
 				"paket_verstaerkt_nicht_ein_zweites_mal",
 				"gain im Paket %.2f" % float(link.last_packet.get("gain", 0.0)))
+			# Und das HUD sagt es, wenn der Helfer laeuft, das Rad aber
+			# schweigt (Netzteil) - genau der Zustand vom 21.09.2026.
+			var hud = main.get("hud")
+			if hud != null:
+				link.helper_acks = 40
+				link.helper_last_ms = Time.get_ticks_msec()
+				link.helper_mode = "wheel"
+				link.helper_wheel_raw = -1
+				hud._update_force()
+				var silent_text: String = String(hud._force.text)
+				link.helper_wheel_raw = 33000
+				hud._update_force()
+				var loud_text: String = String(hud._force.text)
+				_check(silent_text.contains("MELDET NICHTS")
+					and not loud_text.contains("MELDET NICHTS"),
+					"hud_meldet_ein_schweigendes_lenkrad",
+					"schweigend: %s | meldend: %s" % [silent_text, loud_text])
 
 		# --- Das HUD nennt den Grund, wenn keine Kraft ankommt -------------
 		# Der schlimmste Fall ist ein stilles Lenkrad: das Spiel laeuft, das

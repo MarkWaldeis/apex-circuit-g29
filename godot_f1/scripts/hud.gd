@@ -216,6 +216,13 @@ func _update_force() -> void:
 		_force.text = "KEIN HELFER — „Apex Circuit FFB starten.cmd“ starten"
 		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
 		return
+	# Helfer laeuft und hat das Rad uebernommen, aber das Rad selbst meldet
+	# keine Achse: der klassische "Netzteil fehlt"-Fall. Ohne diese Zeile sieht
+	# der Fahrer nur "Kraft 0 %" und weiss nicht, wo er suchen soll.
+	if link.has_method("wheel_silent") and bool(link.call("wheel_silent")):
+		_force.text = "LENKRAD MELDET NICHTS — Netzteil, Pedalkabel, USB-Port prüfen („Lenkrad pruefen.cmd“)"
+		_force.add_theme_color_override("font_color", Color(1.0, 0.55, 0.30))
+		return
 	var st: Dictionary = link.last_state
 	var percent: float = absf(float(st.get("torque", 0.0))) * 100.0
 	var rumble: float = float(st.get("rumble", 0.0))

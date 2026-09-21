@@ -315,6 +315,17 @@ func helper_alive() -> bool:
 	return Time.get_ticks_msec() - helper_last_ms <= HELPER_TIMEOUT_MS
 
 
+## Der Helfer laeuft und hat das Lenkrad uebernommen - aber das Rad selbst
+## meldet keine Achse (typisch: Netzteil nicht angeschlossen, Kabel/Port).
+## Dann gibt es weder Kraft noch Lenkgefuehl, und der Fahrer soll das sehen,
+## statt sich zu fragen, warum nichts ankommt. Das Feld `axis` fehlt im
+## Lebenszeichen genau dann (gemessen: `--check`, `ohne_rad_keine_erfundene_achse`).
+func wheel_silent() -> bool:
+	if not helper_alive() or String(helper_mode) != "wheel":
+		return false
+	return helper_wheel_raw < 0
+
+
 func _send(event: String) -> void:
 	var s: Dictionary = last_state
 	var torque: float = float(s.get("torque", 0.0))

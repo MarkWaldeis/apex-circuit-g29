@@ -212,6 +212,26 @@ func _run() -> void:
 	_check(bool(s.invert) == true, "auf_der_geraden_faellt_sie",
 		"invert=%s note=%s" % [str(s.invert), String(link.get("direction_note"))])
 
+	# --- 9. "Helfer laeuft, Rad schweigt" muss erkennbar sein --------------
+	# Genau der Zustand des Fahrers am 21.09.2026: der Helfer hoert zu, aber das
+	# G29 sendet keine Achsdaten. Das HUD soll das sagen duerfen.
+	s = _settings(true, "auto")
+	w = StubWheel.new()
+	link = _link(s, w)
+	link.helper_acks = 40
+	link.helper_last_ms = Time.get_ticks_msec()
+	link.helper_mode = "wheel"
+	link.helper_wheel_raw = -1                     # kein Achsenfeld = keine Daten
+	_check(bool(link.call("wheel_silent")), "schweigendes_rad_wird_erkannt",
+		"helper_mode=%s raw=%d" % [String(link.get("helper_mode")), int(link.get("helper_wheel_raw"))])
+	link.helper_wheel_raw = 33000                  # jetzt meldet es
+	_check(not bool(link.call("wheel_silent")), "meldendes_rad_gilt_nicht_als_schweigend",
+		"raw=%d" % int(link.get("helper_wheel_raw")))
+	link.helper_mode = "dry"                       # Trockenlauf: keine Kraft, aber kein Defekt
+	link.helper_wheel_raw = -1
+	_check(not bool(link.call("wheel_silent")), "trockenlauf_gilt_nicht_als_defekt",
+		"mode=%s" % String(link.get("helper_mode")))
+
 	if FileAccess.file_exists(PROFILE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(PROFILE))
 	print("WAVE6_DIRECTION %s %d Pruefungen" % ["PASS" if failed == 0 else "FAIL", checks])
