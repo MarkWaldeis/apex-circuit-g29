@@ -220,6 +220,13 @@ func _update_force() -> void:
 	var percent: float = absf(float(st.get("torque", 0.0))) * 100.0
 	var rumble: float = float(st.get("rumble", 0.0))
 	var text: String = "Lenkkraft %3.0f %%" % percent
+	# Einmalige Meldung der Selbstmessung: die Kraftrichtung wurde beim Fahren
+	# erkannt (siehe ffb_link.gd::measure_direction). Danach verschwindet sie
+	# wieder - eine dauerhafte Zeile waere nur Ballast.
+	var note: String = String(link.get("direction_note"))
+	var note_ms: int = int(link.get("direction_note_ms"))
+	if note != "" and Time.get_ticks_msec() - note_ms < 8000:
+		text = note + "   " + text
 	if rumble > 0.05:
 		text += "   Rütteln %2.0f %% @ %2.0f Hz" % [rumble * 100.0, float(st.get("rumble_hz", 0.0))]
 	text += "   %s" % str(st.get("source", "-"))

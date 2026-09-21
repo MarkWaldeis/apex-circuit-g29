@@ -221,34 +221,53 @@ offiziellen Spiels (**On Track / Rumble Strip / Off Track Effects**, je
 (360/400/450/900°) und Kraftrichtung. Details und die Quellen aus dem
 offiziellen Spiel stehen in `docs/FFB_F1_STYLE_PLAN.md`.
 
+Godot **nie direkt** aufrufen, sondern immer über den gesperrten Starter.
+Godot schreibt beim Lauf `.godot/` um; zwei Instanzen am selben Projekt
+zerschießen diesen Cache, und ein so beschädigter Lauf meldet Fehler *und
+trotzdem* „PASS“. Gemessen am 21.09.2026 um 18:56 liefen zwei Läufe
+gleichzeitig: `test_lap_drive.gd` brach mit „Could not preload resource script
+res://scripts/ffb_link.gd“ ab, das Auto wurde nie gebaut — und der Test meldete
+`LAP_DRIVE PASS`. Genau deshalb wertet der Runner so einen Lauf als Fehler:
+
 ```
-godot --headless --path godot_f1 --script tests/test_car_orientation.gd
-godot --headless --path godot_f1 --script tests/test_input_mapping.gd
-godot --headless --path godot_f1 --script tests/test_drive_unit.gd
-godot --headless --path godot_f1 --script tests/test_camera_pose.gd
-godot --headless --path godot_f1 --script tests/test_lap_drive.gd
-godot --headless --path godot_f1 --script tests/test_cockpit_wheel.gd
-godot --headless --path godot_f1 --script tests/test_gameplay_input.gd
-godot --headless --path godot_f1 --script tests/test_pedal_ui.gd
-godot --headless --path godot_f1 --script tests/test_racing_line.gd
-godot --headless --path godot_f1 --script tests/test_gearbox.gd
-godot --headless --path godot_f1 --script tests/test_crash_surfaces.gd
-godot --headless --path godot_f1 --script tests/test_ffb_link.gd
-godot --headless --path godot_f1 --script tests/test_ffb_model.gd
-godot --headless --path godot_f1 --script tests/test_ffb_settings.gd
+powershell -File tools/run_all_tests.ps1              # alle 18 headless-Testdateien
+powershell -File tools/run_all_tests.ps1 -Filter ffb  # nur die FFB-Dateien
 ```
+
+Der Runner startet jede Datei über `tools/run_godot.ps1` (die Sperre), legt die
+Logs unter `tools/testlogs/` ab und zählt eine Datei nur dann als bestanden,
+wenn der Exit-Code 0 ist, **keine** Zeile wie `SCRIPT ERROR`, `Parse Error`,
+`Nonexistent function` oder `Failed to load script` vorkommt und mindestens
+eine `PASS`-Zeile dasteht. Einzeln geht es so:
+
+```
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/test_ffb_model.gd
+```
+
+`tools/run_godot.ps1` wartet zuerst auf die Sperre, bricht mit Exit 125 ab,
+wenn trotzdem eine fremde Godot-Instanz am selben Projekt läuft (erfundene
+Messwerte wären schlimmer als ein Abbruch), und beendet seinen Godot nach
+`-Timeout` Sekunden wirklich — vorher blieb ein hängender Lauf als Waise
+stehen und vergiftete jede weitere Messung.
+
+Geprüft werden 18 Dateien: `test_car_orientation`, `test_input_mapping`,
+`test_drive_unit`, `test_camera_pose`, `test_lap_drive`, `test_cockpit_wheel`,
+`test_gameplay_input`, `test_pedal_ui`, `test_pedal_span`, `test_racing_line`,
+`test_gearbox`, `test_tyre_motion`, `test_crash_surfaces`, `test_ffb_link`,
+`test_ffb_model`, `test_ffb_settings`, `test_ffb_edge`,
+`test_g29_profile_path`.
 
 Zum Nachmessen des Fahrgefühls (schreibt nur Zahlen, keine Dateien):
 
 ```
-godot --headless --path godot_f1 --script tests/probe_feel.gd
-godot --headless --path godot_f1 --script tests/probe_grip.gd
-godot --headless --path godot_f1 --script tests/probe_thrust.gd
-godot --headless --path godot_f1 --script tests/probe_scrape.gd
-godot --headless --path godot_f1 --script tests/probe_brake_crash.gd
-godot --headless --path godot_f1 --script tests/probe_barrier_geometry.gd
-godot --headless --path godot_f1 --script tests/probe_ffb.gd
-godot --headless --path godot_f1 --script tests/probe_review_root.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_feel.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_grip.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_thrust.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_scrape.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_brake_crash.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_barrier_geometry.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_ffb.gd
+powershell -File tools/run_godot.ps1 --headless --path godot_f1 --script tests/probe_review_root.gd
 ```
 
 `probe_review_root` ist die **Gegenprobe** zum Lenkrad-Modell: sie sucht
@@ -267,14 +286,24 @@ echter Beschleunigung (rund Faktor 1,58).
 
 `test_pedal_ui` prüft das Einstellungs-Menü selbst: jede Pedal-Zeile existiert, „Achse ändern“ wandert zum nächsten freien Platz (und überspringt belegte Achsen), „Gas ⟷ Bremse tauschen“ tauscht wirklich, die Anzeige folgt der neuen Zuordnung (getretenes Gaspedal = 100 %, Bremse bleibt 0 %), die Wahl landet im Profil, und jeder Menüweg lässt sich wieder verlassen.
 
+`test_tyre_motion` (18 Prüfungen) prüft, dass sich die sichtbaren Räder wirklich mit dem Tempo drehen. Vorher lief die Rotation des Rades gegen die Rotation, die Godot dem Physik-Knoten selbst gibt, und hob sich exakt auf: auf dem Bildschirm stand das Rad bei 150 km/h still, in den Zahlen war davon nichts zu sehen.
+
+`test_ffb_direction` (19 Prüfungen) prüft die **Selbstmessung der Kraftrichtung**: der Helfer schickt seine Achsenstellung mit jedem Lebenszeichen, das Spiel liest dieselbe Achse über SDL und dreht die Kraft um, wenn sie spiegelverkehrt ankommt. Ohne Achsendaten wird nichts behauptet — dann bleibt die Richtung unentschieden statt geraten.
+
+`test_ffb_edge` (6 Prüfungen) prüft die Randfälle des Lenkrad-Modells: ein einzelner NaN/INF-Tick aus der Physik darf die Glättung nicht dauerhaft vergiften (vorher blieb „nan“ im HUD und das Paket war unlesbar) — das Modell heilt sich selbst.
+
+`test_pedal_span` (9 Prüfungen) prüft die Pedal-Kalibrierung gegen ein verdorbenes Profil: eine unmögliche Spannweite, die das Gas auf 53 % deckelte, wird nicht mehr gespeichert, und Vollgas kommt wieder als 1.00 an.
+
+`test_g29_profile_path` (6 Prüfungen) hält fest, dass ein Diagnoselauf das Lenkrad-Profil des Fahrers inhaltlich **und im Zeitstempel** nicht anfasst — `APEX_G29_PROFILE` leitet ihn auf eine Diagnosedatei um. Ohne das überschrieb `tools/ffb_direction_check.ps1` die von Hand kalibrierte Pedalzuordnung.
+
 Diagnose-Werkzeuge (Fensterlauf, weil headless keine Joysticks sieht):
 
 ```
-godot --path godot_f1 --resolution 320x200 --script tests/probe_g29_hardware.gd
-godot --path godot_f1 --resolution 320x200 --script tests/probe_g29_module.gd
-godot --path godot_f1 --resolution 320x200 --script tests/probe_g29_profile.gd
-godot --path godot_f1 --resolution 1920x1080 --script tests/probe_fps.gd
-godot --path godot_f1 --resolution 1280x720 --script tests/shot_game.gd
+powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 320x200 --script tests/probe_g29_hardware.gd
+powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 320x200 --script tests/probe_g29_module.gd
+powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 320x200 --script tests/probe_g29_profile.gd
+powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 1920x1080 --script tests/probe_fps.gd
+powershell -File tools/run_godot.ps1 --path godot_f1 --resolution 1280x720 --script tests/shot_game.gd
 python tools/hid_probe.py 046d:c24f
 ```
 

@@ -140,7 +140,10 @@ func setup(line, wheel_input, start: Transform3D) -> void:
 	ffb = null
 	if not is_ai:
 		ffb = FfbLink.new()
-		ffb.setup(ffb_settings)
+		# Das Lenkrad mitgeben: damit kann der Kanal die Kraftrichtung selbst
+		# messen (DirectInput-Achse des Helfers gegen die SDL-Achse des Spiels)
+		# und muss sie nicht aus einer Annahme ableiten.
+		ffb.setup(ffb_settings, wheel_input)
 	# HUD, Kamera und Gamepad-Vibration lesen dasselbe Modell wie das echte
 	# Lenkrad. Ein KI-Auto hat keinen Lenkradkanal und rechnet selbst.
 	feedback = WheelFeedback.new()

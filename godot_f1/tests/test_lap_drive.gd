@@ -18,6 +18,7 @@ var worst_lateral: float = 0.0
 var lowest_y: float = INF
 var lowest_label: String = ""
 var no_contact: int = 0
+var samples: int = 0
 var failed: int = 0
 
 
@@ -41,6 +42,13 @@ func _boot() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	main = packed.instantiate()
 	root.add_child(main)
+	# Gemessen am 21.09.2026 (18:56): lief dieser Test gleichzeitig mit einer
+	# zweiten Godot-Instanz, scheiterte schon das Laden von main.gd ("Could not
+	# preload resource script res://scripts/ffb_link.gd"), das Auto wurde nie
+	# gebaut - und der Test meldete trotzdem "LAP_DRIVE PASS". Jede Pruefung war
+	# mit leerem Feld vakuum-gruen, sichtbar nur an "lowest y=inf". Ein Test,
+	# der bei kaputter Szene gruen ist, beweist nichts: deshalb fragen die
+	# Pruefungen unten ausdruecklich nach den Autos.
 	physics_frame.connect(_on_phys)
 
 
@@ -48,6 +56,11 @@ func _on_phys() -> void:
 	frames += 1
 	if frames == 5:
 		var player = main.get("player")
+		var ai = main.get("ai_car")
+		_check(player != null, "the_player_car_exists",
+			"player=%s" % ("da" if player else "FEHLT - main.gd hat kein Auto gebaut"))
+		_check(ai != null, "the_ai_car_exists",
+			"ai_car=%s" % ("da" if ai else "FEHLT - main.gd hat kein Auto gebaut"))
 		if player:
 			player_start_z = player.global_position.z
 			player_start_ok = true
@@ -56,7 +69,6 @@ func _on_phys() -> void:
 			_check(player.global_transform.basis.z.dot(Vector3(0, 0, -1)) > 0.95,
 				"player_nose_points_down_the_straight",
 				"dot=%.3f" % player.global_transform.basis.z.dot(Vector3(0, 0, -1)))
-		var ai = main.get("ai_car")
 		if ai:
 			ai_start_index = line.closest_index(ai.global_position)
 	if frames < 6:
@@ -82,6 +94,7 @@ func _on_phys() -> void:
 	for car in [player2, ai2]:
 		if car == null:
 			continue
+		samples += 1
 		var y: float = car.global_position.y
 		if y < lowest_y:
 			lowest_y = y
@@ -108,9 +121,17 @@ func _finish() -> void:
 			"worst distance to line %.2f m" % worst_lateral)
 		var fwd: float = ai.global_transform.basis.z.dot(ai.linear_velocity)
 		_check(fwd >= -0.5, "ai_never_drives_backwards", "fwd=%.2f" % fwd)
+	else:
+		# Ohne KI-Auto lief die Runde gar nicht - dann darf hier kein stilles
+		# "keine Verstoesse" stehen, sondern es muss auffallen. Vorher wurden
+		# diese drei Pruefungen bei fehlendem Auto einfach uebersprungen.
+		_check(false, "ai_was_simulated_at_all",
+			"kein KI-Auto (ai=%s, start_index=%d)" % [str(ai != null), ai_start_index])
 	_check(no_contact == 0, "ai_forward_axis_matches_motion", "violations=%d" % no_contact)
-	_check(lowest_y > -4.0, "nobody_falls_out_of_the_world",
-		"lowest y=%.2f m (%s)" % [lowest_y, lowest_label])
+	_check(samples > 0, "the_cars_were_really_there",
+		"gelesene Positionen=%d" % samples)
+	_check(samples > 0 and lowest_y > -4.0, "nobody_falls_out_of_the_world",
+		"lowest y=%.2f m (%s), Positionen=%d" % [lowest_y, lowest_label, samples])
 	if failed > 0:
 		print("LAP_DRIVE FAIL count=", failed)
 		quit(1)

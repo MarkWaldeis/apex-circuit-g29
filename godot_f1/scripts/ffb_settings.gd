@@ -15,7 +15,12 @@ const PATH := "user://ffb_settings.json"
 ## Version 2: `invert` hat jetzt einen gemessenen Standardwert. Dateien der
 ## Version 1 kannten die Messung noch nicht und werden beim Laden migriert
 ## (siehe `load_profile`).
-const VERSION := 2
+## Version 3: dazu `invert_source` - woher die Kraftrichtung kommt. Steht dort
+## "fahrer", hat der Fahrer den Schalter im Menue selbst gestellt; dann darf
+## die Selbstmessung (`ffb_link.gd::measure_direction`) ihn nicht mehr
+## ueberschreiben. Ohne dieses Feld haette die Automatik eine bewusste
+## Entscheidung still umgeworfen.
+const VERSION := 3
 ## Ein Testlauf kann seine eigene Einstellungsdatei mitgeben. Ohne das haengt
 ## jede Messung an dem, was der Fahrer im Menue zuletzt eingestellt hat - ein
 ## Prueflauf mit "FFB AUS" hat dann keine Kraft gemessen und die Kette fuer
@@ -65,6 +70,9 @@ var rotation_deg: float = 400.0
 ## Treiberwechsel kann das umdrehen. `tools/ffb_direction_check.ps1` misst es
 ## in ein paar Sekunden nach.
 var invert: bool = true
+## "auto" (noch von der Messung zu bestaetigen) oder "fahrer" (im Menue
+## gestellt). Nur "auto" erlaubt der Selbstmessung, den Wert zu aendern.
+var invert_source: String = "auto"
 ## Diagnostics for the tests: True once a profile was written or read.
 var loaded: bool = false
 var saved: int = 0
@@ -104,6 +112,12 @@ func load_profile() -> bool:
 	var file_version: int = int(d.get("version", 1))
 	if file_version >= 2:
 		invert = bool(d.get("invert", invert))
+	# Ab Version 3 steht dabei, woher die Richtung kommt. Dateien der aelteren
+	# Staende kennen das Feld nicht; ihre Richtung galt als "noch nicht
+	# bestaetigt" und darf von der Selbstmessung nachgezogen werden.
+	invert_source = String(d.get("invert_source", invert_source))
+	if invert_source != "fahrer":
+		invert_source = "auto"
 	var rot: float = float(d.get("rotation_deg", rotation_deg))
 	rotation_deg = rot if ROTATIONS.has(rot) else 400.0
 	loaded = true
@@ -134,6 +148,7 @@ func save_profile() -> bool:
 		"kerb_effects": snappedf(kerb_effects, 0.001),
 		"offtrack_effects": snappedf(offtrack_effects, 0.001),
 		"invert": invert,
+		"invert_source": invert_source,
 		"rotation_deg": rotation_deg,
 	}))
 	f.close()
@@ -147,6 +162,16 @@ func save_profile() -> bool:
 func lock_fraction() -> float:
 	var rot: float = clampf(rotation_deg, 180.0, WHEEL_RANGE_DEG)
 	return rot / WHEEL_RANGE_DEG
+
+
+## Kraftrichtung setzen. `source` sagt, woher sie kommt: "fahrer" (Schalter im
+## Menue) oder "gemessen" (Selbstmessung in `ffb_link.gd`). Steht "fahrer" in
+## der Datei, laesst die Automatik den Wert in Ruhe - eine bewusste
+## Entscheidung darf nicht still umgeworfen werden.
+func set_invert(value: bool, source: String = "fahrer") -> void:
+	invert = value
+	invert_source = source if source == "fahrer" or source == "gemessen" else "auto"
+	save_profile()
 
 
 ## Halber physischer Lenkradweg in Grad (G29 in G HUB auf 900 -> 450).

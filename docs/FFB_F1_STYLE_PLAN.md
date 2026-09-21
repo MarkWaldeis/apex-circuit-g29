@@ -348,6 +348,8 @@ der Root nach und startet die nächste Welle — so lange, bis eine Welle
 | 3 | Modell/Realismus, Kette/Hardware | — (kein Bericht) | Die beiden Welle-3-Agenten liefen bis zum Abbruch, ohne einen Bericht zu schreiben. Was sie an Zwischenständen hinterlassen haben (Headless-Schutz, zwei zusätzliche Ende-zu-Ende-Prüfungen), ist in den Dateien und in §8 dokumentiert. **Ersetzt durch Welle 4** — die Prüfung ist damit nicht „bestanden“, sondern wiederholt |
 | 4 | Modell/Realismus (Agent `wave4_realism`) | — (kein eigener Bericht) | Der Agent brach ab; sein erhaltener Beitrag ist die **NAN-/INF-Härtung** in `ffb_model.gd` samt Randfall-Test `tests/test_ffb_edge.gd` (6 Prüfungen) — vom Root übernommen und nachgemessen |
 | 4 | Kette/Hardware **am echten G29** (Root-Audit) | `docs/reviews/ffb_wave4_hardware.md` | Erstmals lag echte Hardware vor: **Motor dreht das Rad** (dreimal gemessen: +0,5 Kraft → Achse 32767→26), aber **nur zeitweise** (später dieselbe Messung ohne Bewegung). Zwei Mängel in den Diagnosewerkzeugen gefunden und behoben: der Richtungstest **startete den Helfer nie** (Pfad mit Leerzeichen) und **schrieb das Lenkrad-Profil des Fahrers neu**. Dazu drei neue Werkzeuge (`tools/ffb_hw_probe.py`, `tests/probe_axis_read.gd`, `tests/test_g29_profile_path.gd`) |
+| 5 | Kette/Hardware (Agent `w5_direction`) | `docs/reviews/ffb_direction_selfcheck.md` | Die Kraftrichtung wird jetzt **gemessen statt angenommen**: der Helfer schickt seine DirectInput-Achse im Lebenszeichen mit, `ffb_link.gd` vergleicht sie mit der SDL-Achse des Spiels. 19 Prüfungen, `--check` 14/14. Details in §9 |
+| 5 | Messkette/Auslieferung (Root-Audit) | §10 dieses Dokuments | Drei Mängel, alle behoben: ein **Kollisionslauf zählte als grün** (`LAP_DRIVE PASS` aus einer Welt ohne Auto), ein **hängender Godot blieb als Waise stehen** und vergiftete jede weitere Messung, und die **ausgelieferte Kopie konnte still veralten** (Desktop-Start 18:58, Export 19:06). Neu: `tools/run_all_tests.ps1`, gehärteter `tools/run_godot.ps1`, `tools/export_and_deliver.ps1` |
 
 ## 6. Risiken
 
@@ -650,3 +652,161 @@ des 200-Hz-Loops (Kraft, Rütteln, Hz, Tempo, Clipping, „über 1,0“-Zähler)
 überhaupt da ist (`der Helfer meldet die echten Spitzen`). Ergebnis: **10
 Prüfungen, 0 Mängel**, Kraftspitze **0,584** = exakt der Modellwert, Rütteln
 0,700 @ 42 Hz, 0 Werte über 1,0.
+
+---
+
+## 9. Welle 5: die Kraftrichtung wird gemessen, nicht angenommen
+
+### 9.1 Warum das nötig war
+
+Am echten Rad gemessen (`python tools/ffb_hw_probe.py --seconds 1.5 --force
+0.35`, viermal reproduziert): eine **positive DirectInput-Kraft fährt die
+G29-Achse zu ihrem Minimum**. Damit war die halbe Kette bewiesen. Die andere
+Hälfte war eine Annahme: ob „Achse runter“ im Spiel links oder rechts ist,
+hängt davon ab, wie die DirectInput-Achse zur **SDL**-Achse steht, aus der das
+Spiel „rechts = +1“ gelernt hat (`steer_invert: false`, `steer_span 0.5547`).
+Falsch geraten hieße das: das Rad drückt in der Kurve nach außen statt nach
+innen. Der Test, der es entscheidet (`tools/ffb_direction_check.ps1`), dreht
+das Rad mit Kraft — er braucht eine Hand-freie, zuverlässig meldende Hardware.
+
+### 9.2 Die Lösung: beide Seiten lesen dieselbe Achse
+
+* `tools/g29_ffb.py` schickt die eigene **DirectInput-Achsenstellung** im
+  Lebenszeichen mit (`{"ack":1,…,"axis":0…65535}`, 10 Hz). Fehlt sie, steht
+  das Feld **nicht** im Paket — „keine Achsendaten“ darf nie als Messung
+  durchgehen (`PASS ohne_rad_keine_erfundene_achse`).
+* `ffb_link.gd::measure_direction()` vergleicht sie mit der **SDL**-Achse des
+  Spiels: Mitte aus dem Stehen gelernt (das G29 ruht gemessen bei 32767 bis
+  33104), gezählt wird erst ab 15 % Lenkeinschlag und nur mit fünf
+  **verschiedenen** Lebenszeichen.
+  * **gleichläufig** → „Achse runter“ ist links → Kraftrichtung **umgekehrt**,
+  * **gegenläufig** → „Achse runter“ ist rechts → Kraftrichtung **normal**.
+* Angewandt wird nur bei `|torque| ≤ 0,15` — ein Vorzeichenwechsel mitten im
+  Bogen wäre ein Ruck ohne Erklärung. Das HUD meldet das Ergebnis kurz,
+  das Menü zeigt bei „Kraftrichtung“ zusätzlich `(gemessen: gleichläufig /
+  gegenläufig)`.
+* **Der Fahrer behält das letzte Wort:** `ffb_settings.gd` speichert
+  `invert_source` (`"fahrer"` oder `"gemessen"`, Version 3 der Datei). Sobald
+  er den Schalter selbst anfasst, steht dort `"fahrer"` und die Automatik hält
+  sich dauerhaft heraus — auch mitten in der Sitzung.
+
+### 9.3 Messungen
+
+| Prüfung | Ergebnis |
+|---|---|
+| `tests/test_ffb_direction.gd` (neu) | **19 Prüfungen PASS** — u. a. `ohne_achsenwert_keine_entscheidung`, `gleichlaeufig_erkannt → invert=true`, `gegenlaeufig_erkannt → invert=false`, `fahrerwahl_schaltet_die_automatik_aus`, `im_bogen_kein_vorzeichenwechsel` |
+| `python tools/g29_ffb.py --check` | **14 Prüfungen, 0 Mängel** (neu: `das_lebenszeichen_traegt_die_achsenstellung`, `ohne_rad_keine_erfundene_achse`) |
+| alle 19 `godot_f1/tests/test_*.gd` | alle PASS, 0 FAIL |
+| `tools/ffb_end_to_end.ps1` | 10 Prüfungen, 0 Mängel (Spitze 0,584, Rütteln 0,700 @ 42,2 Hz) |
+| `tools/ship_check.ps1` | **5 Prüfungen, 0 Mängel** gegen den neu exportierten Desktop-Build — inklusive der beiden neuen Testfälle **im Build** |
+
+Zusätzlich in Kriterium 17 aufgenommen: **18. Kraftrichtung wird gemessen** —
+das Spiel leitet sie aus dem Vergleich der Helfer- und der SDL-Achse ab, ohne
+eine Hand am Lenkrad; ohne Achsdaten bleibt das Ergebnis ausdrücklich unbekannt.
+
+### 9.4 Ein Fehler, den der eigene Test gefunden hat
+
+Die erste Fassung wandte eine gefällte Entscheidung nur beim nächsten **neuen**
+Messwert an — neue Messwerte gibt es nur beim Lenken, also genau dann, wenn
+Kraft am Rad liegt. Auf der Geraden wäre die Entscheidung nie angekommen
+(`FAIL auf_der_geraden_wird_es_gesetzt`). Behoben: steht die Entscheidung, wird
+sie in jedem Tick erneut zu setzen versucht, bis das Rad ruhig genug ist.
+
+### 9.5 Was offen bleibt
+
+Der **Fühltest**: Software kann messen, dass die Kraft in die richtige Richtung
+geht und wie stark sie ist — nicht, ob sie sich richtig anfühlt. Dafür
+`"Apex Circuit FFB starten.cmd" --demo` oder eine Runde fahren. Das Rad muss
+dabei zuverlässig Achsdaten liefern (sonst bleibt die Richtungsmessung ehrlich
+bei „unbekannt“).
+
+---
+
+## 10. Welle 5 (Root-Audit): die Messkette selbst war angreifbar
+
+Ein Prüfbericht ist nur so viel wert wie die Messung, aus der er stammt. Diese
+Welle hat nicht das Lenkrad geprüft, sondern das, was das Lenkrad prüft — und
+dabei drei Mängel gefunden, von denen zwei die **ganze bisherige Beweislage**
+hätten entwerten können.
+
+### 10.1 Ein Kollisionslauf zählte als bestanden
+
+Gemessen am 21.09.2026 um 18:56, beim Nachfahren der Testliste: mein
+`test_lap_drive.gd` lief gleichzeitig mit fremden Godot-Läufen. Die Ausgabe war
+
+```
+SCRIPT ERROR: Could not preload resource script "res://scripts/ffb_link.gd"
+SCRIPT ERROR: Nonexistent function 'new' in base 'GDScript'
+PASS nobody_falls_out_of_the_world lowest y=inf m ()
+LAP_DRIVE PASS            (exit=0)
+```
+
+Das Auto war nie gebaut worden, die Szene war tot — und der Test meldete
+**PASS**, weil jede seiner Prüfungen über ein leeres Feld lief (`INF > -4,0`
+ist wahr). Der erste Zählversuch („wie viele Testdateien sind grün?“) hätte
+diesen Lauf mitgezählt.
+
+Zwei Ursachen:
+
+1. Die Sperre in `tools/run_godot.ps1` war umgehbar: die README zeigte
+   `godot --headless ...` direkt. Wer das tippt, startet Godot am Cache vorbei.
+2. Ein so kaputter `SceneTree`-Test erreicht sein `quit()` nie. Godot lief
+   endlos weiter (gemessen: PID 32524, sechs Minuten, Elternprozess weg), der
+   Wrapper gab nach seinem Timeout auf und **ließ die Waise stehen** — jede
+   folgende Messung war damit ebenfalls vergiftet.
+
+### 10.2 Was jetzt dagegen steht
+
+* **`tools/run_godot.ps1`** erkennt vor jedem Start fremde Godot-Instanzen am
+  selben Projekt. Statt erfundene Messwerte zu liefern, bricht er mit Exit 125
+  ab (`-AllowStray` erzwingt den Start); nach `-Timeout` wird der eigene Godot
+  wirklich beendet (Exit 126). Die Exit-Codes stehen im Kopf der Datei.
+* **`tools/run_all_tests.ps1`** (neu) fährt alle Testdateien nacheinander durch
+  die Sperre und zählt eine Datei nur dann als Beweis, wenn der Exit-Code 0
+  ist, **keine** Zeile wie `SCRIPT ERROR`, `Parse Error`, `Compile Error`,
+  `Nonexistent function`, `Failed to load script` oder `Invalid call` vorkommt,
+  **keine** `FAIL`-Zeile dasteht und mindestens eine `PASS`-Zeile existiert.
+  Logs liegen in `tools/testlogs/`. Ein Zählfehler in die andere Richtung wurde
+  dabei gefunden und behoben: das erste Muster akzeptierte nur `PASS ` am
+  Zeilenanfang und machte `test_drive_unit` fälschlich rot.
+* **`tests/test_lap_drive.gd`** fragt jetzt ausdrücklich nach Fahrer- und
+  KI-Auto und nach der Zahl der gelesenen Positionen. Eine tote Szene ist damit
+  ein Fehler statt eines stillen „PASS“.
+* **`godot_f1/README.md`** zeigt keinen direkten Godot-Aufruf mehr, nennt
+  Runner und Wrapper und führt die fünf Tests, die in der Liste fehlten.
+
+### 10.3 Der zweite Mangel: ausgeliefert ≠ aktuell
+
+Gemessen um 19:10: Der Desktop-Start `Apex Circuit.lnk` zeigt auf
+`Desktop\Apex Circuit\`, der Export schrieb nach `grok f1 try\ApexCircuit\`.
+Die ausgelieferte `.pck` war vom **18:58**, der frische Export vom **19:06** —
+der Spieler hätte eine ältere Version gestartet. `tools/ship_check.ps1` hätte
+das nicht gemerkt: es prüft die ausgelieferte Kopie, und die bestand die neuen
+Testfälle zufällig schon.
+
+Jetzt: `tools/export_and_deliver.ps1` (aufgerufen von `export_windows.cmd`)
+exportiert, **liefert an den Desktop-Ort aus**, vergleicht die
+SHA256-Summen beider Kopien und prüft, dass die ausgelieferte Datei nicht
+älter ist als die neueste Quelldatei. `tools/ship_check.ps1` hat dafür eine
+sechste Prüfung („die ausgelieferte Datei ist nicht älter als die Quelle“).
+
+Nebenbei aufgefallen: `& $godot …` **wartet nicht** (Godot ist ein
+GUI-Programm) und `$LASTEXITCODE` bleibt leer — die Prüfung meldete „exit “ ohne
+Zahl, während der Export im Hintergrund noch lief. Jetzt `Start-Process -Wait`.
+
+### 10.4 Gemessen nach dem Umbau (21.09.2026, 19:05–19:25)
+
+| Prüfung | Ergebnis |
+|---|---|
+| `tools/run_all_tests.ps1` | **19 Dateien, 380 Prüfungen, 186 s, alle grün** — jede Datei Exit 0, ohne Fehlerzeile, mit PASS |
+| `python tools/g29_ffb.py --check` | **14 Prüfungen, 0 Mängel** |
+| `tools/ffb_end_to_end.ps1` (Spiel + echter Helfer) | **10 Prüfungen, 0 Mängel** — Kraftspitze 0,584, Rütteln 0,700 @ 42,2 Hz, Quellen Asphalt/Blockiert/Kerb/Kies/Schalten, Schalter AN/AUS wirkt |
+| `tools/ship_check.ps1` gegen den **neu ausgelieferten** Build | **6 Prüfungen, 0 Mängel** |
+| `tools/export_and_deliver.ps1` | beide Kopien identisch (`SHA256 EA2DF4EB…`), ausgeliefert 19:08:27 nicht älter als die neueste Quelle 19:07:19 |
+
+### 10.5 Was auch diese Welle nicht beweisen kann
+
+Der **Fühltest am Lenkrad**. Alle Zahlen oben belegen Richtung, Stärke,
+Frequenz und Kette — nicht, ob sich das Ergebnis für den Fahrer richtig anfühlt.
+Der Helfer liefert dafür weiterhin `--demo` (alle Fahrsituationen einmal am Rad)
+und `tools/ffb_direction_check.ps1` (dreht das Rad mit Kraft, Hände weg).

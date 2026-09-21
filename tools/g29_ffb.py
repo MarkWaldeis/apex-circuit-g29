@@ -155,6 +155,34 @@ def _read_float(value, fallback: float = 0.0) -> float:
         return fallback
 
 
+def _wheel_axis_or_none(wheel):
+    """Rohwert der DirectInput-Achse (0..65535), oder None.
+
+    `None` heisst "keine belastbare Aussage": kein Rad, keine Achsendaten,
+    oder ein Wert ausserhalb des Achsenbereichs. Genau diese Unterscheidung
+    braucht das Spiel - es leitet daraus die Kraftrichtung ab
+    (`ffb_link.gd::measure_direction`) und darf dabei nichts erfinden.
+    """
+    if wheel is None:
+        return None
+    reader = getattr(wheel, "read_axis", None)
+    if reader is None:
+        return None
+    try:
+        value = reader()
+    except Exception:
+        return None
+    if value is None:
+        return None
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return None
+    if 0 <= value <= 65535:
+        return value
+    return None
+
+
 class GUID(ctypes.Structure):
     _fields_ = [
         ("Data1", DWORD),
@@ -1148,6 +1176,10 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
     # ueberhaupt ein Helfer lauscht. Das Spiel sendet sonst ins Leere, das
     # Lenkrad bleibt still, und der Fahrer sucht den Fehler in der Physik.
     acks_sent = 0
+    ## Wie viele dieser Lebenszeichen die eigene Achsenstellung trugen. Das
+    ## Spiel braucht sie, um die Kraftrichtung selbst zu messen; im Trockenlauf
+    ## (kein Rad) bleibt die Zahl 0, und das ist die ehrliche Aussage.
+    acks_with_axis = 0
     last_ack = 0.0
     if not quiet:
         print(f"[ffb] hoert auf 127.0.0.1:{port} ({rate:.0f} Hz)")
@@ -1246,12 +1278,25 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                     # antwortet.
                     if peer and now - last_ack >= ACK_PERIOD:
                         last_ack = now
+                        # Die eigene Achsenstellung mitgeben: das Spiel liest
+                        # dieselbe Achse ueber SDL und kann damit SELBST
+                        # messen, wie DirectInput- und SDL-Achse zueinander
+                        # stehen - daraus folgt die richtige Kraftrichtung,
+                        # ohne dass jemand das Rad mit Kraft drehen muss
+                        # (`ffb_link.gd::measure_direction`). Fehlt der Wert,
+                        # steht das Feld nicht im Paket: "keine Achsendaten"
+                        # darf nie als Messung durchgehen.
+                        axis_now = _wheel_axis_or_none(wheel)
+                        ack = {
+                            "v": 2, "ack": 1,
+                            "mode": "dry" if dry_run else "wheel",
+                            "torque": round(live["torque"], 3),
+                        }
+                        if axis_now is not None:
+                            ack["axis"] = axis_now
+                            acks_with_axis += 1
                         try:
-                            sock.sendto(json.dumps({
-                                "v": 2, "ack": 1,
-                                "mode": "dry" if dry_run else "wheel",
-                                "torque": round(live["torque"], 3),
-                            }).encode("utf-8"), peer)
+                            sock.sendto(json.dumps(ack).encode("utf-8"), peer)
                             acks_sent += 1
                         except OSError:
                             # Antwortet niemand (Socket schon zu), ist das kein
@@ -1313,6 +1358,7 @@ def run_bridge(port: int, rate: float, invert: bool, verbose: bool,
                         "damage_max": damage_max,
                         "reported_gain": reported_gain,
                         "acks_sent": acks_sent,
+                        "acks_with_axis": acks_with_axis,
                         "hz_peak": hz_peak,
                         "over_one": over_one,
                     })
@@ -1440,7 +1486,7 @@ def _measure(script, run_seconds: float, rate: float = 200.0,
     return report
 
 
-def _ack_probe(rate: float = 200.0, wait: float = 2.5) -> tuple:
+def _ack_probe(rate: float = 200.0, wait: float = 2.5, wheel=None) -> tuple:
     """Antwortet der Helfer dem Spiel?
 
     Gegenrichtung zu `_measure`: hier laeuft der echte Bruecken-Loop in einem
@@ -1448,7 +1494,10 @@ def _ack_probe(rate: float = 200.0, wait: float = 2.5) -> tuple:
     Rueckkanal kann das HUD nicht sagen, ob ueberhaupt ein Helfer lauscht -
     ein totes Lenkrad waere unsichtbar, weil UDP nichts bestaetigt.
 
-    Rueckgabe: (bekommen, modus, beschreibung)
+    `wheel` (optional) ersetzt das Lenkrad - damit laesst sich pruefen, dass das
+    Lebenszeichen die Achsenstellung des Helfers mitschickt, ohne Hardware.
+
+    Rueckgabe: (bekommen, modus, beschreibung, letzte Antwort)
     """
     port = _free_port()
     report: dict = {}
@@ -1456,7 +1505,7 @@ def _ack_probe(rate: float = 200.0, wait: float = 2.5) -> tuple:
         target=run_bridge,
         args=(port, rate, False, False, 0.5),
         kwargs=dict(dry_run=True, quiet=True, run_seconds=wait + 1.5,
-                    report=report),
+                    report=report, wheel_override=wheel),
         daemon=True,
     )
     worker.start()
@@ -1480,8 +1529,8 @@ def _ack_probe(rate: float = 200.0, wait: float = 2.5) -> tuple:
                 continue
             if isinstance(msg, dict) and int(msg.get("ack", 0)) == 1:
                 return True, str(msg.get("mode", "")), (
-                    f"Antwort {msg} nach {wait - (deadline - time.time()):.2f} s")
-        return False, "", f"keine Antwort innerhalb {wait:.1f} s"
+                    f"Antwort {msg} nach {wait - (deadline - time.time()):.2f} s"), msg
+        return False, "", f"keine Antwort innerhalb {wait:.1f} s", {}
     finally:
         sock.close()
 
@@ -1614,9 +1663,26 @@ def check_chain(rate: float = 200.0) -> int:
     # 8) Rueckkanal: der Helfer antwortet dem Spiel. Daran haengt der
     #    HUD-Hinweis "KEIN HELFER" - und damit die einzige Moeglichkeit, von
     #    innen zu sehen, dass die Kraft gar keinen Empfaenger hat.
-    ack_ok, ack_mode, ack_detail = _ack_probe(rate)
+    ack_ok, ack_mode, ack_detail, _ack_msg = _ack_probe(rate)
     check(ack_ok and ack_mode == "dry", "der_helfer_antwortet_dem_spiel",
           f"Modus {ack_mode or '-'}: {ack_detail}")
+
+    # 9) Das Lebenszeichen traegt die eigene Achsenstellung. Damit kann das
+    #    Spiel die Kraftrichtung SELBST messen, ohne dass jemand das Rad mit
+    #    Kraft drehen muss - genau der Punkt, der bis Welle 4 offen war.
+    #    Ohne Rad (Trockenlauf) faellt das Feld weg; hier wird mit einem
+    #    Ersatzrad gemessen, damit der Weg wirklich geprueft ist.
+    axis_probe = _MagnitudeProbe()
+    axis_probe.wheel.read_axis = lambda: 21234
+    axis_ok, _axis_mode, axis_detail, axis_msg = _ack_probe(rate, wheel=axis_probe.wheel)
+    check(axis_ok and axis_msg.get("axis") == 21234,
+          "das_lebenszeichen_traegt_die_achsenstellung",
+          f"axis={axis_msg.get('axis', None)} (erwartet 21234) - {axis_detail}")
+
+    # Und die Gegenprobe: ohne Rad steht kein erfundener Wert im Paket.
+    _dry_ok, _dry_mode, _dry_detail, dry_msg = _ack_probe(rate)
+    check("axis" not in dry_msg, "ohne_rad_keine_erfundene_achse",
+          f"Felder ohne Rad: {sorted(dry_msg.keys())}")
 
     print(f"FFB_CHECK {'PASS' if failed == 0 else 'FAIL'} {checks} Pruefungen, "
           f"{failed} Mangel")

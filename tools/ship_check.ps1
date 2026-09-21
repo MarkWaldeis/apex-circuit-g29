@@ -156,10 +156,46 @@ Check ($pedalOut -match "PEDAL_SPAN PASS") `
     "der Build enthaelt die Pedal-Haertung (neuer Stand)" `
     ($(if ($pedalPush.Count -gt 0) { $pedalPush[0] } else { "kein Ergebnis (Log: $pedalLog)" }))
 
+# Dasselbe fuer die Selbstmessung der Kraftrichtung (Welle 5): ein Testfall,
+# den es vorher nicht gab, im ausgelieferten Build. Er prueft, dass der Helfer
+# seine Achsenstellung mitschickt, dass daraus die Richtung folgt und dass
+# ohne Achsdaten **nichts** behauptet wird.
+$dirLog = Join-Path $env:TEMP "apex_ship_direction.log"
+$dirErr = Join-Path $env:TEMP "apex_ship_direction.err"
+foreach ($p in @($dirLog, $dirErr)) {
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }
+}
+$dir = Start-Process -FilePath $Exe `
+    -ArgumentList "--headless --script res://tests/test_ffb_direction.gd" `
+    -WindowStyle Hidden -PassThru -Wait `
+    -RedirectStandardOutput $dirLog -RedirectStandardError $dirErr
+$dirOut = @(Get-Content -LiteralPath $dirLog -ErrorAction SilentlyContinue)
+$dirKey = @($dirOut | Where-Object { $_ -match "gleichlaeufig_dreht_die_kraft_um" } | Select-Object -First 1)
+Check ($dirOut -match "FFB_DIRECTION PASS") `
+    "der Build misst die Kraftrichtung selbst (neuer Stand)" `
+    ($(if ($dirKey.Count -gt 0) { $dirKey[0] } else { "kein Ergebnis (Log: $dirLog)" }))
+
+# Und der Grund, warum dieser Test ueberhaupt existiert: dass die ausgelieferte
+# Datei die AKTUELLE ist. Gemessen am 21.09.2026 (19:10) liefen die beiden
+# Kopien auseinander - ausgeliefert 18:58, Export 19:06. Dieser Test haette
+# damals angeschlagen; ohne ihn blieb es unbemerkt, weil die aeltere Kopie
+# zufaellig schon alle neuen Testfaelle bestand.
+$newestSource = @(
+    Get-ChildItem -Path (Join-Path $project 'godot_f1') -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notlike "*\.godot\*" -and $_.Extension -in '.gd', '.tscn', '.cfg', '.json' }
+    Get-Item (Join-Path $project 'godot_f1\project.godot')
+) | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$deliveredPck = [System.IO.Path]::ChangeExtension($Exe, '.pck')
+$deliveredTime = if (Test-Path -LiteralPath $deliveredPck) { (Get-Item -LiteralPath $deliveredPck).LastWriteTime } else { [datetime]::MinValue }
+Check ($deliveredTime -ge $newestSource.LastWriteTime) `
+    "die ausgelieferte Datei ist nicht aelter als die Quelle" `
+    ("ausgeliefert {0}, neueste Quelle {1} ({2})" -f `
+        $deliveredTime.ToString('dd.MM. HH:mm:ss'), $newestSource.LastWriteTime.ToString('dd.MM. HH:mm:ss'), $newestSource.Name)
+
 if ($failed -gt 0) {
     Write-Host "[ship] Log: $($on.log)"
     Write-Host "SHIP_RESULT FAIL $failed Mangel"
     exit 1
 }
-Write-Host "SHIP_RESULT PASS 4 Pruefungen, 0 Mangel"
+Write-Host "SHIP_RESULT PASS 6 Pruefungen, 0 Mangel"
 exit 0

@@ -505,6 +505,17 @@ func _refresh_ffb_buttons() -> void:
 		_ffb_rotation_button.text = "Lenkbereich: %s" % s.rotation_label()
 	if _ffb_invert_button:
 		_ffb_invert_button.text = "Kraftrichtung: %s" % ("umgekehrt" if s.invert else "normal")
+		# Wenn die Selbstmessung schon ein Ergebnis hat, steht es dabei - sonst
+		# sieht der Fahrer nur einen Schalter und weiss nicht, woher der Wert
+		# kommt. Gemessen wird waehrend des Fahrens (ffb_link.gd).
+		var link = player.get("ffb") if player != null else null
+		if link != null:
+			var measured: int = int(link.get("direction_aligned"))
+			if measured >= 0:
+				_ffb_invert_button.text += " (gemessen: %s)" % (
+					"gleichläufig" if measured == 1 else "gegenläufig")
+			elif not bool(link.get("auto_direction")):
+				_ffb_invert_button.text += " (vom Fahrer)"
 
 
 func _ffb_live_text() -> String:
@@ -619,10 +630,15 @@ func _toggle_ffb_invert() -> void:
 	var s = _ffb_settings()
 	if s == null:
 		return
-	s.invert = not bool(s.invert)
-	s.save_profile()
+	# Ueber `set_invert`: damit steht in der Datei, dass diese Richtung vom
+	# Fahrer kommt, und die Selbstmessung (`ffb_link.gd::measure_direction`)
+	# dreht sie nicht mehr um.
+	s.set_invert(not bool(s.invert), "fahrer")
+	var link = player.get("ffb") if player != null else null
+	if link != null:
+		link.auto_direction = false
 	_refresh_ffb_buttons()
-	_note(_ffb_note, "Kraftrichtung %s." % ("umgekehrt" if s.invert else "normal"), 3.0)
+	_note(_ffb_note, "Kraftrichtung %s (vom Fahrer, Automatik aus)." % ("umgekehrt" if s.invert else "normal"), 3.0)
 
 
 func _build_calibrate() -> Control:

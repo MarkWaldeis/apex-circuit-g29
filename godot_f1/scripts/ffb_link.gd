@@ -75,6 +75,25 @@ var last_event: String = ""
 var helper_acks: int = 0
 var helper_mode: String = ""
 var helper_last_ms: int = -1
+## Achsenstellung des Helfers (Rohwert der DirectInput-Achse, 0..65535) aus dem
+## Lebenszeichen. Das Spiel liest dieselbe Achse ueber SDL; aus dem Vergleich
+## folgt die richtige Kraftrichtung, ohne dass jemand das Rad mit Kraft drehen
+## muss (siehe `measure_direction`).
+var helper_wheel_raw: int = -1
+var helper_wheel_ms: int = -1
+## Ergebnis der Selbstmessung: -1 unbekannt, 0 gegenlaeufig, 1 gleichlaeufig.
+var direction_aligned: int = -1
+var direction_samples: int = 0
+## Einmaliger Hinweis fuer das HUD ("Kraftrichtung gemessen: ...").
+var direction_note: String = ""
+var direction_note_ms: int = -1
+## Solange "auto", darf die Messung die Kraftrichtung setzen. Sobald der Fahrer
+## den Schalter im Menue selbst anfasst, ist hier "fahrer" und die Automatik
+## haelt sich heraus.
+var auto_direction: bool = true
+## Das G29 selbst: nur fuer die Richtungsmessung (Achsenvergleich). Fehlt es
+## (Test ohne Rad), unterbleibt die Messung - es wird nichts erfunden.
+var wheel = null
 ## Nur fuer die Hardware-Diagnose (`tests/probe_ffb_steer.gd`): wenn gesetzt,
 ## geht genau diese Grundkraft ans Lenkrad, ohne Physik. Damit laesst sich
 ## nachmessen, in welche Richtung eine positive Kraft das Rad wirklich dreht.
@@ -84,12 +103,27 @@ var _udp: PacketPeerUDP
 var _ready_socket: bool = false
 var _accumulator: float = 0.0
 var _last_send_ms: int = -1
+## Mitte der Helferachse, aus dem Stehen gelernt (kein fester Wert: das G29
+## ruht gemessen bei 32767..33104, ein fester Nullpunkt waere schon schief).
+var _axis_center: float = -1.0
+var _axis_center_votes: int = 0
+## Letzter Achsenwert, der in die Abstimmung eingegangen ist: die Antwort kommt
+## mit 10 Hz, die Physik mit 90 Hz - ohne diese Sperre waere "12 gleiche
+## Stimmen" nur ein einziger Messwert, der zwoelfmal gezaehlt wurde.
+var _axis_vote_ms: int = -1
+var _direction_votes: int = 0
+var _direction_last: bool = false
+## Die Entscheidung steht, ist aber noch nicht angewandt (im Bogen wird nicht
+## umgedreht, siehe `_apply_direction`).
+var _direction_applied: bool = false
 
 
-func setup(ffb_settings = null) -> void:
+func setup(ffb_settings = null, wheel_input = null) -> void:
 	settings = ffb_settings
+	wheel = wheel_input
 	if settings == null:
 		settings = Settings.new()
+	auto_direction = String(settings.invert_source) != "fahrer"
 	model = Model.new()
 	model.setup(settings)
 	last_state = model.last_state()
@@ -142,6 +176,7 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	var events: Array = model.take_events()
 	_send(String(events[0]) if events.size() > 0 else "")
 	_read_acks()
+	measure_direction(delta)
 	return last_state
 
 
@@ -157,6 +192,115 @@ func _read_acks() -> void:
 			helper_acks += 1
 			helper_last_ms = Time.get_ticks_msec()
 			helper_mode = String(msg.get("mode", ""))
+			# Nur eine echte Zahl aus dem Achsenbereich zaehlt. Ein fehlendes
+			# Feld heisst "keine Achsendaten" und darf nie als Messung gelten.
+			var axis = msg.get("axis", null)
+			if typeof(axis) == TYPE_FLOAT or typeof(axis) == TYPE_INT:
+				var axis_value: int = int(axis)
+				if axis_value >= 0 and axis_value <= 65535:
+					helper_wheel_raw = axis_value
+					helper_wheel_ms = helper_last_ms
+
+
+## Die Kraftrichtung selbst messen - statt sie nur zu vermuten.
+##
+## Was gemessen ist (`tools/ffb_hw_probe.py`, 21.09.2026): eine positive
+## DirectInput-Kraft faehrt die G29-Achse zu ihrem **Minimum**. Ob "Achse
+## runter" im Spiel links oder rechts ist, haengt daran, wie die
+## DirectInput-Achse zur SDL-Achse steht, aus der das Spiel "rechts = +1"
+## gelernt hat - und genau das laesst sich messen, sobald der Fahrer das
+## Lenkrad dreht:
+##
+##   * der Helfer schickt seinen Achsenwert mit jedem Lebenszeichen (10 Hz),
+##   * das Spiel liest dieselbe Achse ueber SDL,
+##   * zeigen beide beim Drehen in dieselbe Richtung, ist die Kraft
+##     spiegelverkehrt und muss umgedreht werden, sonst nicht.
+##
+## Damit faellt die letzte Annahme der Kette weg, ohne dass jemand das Rad mit
+## Kraft drehen muss. Ohne Achsendaten wird **nichts** entschieden: `-1` bleibt
+## stehen und das HUD schweigt.
+func measure_direction(delta: float) -> void:
+	if not auto_direction or wheel == null or not enabled:
+		return
+	# Steht die Entscheidung, wird sie in jedem Tick erneut zu setzen versucht,
+	# bis das Rad ruhig genug ist. Ohne diesen Zweig haette sie nur beim
+	# naechsten *neuen* Messwert eine Chance gehabt - und neue Messwerte gibt es
+	# nur beim Lenken, also genau dann, wenn Kraft am Rad liegt.
+	if direction_aligned >= 0:
+		if not _direction_applied:
+			_apply_direction()
+		return
+	if helper_wheel_raw < 0 or Time.get_ticks_msec() - helper_wheel_ms > 400:
+		return
+	if not wheel.has_method("axis_snapshot") or not wheel.has_method("has_axis_data"):
+		return
+	if not bool(wheel.has_axis_data()):
+		return
+	var snap: PackedFloat32Array = wheel.axis_snapshot()
+	var idx: int = int(wheel.get("steer_axis"))
+	if idx < 0 or idx >= snap.size():
+		return
+	var steer: float = clampf(float(snap[idx]), -1.0, 1.0)
+	var raw_now: float = float(helper_wheel_raw)
+	# Die Mitte aus dem Stehen lernen. Ein fester Wert waere falsch: gemessen
+	# ruht die G29-Achse je nach Lauf bei 32767 bis 33104.
+	if absf(steer) < 0.05:
+		if _axis_center < 0.0:
+			_axis_center = raw_now
+		else:
+			_axis_center = lerpf(_axis_center, raw_now, 0.10)
+		_axis_center_votes += 1
+		return
+	if _axis_center < 0.0 or _axis_center_votes < 10:
+		return
+	# Erst ab deutlichem Lenkeinschlag: in der Totzone ist die Aussage duenn.
+	if absf(steer) < 0.15:
+		return
+	var offset: float = raw_now - _axis_center
+	if absf(offset) < 0.10 * 32767.0:
+		return
+	if helper_wheel_ms == _axis_vote_ms:
+		return
+	_axis_vote_ms = helper_wheel_ms
+	var aligned: bool = signf(offset) == signf(steer)
+	if aligned == _direction_last:
+		_direction_votes += 1
+	else:
+		_direction_last = aligned
+		_direction_votes = 1
+	if _direction_votes < 5:
+		return
+	direction_aligned = 1 if aligned else 0
+	direction_samples = _direction_votes
+	_apply_direction()
+
+
+## Ergebnis anwenden - aber nur in einem ruhigen Moment. Mitten im Bogen waere
+## ein Vorzeichenwechsel ein Ruck am Lenkrad, und der Fahrer haette keine
+## Chance zu verstehen, woher er kommt.
+func _apply_direction() -> void:
+	if settings == null or direction_aligned < 0:
+		return
+	# Hat der Fahrer den Schalter selbst gestellt, gilt seine Entscheidung -
+	# auch mitten in der Sitzung.
+	if String(settings.invert_source) == "fahrer":
+		auto_direction = false
+		return
+	if absf(float(last_state.get("torque", 0.0))) > 0.15:
+		return
+	var want: bool = direction_aligned == 1
+	var had: bool = bool(settings.invert)
+	if had == want:
+		direction_note = "Kraftrichtung gemessen: %s — war schon richtig" % _direction_word(want)
+	else:
+		settings.set_invert(want, "gemessen")
+		direction_note = "Kraftrichtung gemessen: %s — automatisch gesetzt" % _direction_word(want)
+	direction_note_ms = Time.get_ticks_msec()
+	_direction_applied = true
+
+
+func _direction_word(inverted: bool) -> String:
+	return "umgekehrt" if inverted else "normal"
 
 
 ## Laeuft ein Helfer, der antwortet? `false` heisst nicht automatisch "kaputt":

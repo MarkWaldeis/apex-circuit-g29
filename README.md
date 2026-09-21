@@ -48,14 +48,19 @@ Die Rüttel-Regler heißen wie im offiziellen Spiel (**On Track Effects**,
 **Rumble Strip Effects**, **Off Track Effects** — je 0–100 %) und wirken
 getrennt: den Kerb leiser stellen lässt das grobe Kies-Mahlen stehen.
 
-Die **Kraftrichtung** ist auf diesem Lenkrad nachgemessen
-(`python tools/ffb_hw_probe.py --seconds 1.5 --force 0.5`: eine positive
-DirectInput-Kraft fährt die G29-Achse zum Minimum, „rechts“ ist laut
-Kalibrierung das Maximum) und steht deshalb im Menü auf **umgekehrt**. Zieht
-das Lenkrad trotzdem in die falsche Richtung — etwa nach einem Treiberwechsel
-oder an einem anderen Rad —, dann unter `Esc` → *Einstellungen* → *Force
-Feedback* auf **Kraftrichtung: normal** stellen oder
-`tools\ffb_direction_check.ps1` laufen lassen.
+Die **Kraftrichtung misst das Spiel beim Fahren selbst**. Gemessen ist am
+echten Rad, dass eine positive DirectInput-Kraft die G29-Achse zu ihrem Minimum
+fährt (`python tools/ffb_hw_probe.py --seconds 1.5 --force 0.35`, viermal
+reproduziert). Ob „Achse runter“ links oder rechts ist, hängt daran, wie die
+DirectInput-Achse zur SDL-Achse steht, aus der das Spiel „rechts“ gelernt hat —
+und das vergleicht das Spiel im Betrieb: der Helfer schickt seine
+Achsenstellung mit jedem Lebenszeichen mit, das Spiel liest dieselbe Achse über
+SDL. Sobald du das erste Mal richtig lenkst, steht die Richtung fest; gesetzt
+wird sie in einem ruhigen Moment, nicht im Bogen, und das HUD meldet es kurz
+(„Kraftrichtung gemessen: …“). Ohne Achsdaten (Rad stromlos) wird **nichts**
+entschieden. Willst du es selbst bestimmen: `Esc` → *Einstellungen* → *Force
+Feedback* → **Kraftrichtung** — deine Wahl gewinnt und die Automatik hält sich
+dauerhaft heraus.
 
 **Wichtig für Änderungen am Spiel:** der Doppelklick-Start läuft auf dem
 **Export**, nicht auf den Godot-Quellen. Nach Änderungen also
@@ -153,8 +158,11 @@ nicht davon abhängen, was zuletzt im Menü eingestellt war.
 `ship_check.ps1` prüft die **ausgelieferte** `Apex Circuit.exe` — der
 Desktop-Start läuft auf dem Export, nicht auf den Godot-Quellen. Es startet
 den Build headless gegen den echten Helfer und misst, ob er den neuen Stand
-enthält (Kennzeichen: er kennt `APEX_FFB_SETTINGS` und schaltet bei „FFB AUS“
-alle Kanäle auf 0).
+enthält. Fünf Prüfungen: er kennt `APEX_FFB_SETTINGS` und schaltet bei „FFB
+AUS“ alle Kanäle auf 0, er legt im Stand Reibung an — und er läuft zwei
+Testfälle, die es in alten Ständen nicht gab (Vollgas trotz kaputter
+Pedal-Kalibrierung, Selbstmessung der Kraftrichtung). Damit ist „der Build ist
+aktuell“ gemessen und nicht aus einem Zeitstempel geschlossen.
 
 Windows erkennt das G29 auch dann, wenn es **keine** Daten liefert — typisch, wenn das Netzteil nicht angeschlossen ist. Prüfen:
 

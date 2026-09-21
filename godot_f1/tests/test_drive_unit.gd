@@ -7,6 +7,20 @@ var world: Node3D
 var car
 var frames: int = 0
 var start_gear: int = 1
+var failed: int = 0
+
+
+## Jede Pruefung meldet eine PASS-Zeile. Vorher stand hier nur
+## `push_error("FAIL ...")`: der Lauf war in Ordnung, aber `run_all_tests.ps1`
+## konnte ihn nicht von einem Test ohne jede Aussage unterscheiden und hat ihn
+## zu Recht als "kein Beweis" markiert (gemessen am 21.09.2026).
+func _check(ok: bool, label: String, detail: String = "") -> void:
+	if ok:
+		print("PASS ", label, " ", detail)
+	else:
+		push_error("FAIL %s %s" % [label, detail])
+		failed += 1
+		print("FAIL ", label, " ", detail)
 
 
 func _initialize() -> void:
@@ -69,19 +83,11 @@ func _finish() -> void:
 	var contact: bool = false
 	if fl:
 		contact = fl.is_in_contact()
-	var failed := 0
-	if fwd <= 0.0:
-		push_error("FAIL fwd=%s expected > 0" % fwd)
-		failed += 1
-	if car.speed_kmh < 8.0:
-		push_error("FAIL speed=%s expected rise" % car.speed_kmh)
-		failed += 1
-	if car.gear <= start_gear:
-		push_error("FAIL gear=%s did not increase from %s" % [car.gear, start_gear])
-		failed += 1
-	if not contact:
-		push_error("FAIL wheels not in contact")
-		failed += 1
+	_check(fwd > 0.0, "das_auto_faehrt_vorwaerts", "fwd=%.2f" % fwd)
+	_check(car.speed_kmh >= 8.0, "das_tempo_steigt", "%.1f km/h" % car.speed_kmh)
+	_check(car.gear > start_gear, "das_getriebe_schaltet_hoch",
+		"Gang %d -> %d" % [start_gear, car.gear])
+	_check(contact, "die_raeder_haben_bodenkontakt", "contact=%s" % contact)
 	if failed > 0:
 		print("DRIVE_UNIT FAIL count=", failed)
 		quit(1)
