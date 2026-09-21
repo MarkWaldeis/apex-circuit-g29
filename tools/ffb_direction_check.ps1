@@ -48,6 +48,27 @@ function Stop-StrayProbe {
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
+## Parallel laufende Pruefungen duerfen sich nicht gegenseitig erschlagen
+## (gemessen am 21.09.2026: zwei Laeufe nahmen sich Helfer und Spiel weg, beide
+## Ergebnisse waren wertlos). Ein Helfer, der vor weniger als 5 Minuten
+## gestartet wurde, gehoert zu einem laufenden Lauf - dann bricht dieser Aufruf
+## ab, statt zu toeten. Alte Waisen werden weiterhin aufgeraeumt.
+$foreignHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
+$youngHelpers = @($foreignHelpers | Where-Object {
+        $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+if ($youngHelpers.Count -gt 0) {
+    $ids = ($youngHelpers | ForEach-Object { "$($_.ProcessId)" }) -join ', '
+    Write-Host (("[direction] ABBRUCH: es laeuft schon ein Helfer (PID {0}, gestartet " +
+        "vor weniger als 5 Minuten) - parallele Laeufe messen sich gegenseitig " +
+        "kaputt. Bitte warten oder spaeter starten.") -f $ids)
+    exit 125
+}
+foreach ($h in $foreignHelpers) {
+    Write-Host ("[direction] Raeume alten Helfer auf (Waise): PID {0}" -f $h.ProcessId)
+    Stop-Process -Id $h.ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 $probeLog = "$project\tools\ffb_direction_probe.log"
 $probeErr = "$project\tools\ffb_direction_probe.err"
 $bridge = $null

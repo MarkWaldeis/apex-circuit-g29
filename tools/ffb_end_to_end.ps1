@@ -50,15 +50,44 @@ $settingsQuoted = "user://ffb_e2e_settings.json"
 ## Lenkrad, das Spiel sperrte die ausgelieferte .exe (der naechste Export
 ## scheiterte mit einem nackten IOException). Eine Messung neben einem alten
 ## Prozess ist keine Messung.
-$staleGames = @(Get-Process -Name 'Apex Circuit', 'ApexCircuit' -ErrorAction SilentlyContinue)
+## Aber nicht blind: laeuft gerade ein anderer Prueflauf, gehoeren Spiel und
+## Helfer zu IHM. Werden sie hier erschlagen, messen beide Laeufe nichts
+## (gemessen am 21.09.2026: zwei parallele Laeufe nahmen sich gegenseitig
+## Helfer und Spiel weg). Prozesse, die vor weniger als 5 Minuten gestartet
+## wurden, gelten als "laufender Lauf" - dann bricht dieses Skript mit Exit 125
+## ab, statt zu toeten. Alte Waisen werden wie bisher aufgeraeumt.
+$staleGames = @(Get-CimInstance Win32_Process -Filter "Name like '%Apex%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*Apex Circuit.exe*' -or $_.CommandLine -like '*ApexCircuit.exe*' })
+if ($staleGames.Count -gt 0) {
+    $young = @($staleGames | Where-Object {
+            $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+    if ($young.Count -gt 0) {
+        $ids = ($young | ForEach-Object { "$($_.ProcessId)" }) -join ', '
+        Write-Host (("[e2e] ABBRUCH: es laeuft schon ein Spiel (PID {0}, gestartet " +
+            "vor weniger als 5 Minuten) - parallele Laeufe messen sich gegenseitig " +
+            "kaputt. Bitte warten oder spaeter starten.") -f $ids)
+        exit 125
+    }
+}
 foreach ($g in $staleGames) {
-    Write-Host ("[e2e] Beende altes Spiel: PID {0}" -f $g.Id)
-    Stop-Process -Id $g.Id -Force -ErrorAction SilentlyContinue
+    Write-Host ("[e2e] Beende altes Spiel (Waise): PID {0}" -f $g.ProcessId)
+    Stop-Process -Id $g.ProcessId -Force -ErrorAction SilentlyContinue
 }
 $staleHelpers = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*g29_ffb.py*' })
+if ($staleHelpers.Count -gt 0) {
+    $youngHelpers = @($staleHelpers | Where-Object {
+            $_.CreationDate -and ((Get-Date) - $_.CreationDate).TotalSeconds -lt 300 })
+    if ($youngHelpers.Count -gt 0) {
+        $ids = ($youngHelpers | ForEach-Object { "$($_.ProcessId)" }) -join ', '
+        Write-Host (("[e2e] ABBRUCH: es laeuft schon ein Helfer (PID {0}, gestartet " +
+            "vor weniger als 5 Minuten) - parallele Laeufe messen sich gegenseitig " +
+            "kaputt. Bitte warten oder spaeter starten.") -f $ids)
+        exit 125
+    }
+}
 foreach ($h in $staleHelpers) {
-    Write-Host ("[e2e] Beende alten Helfer: PID {0}" -f $h.ProcessId)
+    Write-Host ("[e2e] Beende alten Helfer (Waise): PID {0}" -f $h.ProcessId)
     Stop-Process -Id $h.ProcessId -Force -ErrorAction SilentlyContinue
 }
 if ($staleGames.Count -gt 0 -or $staleHelpers.Count -gt 0) { Start-Sleep -Milliseconds 800 }
