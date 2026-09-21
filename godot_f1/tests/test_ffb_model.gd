@@ -300,8 +300,9 @@ func _run() -> void:
 	var damaged_fast: Dictionary = _steady(_corner({"damage": 0.30, "speed": 62.0}))
 	# Dauerprobe (probe_wave6_feel.gd): ein einzelner Streifer darf das Lenkrad
 	# nicht fuer den Rest der Sitzung laut machen. Gemessen gilt jetzt:
-	# Schaden 0,22 -> 0,19 | 0,44 -> 0,38 | 0,66 -> 0,64 | 1,0 -> 0,75, und
-	# der Kerb (0,85) bleibt immer lauter.
+	# Schaden 0,22 -> 0,19 | 0,44 -> 0,38 | 0,66 -> 0,64 | 1,0 -> 0,75.
+	# Die alte Behauptung "der Kerb bleibt immer lauter" war falsch (gemessen:
+	# Kerb 0,588 bei 108 km/h gegen ein Wrack mit 0,750, siehe Abschnitt 19).
 	var mild: float = float(_steady(_corner({"damage": 0.22}))["rumble"])
 	var medium: float = float(_steady(_corner({"damage": 0.44}))["rumble"])
 	var badly: float = float(_steady(_corner({"damage": 0.66}))["rumble"])
@@ -364,6 +365,61 @@ func _run() -> void:
 		"on_track_band_auf_null_schaltet_die_asphalt_textur_ab",
 		"Asphalt-Textur %.3f -> %.3f (%s)" % [band_road_on, float(road_off["rumble"]), str(road_off["source"])])
 	band_settings.ontrack_effects = 1.0
+
+	# --- 18. Ein Stoss ohne Lenkbefehl darf nicht verschwinden ------------
+	# `g29_input.gd` setzt die Lenkung per Totzone auf der Geraden auf genau
+	# 0.0. Der Stoss bekam damit das Vorzeichen `-signf(0.0)` = 0, und der
+	# Helfer machte daraus gemessen **0,000 Kraft**: Schaltstoss, Bodenwelle
+	# und ein gerader Einschlag waren am Lenkrad nicht zu spueren, waehrend HUD
+	# und Kamera sie zeigten. Der Helfer legt ein vorzeichenloses Ereignis
+	# seitdem als Klopfen an (30 Hz, `tools/g29_ffb.py`); diese Pruefung haelt
+	# die Eingangsseite fest - auf der Geraden darf das Vorzeichen **0** sein
+	# (nichts erfunden), in der Kurve traegt es den Lenkbefehl.
+	var straight_ctx: Dictionary = _corner({"steer": 0.0, "steer_angle": 0.0})
+	_steady(straight_ctx)
+	model.poke("crash", 1.0)
+	var straight_hit: Dictionary = model.update(1.0 / 90.0, straight_ctx)
+	_check(float(straight_hit["pulse"]) > 0.95
+		and absf(float(straight_hit["pulse_dir"])) <= 0.001,
+		"stoss_ohne_lenkbefehl_hat_kein_vorzeichen",
+		"steer 0.0 -> pulse %.2f, Richtung %+.2f, Quelle %s (der Helfer klopft)" % [
+			float(straight_hit["pulse"]), float(straight_hit["pulse_dir"]),
+			String(straight_hit["source"])])
+	_steady(_corner())
+	model.poke("shift", 0.45)
+	var corner_shift: Dictionary = model.update(1.0 / 90.0, _corner())
+	_check(float(corner_shift["pulse"]) > 0.3
+		and absf(float(corner_shift["pulse_dir"]) + 1.0) < 0.01,
+		"stoss_in_der_kurve_laeuft_gegen_den_lenkbefehl",
+		"Lenkbefehl +1.0 (rechts) -> pulse %.2f, Stoss %+.2f (nach links)" % [
+			float(corner_shift["pulse"]), float(corner_shift["pulse_dir"])])
+
+	# --- 19. Die Oberflaeche fuehrt, die Unwucht bleibt auf dem Asphalt ----
+	# Gemessen (probe_wave9_loudness.gd, 108 km/h, Schaden 1,0): ohne die
+	# Begrenzung im Modell stand auf Kies und auf dem Kerb `Quelle Unwucht,
+	# 0,750 @ 19 Hz` - das Off-Track-Band des offiziellen Spiels war damit
+	# fuer den Rest der Sitzung nicht mehr zu spueren (es gibt keine
+	# Werkstatt). Mit der Begrenzung: Kerb 0,588 @ 29 Hz, Kies 0,300 @ 13 Hz.
+	var wreck_kerb: Dictionary = _steady(_corner({
+		"speed": 30.0, "damage": 1.0, "surface": surf_kerb}))
+	var wreck_gravel: Dictionary = _steady(_corner({
+		"speed": 30.0, "damage": 1.0, "surface": surf_gravel}))
+	_check(String(wreck_kerb["source"]) == "Kerb" and float(wreck_kerb["rumble"]) < 0.70,
+		"der_kerb_bleibt_das_lauteste_auf_dem_kerb",
+		"Kerb mit Wrack %.3f @ %.0f Hz (%s), vorher 0,750 @ 19 Hz (Unwucht)" % [
+			float(wreck_kerb["rumble"]), float(wreck_kerb["rumble_hz"]),
+			String(wreck_kerb["source"])])
+	_check(String(wreck_gravel["source"]) == "Kies" and float(wreck_gravel["rumble"]) < 0.40,
+		"das_kies_mahlen_bleibt_auch_mit_wrack_hoerbar",
+		"Kies mit Wrack %.3f @ %.0f Hz (%s), vorher 0,750 @ 19 Hz (Unwucht)" % [
+			float(wreck_gravel["rumble"]), float(wreck_gravel["rumble_hz"]),
+			String(wreck_gravel["source"])])
+	var wreck_road: Dictionary = _steady(_corner({"speed": 30.0, "damage": 1.0}))
+	_check(String(wreck_road["source"]) == "Unwucht" and float(wreck_road["rumble"]) > 0.6,
+		"auf_asphalt_bleibt_die_unwucht_deutlich_zu_spueren",
+		"Asphalt mit Wrack %.3f @ %.0f Hz (%s)" % [
+			float(wreck_road["rumble"]), float(wreck_road["rumble_hz"]),
+			String(wreck_road["source"])])
 
 	if failed > 0:
 		print("FFB_MODEL FAIL count=%d von %d" % [failed, checks])

@@ -149,7 +149,16 @@ func setup(ffb_settings = null) -> void:
 
 
 ## Einmaliges Ereignis (Schalten, Einschlag, Kerbschlag). `direction` ist in
-## der Lenkradwelt (+ = rechts); 0 heisst "gegen den Lenkbefehl".
+## der Lenkradwelt (+ = rechts); 0 heisst "kein Vorzeichen" (kein Lenkbefehl,
+## gegen den der Stoss laufen koennte).
+##
+## Wichtig fuer den Lenkradkanal: **0 ist kein Null-Stoss.** Auf der Geraden
+## setzt `g29_input.gd` die Lenkung per Totzone auf genau 0.0, `-signf(0.0)`
+## ist also 0 - und `tools/g29_ffb.py` machte daraus gemessen **0,000 Kraft**
+## (Schaltstoss 0,45 und ein voller Einschlag kamen am Rad nicht an, waehrend
+## HUD und Kamera sie zeigten). Seit dem 21.09.2026 legt der Helfer einen
+## Stoss ohne Vorzeichen als **Klopfen** an (Vorzeichenwechsel mit 30 Hz):
+## gemessen 0,315 mit 39 Vorzeichenwechseln statt 0,000.
 func poke(kind: String, severity: float, direction: float = 0.0) -> void:
 	var s: float = clampf(_safe(severity, 0.0), 0.0, 1.0)
 	if s <= 0.0:
@@ -442,6 +451,9 @@ func _rumble_for(speed: float, v_ratio: float, surface: Dictionary,
 	var src: String = "-"
 	var kind: int = int(surface.get("surface", 0))
 	var surf_rumble: float = clampf(_num(surface, "rumble", 0.0), 0.0, 1.0)
+	## Was die **Oberflaeche selbst** liefert, bevor andere Quellen dazukommen.
+	## Die Unwucht (unten) darf diese Zahl nicht ueberbieten - siehe dort.
+	var surface_level: float = 0.0
 	if effects_on and surf_rumble > 0.01:
 		var speed_gain: float = 0.35 + 0.65 * clampf(speed / 45.0, 0.0, 1.2)
 		# Der Band-Regler skaliert nur sein eigenes Rütteln - Kerb leise machen
@@ -459,6 +471,7 @@ func _rumble_for(speed: float, v_ratio: float, surface: Dictionary,
 			level = amp * 0.75
 			hz = 7.0 + 5.0 * clampf(speed / 40.0, 0.0, 1.2)
 			src = "Gras"
+		surface_level = level
 	# Blockierende Vorderraeder: feines, hartes Rattern ueber der Grundkraft.
 	if effects_on and lock > 0.15:
 		var chat: float = 0.25 + 0.45 * lock
@@ -477,10 +490,25 @@ func _rumble_for(speed: float, v_ratio: float, surface: Dictionary,
 	# dumpf im Stand, mit dem Tempo schneller und staerker.
 	if effects_on and flat > 0.01:
 		# Leichter Schaden bleibt leise (0,19 nach einem Streifer), schwerer
-		# Schaden wird deutlich staerker (0,75) - und der Kerb (0,85) bleibt
-		# immer noch das lauteste Geraeusch am Lenkrad.
+		# Schaden wird deutlich staerker (bis 0,75 im Wrack).
+		#
+		# **Die Oberflaeche bleibt die Fuehrung.** Ohne die Begrenzung in der
+		# naechsten Zeile verdraengte ein Wrack (Schaden 1,0 = 0,75) das
+		# Kies-Mahlen (0,30 @ 13 Hz) und den Kerb (0,588 @ 29 Hz) bei 108 km/h
+		# vollstaendig: gemessen stand dann `Quelle Unwucht, 0,750 @ 19 Hz` im
+		# Paket, und weil es im Spiel keine Werkstatt gibt, blieb das fuer den
+		# Rest der Sitzung so - das Off-Track-Band des offiziellen Spiels war
+		# damit nicht mehr zu spueren (tests/probe_wave9_loudness.gd).
+		#
+		# Physikalisch ist die Begrenzung richtig: die Unwucht ist eine
+		# Modulation des Radkontakts. Solange der Reifen ueber Kerbsteine oder
+		# Kies laeuft, gibt die Oberflaeche den Takt vor - die Unwucht bleibt
+		# dort spuerbar, wo sie es auch am echten Auto ist: auf Asphalt, wo
+		# nichts anderes ruehrt (dort gilt die Begrenzung nicht).
 		var wobble: float = (0.15 + 0.60 * pow(flat, FLAT_CURVE)) \
 			* clampf(speed / 25.0, 0.0, 1.0)
+		if surface_level > 0.01:
+			wobble = minf(wobble, surface_level)
 		if wobble > level:
 			level = wobble
 			hz = 11.0 + 16.0 * clampf(speed / 60.0, 0.0, 1.2)
