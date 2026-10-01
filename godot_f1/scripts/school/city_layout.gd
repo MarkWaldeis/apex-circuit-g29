@@ -30,7 +30,7 @@ static func roads() -> Array:
 		{"name": "Ring Ost", "from": Vector2(240, -60), "to": Vector2(216, -20), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring Ost", "from": Vector2(240, -60), "to": Vector2(240, -240), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		# Zufahrt zum Übungsplatz von der Hauptstraße.
-		{"name": "Übungsplatz-Zufahrt", "from": Vector2(0, -60), "to": Vector2(0, 40), "limit": 30, "width": 6.0, "oneway": 0, "line": false},
+		{"name": "Übungsplatz-Zufahrt", "from": Vector2(0, -60), "to": Vector2(0, 42), "limit": 30, "width": 6.0, "oneway": 0, "line": false},
 		# Kreisverkehr-Arme (Einfahrt in den Kreis bei (200,-60)).
 		{"name": "Kreisverkehr Westarm", "from": Vector2(172, -60), "to": Vector2(184, -60), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
 		{"name": "Kreisverkehr Ostarm", "from": Vector2(216, -60), "to": Vector2(240, -60), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
@@ -294,7 +294,7 @@ static func signs() -> Array:
 		{"kind": "board", "arg": "Berganfahren", "pos": Vector3(-78, 0, 82), "rot_y": 135.0},
 		# Engstelle auf der Kreisverkehr-Nordstraße: wer die parkenden
 		# Autos auf seiner Seite hat (Nordfahrtrichtung), wartet auf den
-		# Gegenverkehr (208); die freie Seite darf zuerst (308).
+		# Gegenverkehr (VZ 308); die freie Seite darf zuerst (VZ 208).
 		{"kind": "engst_wait", "pos": Vector3(203.6, 0, -100.0), "rot_y": 0.0},
 		{"kind": "engst_prio", "pos": Vector3(196.4, 0, -119.0), "rot_y": 180.0},
 	]

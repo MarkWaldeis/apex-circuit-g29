@@ -845,7 +845,7 @@ func _trees(world: Node3D) -> void:
 	# Allee entlang des Rings + ein paar Bäume am Platz.
 	var spots := []
 	for i in range(10):
-		spots.append(Vector2(-235 + i * 0.0, -215 + i * 24))
+		spots.append(Vector2(-235.0, -215 + i * 24))
 	for i in range(6):
 		spots.append(Vector2(-40 + i * 30, 128))
 	for i in range(5):
@@ -853,6 +853,17 @@ func _trees(world: Node3D) -> void:
 	var trunk_m := _mat(Color(0.35, 0.24, 0.14), 1.0)
 	var leaf_m := _mat(Color(0.16, 0.40, 0.16), 1.0)
 	for p in spots:
+		# Stamm bekommt eine Kollision — durch Baumstämme fahren
+		# darf nicht folgenlos bleiben.
+		var body := StaticBody3D.new()
+		body.position = Vector3(p.x, 0.0, p.y)
+		var col := CollisionShape3D.new()
+		var cyl := CylinderShape3D.new()
+		cyl.radius = 0.3
+		cyl.height = 2.6
+		col.shape = cyl
+		col.position.y = 1.3
+		body.add_child(col)
 		var trunk := MeshInstance3D.new()
 		var tb := CylinderMesh.new()
 		tb.top_radius = 0.14
@@ -861,6 +872,7 @@ func _trees(world: Node3D) -> void:
 		trunk.mesh = tb
 		trunk.material_override = trunk_m
 		trunk.position = Vector3(p.x, 1.3, p.y)
+		world.add_child(body)
 		world.add_child(trunk)
 		var crown := MeshInstance3D.new()
 		var sph := SphereMesh.new()

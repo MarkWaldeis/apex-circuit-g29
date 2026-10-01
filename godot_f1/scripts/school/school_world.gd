@@ -125,6 +125,7 @@ func _ready() -> void:
 		Vector2(-100.0, -150.0), 3.6)
 	# Beide gehen erst los, wenn kein Fahrzeug an der Querung ankommt.
 	var peds := [ped, ped2]
+	_peds = peds
 	for p in peds:
 		p.watchers = [player] + traffic_cars
 
@@ -257,6 +258,7 @@ func _physics_process(delta: float) -> void:
 ## entfernen — so laesst sich die Stadt zwischen "ruhig zum Ueben" und
 ## "voll wie Berufsverkehr" umstellen (Taste G).
 var _rbl_t: float = 20.0       ## Cooldown fuer den RvL-Trainer
+var _peds: Array = []          ## Fussgaenger+Reh — KI-Spawn braucht sie zum Bremsen
 
 
 ## Zufalls-RvL-Training: naehert sich der Schueler der RvL-Kreuzung
@@ -295,12 +297,24 @@ func _rbl_trainer_tick(delta: float) -> void:
 	if best.is_empty():
 		return
 	var enter: Vector2 = best["enter"]
-	var start := Vector2(best["pos"]) - enter * 19.0
-	var goal := Vector2(best["pos"]) + enter * 28.0
+	# Auf der rechten Fahrspur des Arms — sonst faehrt der Trainer
+	# mittig durch die Kreuzung.
+	var off := Vector2(-enter.y, enter.x) * 1.8
+	var start := Vector2(best["pos"]) - enter * 19.0 + off
+	var goal := Vector2(best["pos"]) + enter * 28.0 + off
+	# Freiheit fuer den Spawn: steht da schon ein KI-Auto, spaeter.
+	for t in instructor.traffic:
+		if is_instance_valid(t):
+			var tp := Vector2(t.global_position.x, t.global_position.z)
+			if tp.distance_to(start) < 12.0 or tp.distance_to(goal) < 12.0:
+				_rbl_t = 8.0
+				return
 	var tc := TrafficCar.new()
 	tc.name = "RvlTrainer"
 	add_child(tc)
 	tc.setup(lights, player, 1, -1, [start, goal])
+	tc.pedestrians = _peds
+	tc.night = _night
 	instructor.traffic.append(tc)
 
 

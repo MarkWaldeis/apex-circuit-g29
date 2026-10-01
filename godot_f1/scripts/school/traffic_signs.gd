@@ -261,7 +261,7 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 				dot.position = Vector3(-0.10 + i * 0.10, -0.055, 0.04)
 				face.add_child(dot)
 		"engst_wait":
-			## Zeichen 208: Dem Gegenverkehr Vorrang gewaehren — eigenes
+			## Zeichen 308: Dem Gegenverkehr Vorrang gewaehren — eigenes
 			## (dickes, schwarzes) Hoch muss auf den duennen roten
 			## Gegenpfeil warten.
 			var rim := _bar(Vector3(0.60, 0.60, 0.015), black)
@@ -276,7 +276,7 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			dn.position = Vector3(0.12, 0.0, 0.03)
 			face.add_child(dn)
 		"engst_prio":
-			## Zeichen 308: Vorrang vor dem Gegenverkehr — dicker weisser
+			## Zeichen 208: Vorrang vor dem Gegenverkehr — dicker weisser
 			## Hochpfeil darf zuerst durch die Engstelle.
 			var back := _bar(Vector3(0.56, 0.56, 0.02), blue)
 			face.add_child(back)

@@ -235,7 +235,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_einbahn(pos, p2)
 	_check_ueberhol(p2, spd)
 	_check_lane_change(pos, spd, delta)
-	_check_pullout(p2, spd)
+	_check_pullout(p2, spd, delta)
 	_check_door_car(p2, spd, delta)
 	_check_left_turn(p2, spd, delta)
 	_check_priority(p2, spd, delta)
@@ -288,9 +288,10 @@ func _check_alaram_exercise(p2: Vector2, spd: float, delta: float) -> void:
 		return
 	match _alarm_state:
 		0:
-			# Voraussetzung: ~30 km/h auf dem Platz, seltener Zufallsstart.
-			if _alarm_cool <= 0.0 and spd > 8.5 and spd < 15.0 \
-					and randf() < delta * 0.15:
+			# Voraussetzung: ~30-54 km/h auf dem Platz — dann ist die Uebung
+			# scharf (waehrend sie scharf ist, pausiert die Platz-Temporegel,
+			# sonst wuerde das zuegige Anfahren selbst abgemahnt).
+			if _alarm_cool <= 0.0 and spd > 8.5 and spd < 15.0:
 				_alarm_state = 1
 				_alarm_wait = randf_range(3.0, 7.0)
 				_say("Gefahrenbremsung ueben: fahr weiter geradeaus — wenn ich rufe, VOLLBREMSUNG!", 0)
@@ -298,7 +299,14 @@ func _check_alaram_exercise(p2: Vector2, spd: float, delta: float) -> void:
 			if spd < 6.0:
 				# Schueler ist schon von selbst langsam geworden.
 				_alarm_state = 0
+				_alarm_cool = 20.0
 				_say("Zu langsam fuer die Uebung — wir versuchen es gleich nochmal.", 0)
+				return
+			if spd > 16.0:
+				# Deutlich zu schnell — Uebung sinnlos, Temporegel greift wieder.
+				_alarm_state = 0
+				_alarm_cool = 20.0
+				_say("Das ist schon zu flott fuer die Uebung — langsamer, dann geht es weiter.", 1)
 				return
 			_alarm_wait -= delta
 			if _alarm_wait <= 0.0:
@@ -943,9 +951,9 @@ func _check_ueberhol(p2: Vector2, spd: float) -> void:
 ## Anfahren nach dem Halt: kommt ein KI-Fahrzeug von hinten
 ## derselben Richtung, darf man nicht einfach auf die Fahrbahn
 ## — Schulterblick und Blinker sind Pflicht, sonst wird gemahnt.
-func _check_pullout(p2: Vector2, spd: float) -> void:
+func _check_pullout(p2: Vector2, spd: float, delta: float) -> void:
 	if spd < 0.5:
-		_still_t += 0.016
+		_still_t += delta
 		if _still_t > 2.5:
 			_pullout_armed = true
 		return
@@ -991,7 +999,7 @@ func _check_einbahn(pos: Vector3, p2: Vector2) -> void:
 
 
 ## Engstelle Kreis-Nordstrasse: die parkenden Autos stehen auf der
-## Ostseite — die Nordfahrt traegt VZ 208 und muss Gegenverkehr in der
+## Ostseite — die Nordfahrt traegt VZ 308 und muss Gegenverkehr in der
 ## Luecke erst durchlassen. Kommt ein KI-Auto suedwaerts entgegen,
 ## waehrend der Schueler nordwaerts auf die Luecke zufaellt: mahnen.
 func _check_engstelle_vorrang(p2: Vector2, delta: float) -> void:
@@ -1009,7 +1017,7 @@ func _check_engstelle_vorrang(p2: Vector2, delta: float) -> void:
 		var tdir := Vector2(tc.global_transform.basis.z.x,
 			tc.global_transform.basis.z.z)
 		if tdir.y > 0.5 and _engstelle_cd <= 0.0:
-			_warn("Engstelle: Gegenverkehr in der Lücke — hier warten (VZ 208).")
+			_warn("Engstelle: Gegenverkehr in der Lücke — hier warten (VZ 308).")
 			_engstelle_cd = 12.0
 			return
 
@@ -1136,7 +1144,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	var lr: Dictionary = lot["rect"]
 	var on_lot := p2.x >= float(lr["x0"]) and p2.x <= float(lr["x1"]) \
 		and p2.y >= float(lr["z0"]) and p2.y <= float(lr["z1"])
-	if on_lot and spd * 3.6 > 30.0:
+	if on_lot and spd * 3.6 > 30.0 and _alarm_state == 0:
 		_warn("Auf dem Übungsplatz gilt Schritttempo — deutlich langsamer fahren.")
 	# Gefahrbremsung: auf der Bremsbahn von >25 km/h auf 0 mit Vollbremsung.
 	var bl: Dictionary = lot["brake_lane"]
@@ -1482,6 +1490,8 @@ func _check_ball(p2: Vector2, spd: float) -> void:
 			_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
 		elif spd < 2.0:
 			_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
+		elif spd < 5.5:
+			_done("ball", "Ball gesehen und in Schritttempo vorbei — genau richtig.")
 
 
 ## Zwischenbilanz (Taste Z): Fahrlehrer zieht ein Zwischenfazit —

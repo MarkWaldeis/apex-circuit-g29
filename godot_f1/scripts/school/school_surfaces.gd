@@ -38,7 +38,7 @@ func setup() -> void:
 	_lot_rect = CityLayout.lot()["rect"]
 	_baustelle = CityLayout.baustelle()["zone"]
 	# Engstelle Kreis-Nordstrasse: parkende Autos auf der Ostspur,
-	# die Nordspur muss legal links ausweichen (VZ 208).
+	# die Nordspur muss legal links ausweichen (VZ 308).
 	_engstelle = Rect2(Vector2(192.0, -120.0), Vector2(16.0, 25.0))
 	var junc: Dictionary = CityLayout.junctions()
 	_island = junc.get("kreis", {})
