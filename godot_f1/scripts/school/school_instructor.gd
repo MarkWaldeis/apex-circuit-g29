@@ -1166,7 +1166,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			elif absf(p2.x - bp.x) > 1.2:
 				_say("Parklücke getroffen — aber zu weit vom Rand: näher an den Bordstein.", 1)
 			else:
-				_done("parallel", "Längsparken geschafft — gerade und nah am Bordstein, vorbildlich.")
+				_done("parallel", "Längsparken geschafft — gerade und nah am Bordstein, vorbildlich. Auf der Strasse dabei vorher rechts blinken und Ausschau nach rückwärtigem Verkehr halten.")
 			break
 	# Slalom: die Pylonen der Reihe nach auf der richtigen Seite passieren
 	# (von links oder rechts — die Richtung ist frei). Falsche Seite = Reset.

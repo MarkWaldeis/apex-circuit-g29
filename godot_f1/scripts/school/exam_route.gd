@@ -60,6 +60,33 @@ static func route_c() -> Array:
 	]
 
 
+## Route D: die grosse Ring-Runde — Yield-Einfahrt auf die 100er-Strasse,
+## Wildwechsel am West-Ring, Engstelle an der Kreis-Nordstrasse,
+## Kreisverkehr von Norden herein und wieder nach Hause. Wegpunkte
+## liegen auf der rechten Fahrspur.
+static func route_d() -> Array:
+	return [
+		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
+		{"pos": Vector2(-90, -61.8), "text": "Geradeaus über die Ampelkreuzung."},
+		{"pos": Vector2(-200, -61.8), "text": "Weiter Richtung Westen — gleich Ringstraße."},
+		{"pos": Vector2(-241.5, -56.0), "text": "Links auf die Ringstraße — Vorfahrt gewähren."},
+		{"pos": Vector2(-241.5, -45.0), "text": "Achtung Wildwechsel — vom Gas, bremsbereit."},
+		{"pos": Vector2(-241.5, 60.0), "text": "Der Ringstraße folgen — Tempo 100."},
+		{"pos": Vector2(-190.0, 141.5), "text": "Links auf die Ringstraße Süd."},
+		{"pos": Vector2(150.0, 141.5), "text": "Der Ringstraße folgen — gern den Lkw überholen."},
+		{"pos": Vector2(241.5, 90.0), "text": "Links auf die Ringstraße Ost."},
+		{"pos": Vector2(241.5, -140.0), "text": "Der Ringstraße nach Norden folgen."},
+		{"pos": Vector2(200.0, -241.5), "text": "Links auf die Ringstraße Nord."},
+		{"pos": Vector2(198.5, -225.0), "text": "Gleich links in die Kreisverkehr-Nordstraße — Vorfahrt gewähren."},
+		{"pos": Vector2(198.5, -150.0), "text": "Der Nordstraße folgen — Engstelle beachten."},
+		{"pos": Vector2(198.5, -92.0), "text": "Kreisverkehr — Vorfahrt dem Kreis."},
+		{"pos": Vector2(178.0, -61.8), "text": "Erste Ausfahrt nach Westen — beim Rausfahren blinken."},
+		{"pos": Vector2(80.0, -61.8), "text": "Der Hauptstraße zurück Richtung Zentrum."},
+		{"pos": Vector2(6.0, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
+	]
+
+
 static func default_route() -> Array:
 	return [
 		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
@@ -78,14 +105,16 @@ var _route_i := -1   ## Routen A/B wechseln sich bei jedem Start ab
 
 
 func begin() -> void:
-	_route_i = (_route_i + 1) % 3
+	_route_i = (_route_i + 1) % 4
 	match _route_i:
 		0:
 			wps = default_route()
 		1:
 			wps = route_b()
-		_:
+		2:
 			wps = route_c()
+		_:
+			wps = route_d()
 	idx = 0
 	active = true
 	_said = true   ## erste Anweisung wird beim Start gesprochen
