@@ -74,6 +74,7 @@ var _ind_used_turn: bool = false
 var _rev_acc: float = 0.0
 var _hill_ref := 0.0           ## tiefster Punkt seit Beginn der Bergfahrt
 var _hill_armed: bool = false
+var _hill_stop_t: float = 0.0  ## Standzeit am Hang ohne Handbremse
 var _grinds_seen: int = 0
 var _stalls_seen: int = 0
 var _impact_seen: float = 0.0
@@ -1266,6 +1267,16 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	var hill: Dictionary = lot["hill"]
 	var hp: Vector2 = hill["pos"]
 	var hill_rect := Rect2(hp.x - float(hill["w"]) * 0.5 - 1.0, hp.y - float(hill["run"]) * 0.5 - 7.0, float(hill["w"]) + 2.0, float(hill["run"]) + float(hill.get("down", 8.0)) + 22.0)
+	# Wer am Hang haelt, sichert mit der Handbremse — nur Bremse oder
+	# Kupplung allein laesst das Auto zurueckrollen.
+	if _in_rect(p2, hill_rect) and spd < 0.2 \
+			and not bool(car.get("handbrake_on")):
+		_hill_stop_t += delta
+		if _hill_stop_t > 2.5:
+			_warn("Am Berg die Handbremse anziehen — Bremse oder Kupplung allein reicht nicht.")
+			_hill_stop_t = -6.0
+	else:
+		_hill_stop_t = 0.0
 	if _in_rect(p2, hill_rect):
 		if not _hill_armed and spd < 0.5 \
 				and p2.y > hp.y - float(hill["run"]) * 0.5 - 3.0 \
