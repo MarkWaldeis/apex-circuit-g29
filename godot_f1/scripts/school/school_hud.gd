@@ -33,8 +33,8 @@ class SchoolMap extends Control:
 			var cp: Vector2 = to_px.call(Vector2(car.global_position.x,
 				car.global_position.z))
 			draw_circle(cp, 3.0, Color(1.0, 0.85, 0.2))
-			var h: Vector2 = Vector2(-car.global_transform.basis.z.x,
-				-car.global_transform.basis.z.z).normalized()
+			var h: Vector2 = Vector2(car.global_transform.basis.z.x,
+				car.global_transform.basis.z.z).normalized()
 			draw_line(cp, cp + h * 6.5, Color(1.0, 0.85, 0.2), 1.6)
 ## HUD der Fahrschule: Tempo, Gang, Drehzahlband, Kupplungsschleifpunkt,
 ## Blinker, Fahrlehrer-Meldungen und die Übungsliste.

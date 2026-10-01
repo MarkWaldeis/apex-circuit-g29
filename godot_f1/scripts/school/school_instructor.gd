@@ -581,8 +581,8 @@ func _check_left_turn(p2: Vector2, spd: float, delta: float) -> void:
 		var dj := p2.distance_to(c)
 		if dj > 16.0 or dj < 1.5:
 			continue
-		var fwd := Vector2(-car.global_transform.basis.z.x,
-			-car.global_transform.basis.z.z)
+		var fwd := Vector2(car.global_transform.basis.z.x,
+			car.global_transform.basis.z.z)
 		for tc in traffic:
 			if not is_instance_valid(tc):
 				continue
@@ -757,10 +757,14 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 		var enter: Vector2 = arm["enter"]
 		var stop: Vector2 = arm["pos"]
 		# Vorzeichenabstand zur Haltelinie entlang der Fahrtrichtung:
-		# negativ = vor der Linie, positiv = drüber.
+		# negativ = vor der Linie, positiv = drüber. Die Linie wirkt nur
+		# im Einfahrtskorridor — jenseits von ~5 m quer zur Einfahrt ist
+		# es eine andere Strasse (sonst feuern Phantom-Linien quer durch
+		# die Karte: Parallelpassagen zaehlten als Stoppschild-Verstoss).
+		var lat: float = absf((p2 - stop).dot(Vector2(-enter.y, enter.x)))
 		var d: float = (p2 - stop).dot(enter)
 		var prev: float = float(track["d"])
-		if prev <= 0.0 and d > 0.0 and spd > 1.0:
+		if lat < 5.0 and prev <= 0.0 and d > 0.0 and spd > 1.0:
 			_on_stop_line_crossed(j, arm, key, spd)
 			# Blinker-Merker: beim Abbiegen an einer Kreuzung Blinker erwarten.
 			# Ausnahme Kreisverkehr: Einfahren ist BLINKFREI, erst das
@@ -775,7 +779,7 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 		# Wer vor der Linie wirklich steht, merkt es sich (Stopschild-Pflicht):
 		# Schleichen zählt nicht — erst nach ~1 s echtem Stillstand gilt es als Halt.
 		var now_s := Time.get_ticks_msec() / 1000.0
-		if d < 0.2 and d > -4.5 and spd < 0.12:
+		if lat < 5.0 and d < 0.2 and d > -4.5 and spd < 0.12:
 			if not _stop_still.has(key):
 				_stop_still[key] = now_s
 			if now_s - float(_stop_still[key]) > 0.9:

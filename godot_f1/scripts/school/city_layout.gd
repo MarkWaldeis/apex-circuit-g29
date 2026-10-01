@@ -422,7 +422,7 @@ static func baustelle() -> Dictionary:
 ## Pannen-Übung: ruhiges Teilstueck am westlichen Fahrbahnrand der
 ## Schulstraße — hier simuliert der Schueler eine Panne (Warnblinker an).
 static func pannen_zone() -> Rect2:
-	return Rect2(Vector2(-80.0, -123.0), Vector2(60.0, 5.5))
+	return Rect2(Vector2(-80.0, -183.8), Vector2(60.0, 6.0))
 
 
 ## Situationsgefahr Ball: auf der Kreisverkehr-Nordstraße rollt ein
@@ -440,7 +440,7 @@ static func street_ball() -> Dictionary:
 ## Schulbus an der Schulstraße: haelt am Bordstein und blinkt —
 ## §20 StVO: an einem haltenden Bus nur Schrittgeschwindigkeit.
 static func school_bus() -> Dictionary:
-	return {"pos": Vector2(40.0, -177.6), "rot": 0.0}
+	return {"pos": Vector2(40.0, -177.6), "rot": 90.0}
 
 
 ## Radfahrer-Rundkurs: rechte Fahrbahnseite der Hauptstraße (ostwärts
@@ -481,7 +481,7 @@ static func spawn() -> Transform3D:
 static func reset_spots() -> Array:
 	return [
 		{"pos": Vector2(0, 60), "rot": 180.0},
-		{"pos": Vector2(-40, -61.8), "rot": 90.0},
+		{"pos": Vector2(-55.0, -61.8), "rot": 270.0},
 		{"pos": Vector2(172, -61.8), "rot": 270.0},
 	]
 
