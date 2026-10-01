@@ -215,6 +215,7 @@ func _physics_process(delta: float) -> void:
 		var light = item["light"]
 		if is_instance_valid(light):
 			light.set_phase(lights.phase_of(String(item["arm"])))
+	_rbl_trainer_tick(delta)
 	if _rain and player:
 		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
@@ -231,6 +232,54 @@ func _physics_process(delta: float) -> void:
 ## Verkehrsdichte umschalten: zwei zusaetzliche KI-Autos spawnen oder
 ## entfernen — so laesst sich die Stadt zwischen "ruhig zum Ueben" und
 ## "voll wie Berufsverkehr" umstellen (Taste G).
+var _rbl_t: float = 20.0       ## Cooldown fuer den RvL-Trainer
+
+
+## Zufalls-RvL-Training: naehert sich der Schueler der RvL-Kreuzung
+## (-100,-180), schickt die Welt gelegentlich ein KI-Auto von RECHTS
+## des Schuelers quer — es hat Vorfahrt, der Schueler muss warten.
+## Nur ausserhalb der Pruefungsfahrt, damit die Route nicht stoert.
+func _rbl_trainer_tick(delta: float) -> void:
+	_rbl_t = maxf(_rbl_t - delta, 0.0)
+	if _rbl_t > 0.0 or player == null or instructor == null \
+			or instructor.exam.active:
+		return
+	var jp := Vector2(-100.0, -180.0)
+	var pp := Vector2(player.global_position.x, player.global_position.z)
+	var dj := pp.distance_to(jp)
+	if dj < 13.0 or dj > 42.0:
+		return
+	var spd: float = player.linear_velocity.length()
+	if spd < 1.5:
+		return   # steht schon in der Kreuzung — nichts trainierbar
+	_rbl_t = 50.0
+	# Der naechste Arm rechts der Fahrtrichtung ist der "rechts von
+	# dir"-Verkehr — der Trainer kommt genau von dort.
+	var s_fwd := Vector2(player.global_transform.basis.z.x,
+		player.global_transform.basis.z.z).normalized()
+	if s_fwd == Vector2.ZERO:
+		return
+	var right := Vector2(-s_fwd.y, s_fwd.x)
+	var want := jp + right * 6.5
+	var best: Dictionary = {}
+	var bd := 1e9
+	for arm in CityLayout.junctions()["rbl_west"]["arms"]:
+		var d: float = Vector2(arm["pos"]).distance_to(want)
+		if d < bd:
+			bd = d
+			best = arm
+	if best.is_empty():
+		return
+	var enter: Vector2 = best["enter"]
+	var start := Vector2(best["pos"]) - enter * 19.0
+	var goal := Vector2(best["pos"]) + enter * 28.0
+	var tc := TrafficCar.new()
+	tc.name = "RvlTrainer"
+	add_child(tc)
+	tc.setup(lights, player, 1, -1, [start, goal])
+	instructor.traffic.append(tc)
+
+
 ## Regen-Partikelstrahl ueber dem Spieler (Naesse-Taste M).
 func _make_rain() -> void:
 	_rain = GPUParticles3D.new()

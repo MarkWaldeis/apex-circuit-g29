@@ -125,6 +125,7 @@ var _corners: Array = CORNERS_A
 var truck := false           ## Lkw-Mesh + langsames Reisetempo
 var cruise := CRUISE
 var _blink: Array = CORNERS_A
+var _oneshot := false         ## freier Kurs: am Ende verschwindet das Auto
 var _horn_player: AudioStreamPlayer3D
 var _horn_gen                ## AudioStreamGeneratorPlayback
 var _horn_left: float = 0.0  ## restliche Horn-Samples
@@ -132,10 +133,17 @@ var _horn_phase: float = 0.0
 var _horn_cd: float = 0.0
 
 
-func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
+func setup(p_lights, p_player, start_i: int = 0, route: int = 0,
+		path: Array = []) -> void:
 	lights = p_lights
 	player = p_player
-	if route == 1:
+	if route < 0:
+		# Freier Kurs (z. B. RvL-Training): einmal abfahren, dann weg.
+		_path = path
+		_corners = []
+		_blink = []
+		_oneshot = true
+	elif route == 1:
 		_path = ROUTE_B
 		_corners = CORNERS_B
 		_blink = BLINK_B
@@ -237,6 +245,9 @@ func _physics_process(delta: float) -> void:
 	var to := target - pos
 	var dist := to.length()
 	if dist < 1.4:
+		if _oneshot and _i == _path.size() - 1:
+			queue_free()
+			return
 		_i = (_i + 1) % _path.size()
 		return
 	var dir := to.normalized()
