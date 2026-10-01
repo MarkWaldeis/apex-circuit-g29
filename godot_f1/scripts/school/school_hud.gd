@@ -1,4 +1,41 @@
 extends CanvasLayer
+
+const CityLayout = preload("res://scripts/school/city_layout.gd")
+
+
+## Kleine Uebersichtskarte unten rechts: Strassennetz, Uebungsplatz,
+## KI-Verkehr und das eigene Auto — Orientierungsuebung wie Navi.
+class SchoolMap extends Control:
+	var car
+	var traffic: Array = []
+
+	func _process(_d: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var b := Rect2(Vector2(-260, -260), Vector2(520, 420))
+		var s := Vector2(size.x / b.size.x, size.y / b.size.y)
+		var to_px := func(p: Vector2) -> Vector2:
+			return (p - b.position) * s
+		# Uebungsplatzflaeche zuerst, damit die Zufahrt drueber liegt.
+		var lr: Dictionary = CityLayout.lot()["rect"]
+		var la: Vector2 = to_px.call(Vector2(float(lr["x0"]), float(lr["z0"])))
+		var lb: Vector2 = to_px.call(Vector2(float(lr["x1"]), float(lr["z1"])))
+		draw_rect(Rect2(la, lb - la), Color(0.30, 0.32, 0.38))
+		for road in CityLayout.roads():
+			draw_line(to_px.call(road["from"]), to_px.call(road["to"]),
+				Color(0.62, 0.62, 0.66), 1.8)
+		for tc in traffic:
+			if is_instance_valid(tc):
+				draw_circle(to_px.call(Vector2(tc.global_position.x,
+					tc.global_position.z)), 2.4, Color(0.45, 0.75, 1.0))
+		if car:
+			var cp: Vector2 = to_px.call(Vector2(car.global_position.x,
+				car.global_position.z))
+			draw_circle(cp, 3.0, Color(1.0, 0.85, 0.2))
+			var h: Vector2 = Vector2(-car.global_transform.basis.z.x,
+				-car.global_transform.basis.z.z).normalized()
+			draw_line(cp, cp + h * 6.5, Color(1.0, 0.85, 0.2), 1.6)
 ## HUD der Fahrschule: Tempo, Gang, Drehzahlband, Kupplungsschleifpunkt,
 ## Blinker, Fahrlehrer-Meldungen und die Übungsliste.
 ## `setup(car, g29, instructor)` einmal aufrufen; das HUD liest dann pro Frame.
@@ -27,6 +64,7 @@ var _mirror_l: Camera3D
 var _mirror_r: Camera3D
 var _dist_label: Label
 var _backup_panel: PanelContainer
+var _map: SchoolMap
 var _backup_cam: Camera3D
 var _help: PanelContainer
 var _mini_cam: Camera3D
@@ -255,6 +293,16 @@ func _build() -> void:
 	_tasks.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tv.add_child(_tasks)
 
+	# Minikarte unten rechts: Strassenplan + Position (Orientierung).
+	var map_panel := PanelContainer.new()
+	map_panel.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 6))
+	map_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	map_panel.position = Vector2(-186, -144)
+	root.add_child(map_panel)
+	_map = SchoolMap.new()
+	_map.custom_minimum_size = Vector2(172, 130)
+	map_panel.add_child(_map)
+
 	# --- Hilfe-Overlay (F1): alle Tasten im Überblick --------------------------
 	_help = PanelContainer.new()
 	_help.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 10))
@@ -323,6 +371,10 @@ func _on_coached(text: String, level: int) -> void:
 func _process(delta: float) -> void:
 	if car == null:
 		return
+	if _map:
+		_map.car = car
+		if instructor:
+			_map.traffic = instructor.traffic
 	_speed.text = str(int(round(car.speed_kmh)))
 	_gear.text = car.gear_label() if car.has_method("gear_label") else str(car.gear)
 	var frac: float = clampf(car.rpm / 6200.0, 0.0, 1.0)
