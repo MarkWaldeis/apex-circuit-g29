@@ -118,6 +118,11 @@ var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
 var truck := false           ## Lkw-Mesh + langsames Reisetempo
 var cruise := CRUISE
+var _horn_player: AudioStreamPlayer3D
+var _horn_gen                ## AudioStreamGeneratorPlayback
+var _horn_left: float = 0.0  ## restliche Horn-Samples
+var _horn_phase: float = 0.0
+var _horn_cd: float = 0.0
 
 
 func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
@@ -140,6 +145,7 @@ func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
 	var dir := (to - from).normalized()
 	global_transform = Transform3D(_basis_to(dir), Vector3(from.x, 0.0, from.y))
 	_build_mesh()
+	_build_horn()
 
 
 ## Lkw-Aufbau: Zugmaschine + Kofferauflieger, damit der Schueler
@@ -177,6 +183,36 @@ func _build_truck_mesh() -> void:
 			w.rotation.z = PI / 2.0
 			w.position = Vector3(wx, 0.45, wz)
 			add_child(w)
+
+
+## Hupe: zweigestrichener Zweiklang wie beim Schulauto — die KI
+## warnt hoerbar, wenn der Schueler gefaehrlich dicht reinzieht.
+func _build_horn() -> void:
+	var stream := AudioStreamGenerator.new()
+	stream.mix_rate = 22050.0
+	stream.buffer_length = 0.3
+	_horn_player = AudioStreamPlayer3D.new()
+	_horn_player.stream = stream
+	_horn_player.unit_size = 9.0
+	_horn_player.max_distance = 90.0
+	add_child(_horn_player)
+	_horn_player.play()
+	_horn_gen = _horn_player.get_stream_playback()
+
+
+func _process(delta: float) -> void:
+	_horn_cd = maxf(_horn_cd - delta, 0.0)
+	if _horn_gen == null:
+		return
+	var frames := int(_horn_gen.get_frames_available())
+	for i in range(frames):
+		var s := 0.0
+		if _horn_left > 0.0:
+			_horn_left -= 1.0
+			_horn_phase += 1.0
+			s = (sin(TAU * _horn_phase * 0.0177) \
+				+ sin(TAU * _horn_phase * 0.023)) * 0.22
+		_horn_gen.push_frame(Vector2(s, s))
 
 
 func _basis_to(dir: Vector2) -> Basis:
@@ -259,6 +295,11 @@ func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
 		var side := absf(rel.dot(Vector2(-dir.y, dir.x)))
 		if ahead > 0.0 and ahead < 10.0 and side < 3.2:
 			v = minf(v, 0.0)
+		# Gefaehrliches Reinziehen: der KI-Fahrer hupt und bremst.
+		if ahead > 0.0 and ahead < 7.0 and side < 2.8 \
+				and speed_ms > 4.5 and _horn_cd <= 0.0:
+			_horn_left = 15000.0
+			_horn_cd = 7.0
 	# Fussgaenger auf der Querung: Vorrang, wie es die StVO verlangt.
 	for pd in pedestrians:
 		if not is_instance_valid(pd):
