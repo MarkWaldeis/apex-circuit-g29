@@ -75,6 +75,13 @@ func _ready() -> void:
 		add_child(tc)
 		tc.setup(lights, player, s)
 		traffic_cars.append(tc)
+	# Drittes Stadtauto auf der Kreisverkehr-Schleife: dort wer in den
+	# Kreis einfaehrt, muss dem Ringverkehr Vorfahrt gewaehren.
+	var tc_ring := TrafficCar.new()
+	tc_ring.name = "TrafficCarRing"
+	add_child(tc_ring)
+	tc_ring.setup(lights, player, 3, 1)
+	traffic_cars.append(tc_ring)
 
 	var ped := Pedestrian.new()
 	ped.name = "Pedestrian"

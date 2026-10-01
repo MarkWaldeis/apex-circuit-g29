@@ -10,7 +10,8 @@ extends AnimatableBody3D
 const CityLayout = preload("res://scripts/school/city_layout.gd")
 
 ## Wegpunkte (x, z) — Spur ~1.8 m rechts der Fahrbahnmitte.
-const PATH := [
+## Route A: Blockrunde Schul-/West-/Haupt-/Oststraße.
+const ROUTE_A := [
 	Vector2(96.0, -181.8),    # 0 Schulstraße, Richtung West
 	Vector2(-94.0, -181.8),   # 1
 	Vector2(-101.8, -174.0),  # 2 Kurve Weststraße Nord
@@ -20,7 +21,23 @@ const PATH := [
 	Vector2(101.8, -66.0),    # 6 Kurve Oststraße Süd
 	Vector2(101.8, -174.0),   # 7 Oststraße, Richtung Nord -> Kurve zu 0
 ]
-const CORNER_TARGETS := [2, 4, 6, 0]   ## Ziel-Indizes, vor denen abgebremst wird
+const CORNERS_A := [2, 4, 6, 0]   ## Ziel-Indizes, vor denen abgebremst wird
+
+## Route B: Kreisverkehr-Schleife — Südarm rein, Ostarm raus, ueber die
+## Ring-Ost-Diagonale zurueck in die Suedstrasse. Lerneffekt: wer in den
+## Kreis einfaehrt, muss dem Fahrzeug IM Ring Vorfahrt gewaehren.
+const ROUTE_B := [
+	Vector2(206.0, -30.0),    # 0 Suedstrasse Richtung Kreis
+	Vector2(200.0, -40.0),    # 1 Suedarm-Einfahrt
+	Vector2(199.0, -50.0),    # 2 Ring-Einfahrt Sued (Vorfahrt wartet)
+	Vector2(204.5, -51.0),    # 3 Ring Suedviertel Richtung Ost
+	Vector2(211.0, -58.0),    # 4 Ring Ost
+	Vector2(217.0, -60.0),    # 5 Ausfahrt Ostarm
+	Vector2(232.0, -58.0),    # 6 Ostarm -> Ring Ost
+	Vector2(222.0, -36.0),    # 7 Diagonale Ring Ost -> Suedstrasse
+	Vector2(213.0, -26.0),    # 8 Suedstrasse zurueck
+]
+const CORNERS_B := [2, 5, 7]
 const CRUISE := 8.3                    ## ~30 km/h
 const CORNER_V := 3.5
 const ACCEL := 6.0
@@ -39,14 +56,19 @@ var speed_ms: float = 0.0
 var _i: int = 0                  ## Index des aktuellen Ziel-Wegpunkts
 var _stop_left: float = 0.0      ## verbleibende Haltezeit am Stoppschild
 var _stop_done: bool = false     ## Stoppschild diese Runde schon bedient
+var _path: Array = ROUTE_A
+var _corners: Array = CORNERS_A
 
 
-func setup(p_lights, p_player, start_i: int = 0) -> void:
+func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
 	lights = p_lights
 	player = p_player
-	_i = start_i % PATH.size()
-	var from: Vector2 = PATH[(_i - 1 + PATH.size()) % PATH.size()]
-	var to: Vector2 = PATH[_i]
+	if route == 1:
+		_path = ROUTE_B
+		_corners = CORNERS_B
+	_i = start_i % _path.size()
+	var from: Vector2 = _path[(_i - 1 + _path.size()) % _path.size()]
+	var to: Vector2 = _path[_i]
 	var dir := (to - from).normalized()
 	global_transform = Transform3D(_basis_to(dir), Vector3(from.x, 0.0, from.y))
 	_build_mesh()
@@ -60,16 +82,16 @@ func _basis_to(dir: Vector2) -> Basis:
 func _physics_process(delta: float) -> void:
 	_stop_left = maxf(_stop_left - delta, 0.0)
 	var pos := Vector2(global_position.x, global_position.z)
-	var target: Vector2 = PATH[_i]
+	var target: Vector2 = _path[_i]
 	var to := target - pos
 	var dist := to.length()
 	if dist < 1.4:
-		_i = (_i + 1) % PATH.size()
+		_i = (_i + 1) % _path.size()
 		return
 	var dir := to.normalized()
 
 	var v := CRUISE
-	if dist < 16.0 and _i in CORNER_TARGETS:
+	if dist < 16.0 and _i in _corners:
 		v = CORNER_V
 	v = _apply_rules(pos, dir, v)
 

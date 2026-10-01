@@ -294,10 +294,15 @@ func _check_priority(p2: Vector2, spd: float, delta: float) -> void:
 	var s_dir := Vector2(car.global_transform.basis.z.x, car.global_transform.basis.z.z).normalized()
 	for j in CityLayout.junctions().values():
 		var kind := String(j["kind"])
-		if kind != "rbl" and kind != "yield":
+		if kind != "rbl" and kind != "yield" and kind != "roundabout":
 			continue
 		var c: Vector2 = j["center"]
-		if p2.distance_to(c) > 9.0:
+		var dc := p2.distance_to(c)
+		if kind == "roundabout":
+			# Beim Einfahren zaehlt nur der Bereich kurz vor dem Ring.
+			if dc > 22.0 or dc < 11.5:
+				continue
+		elif dc > 9.0:
 			continue
 		var to_c := (c - p2).normalized()
 		if to_c.dot(s_dir) < 0.3:
@@ -320,12 +325,20 @@ func _check_priority(p2: Vector2, spd: float, delta: float) -> void:
 				# Schueler sitzt auf dem Yield-Arm (wartepflichtig).
 				var e: Vector2 = s_arm["enter"]
 				bad = s_dir.dot(e.normalized()) > 0.5
+			elif kind == "roundabout":
+				# Faehrt der Schueler gerade auf den Ring zu, muss er den
+				# Verkehr im Kreis durchlassen.
+				var d_t := tp.distance_to(c)
+				bad = d_t < 15.0 and to_c.dot(s_dir) > 0.4
 			else:
 				# rbl: KI kommt dem Schueler von rechts.
 				var right := Vector2(s_dir.y, s_dir.x)
 				bad = t_dir.dot(-right) > 0.45
 			if bad:
-				_say("Vorfahrt missachtet — der Gegenverkehr hatte Vorfahrt. In der Pruefung waere das vorbei.", 2)
+				if kind == "roundabout":
+					_say("Im Kreisverkehr hat der Ringverkehr Vorfahrt — erst einfahren, wenn die Luecke frei ist.", 2)
+				else:
+					_say("Vorfahrt missachtet — der Gegenverkehr hatte Vorfahrt. In der Pruefung waere das vorbei.", 2)
 				_prio_cd = 20.0
 				return
 
