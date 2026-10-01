@@ -51,6 +51,7 @@ const TASKS := [
 	{"id": "fussampel", "name": "Fußgängerampel: bei Rot angehalten"},
 	{"id": "fussg_ab", "name": "Fußgänger beim Abbiegen durchgelassen (§9)"},
 	{"id": "radler_ab", "name": "Radfahrer beim Rechtsabbiegen durchgelassen (§9)"},
+	{"id": "abstand", "name": "Sicherheitsabstand gehalten (halber Tacho)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -1428,6 +1429,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_spiel(p2, spd)
 	_check_schleif(spd, delta)
 	_check_einfadeln(p2, spd)
+	_check_distance(p2, spd, delta)
 	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -1786,6 +1788,65 @@ func _check_einfadeln(p2: Vector2, spd: float) -> void:
 	elif p2.y > -200.0:
 		_auf_armed = false
 		_auf_slow = false
+
+
+## Sicherheitsabstand ("halber Tacho"): folgt das Schulauto einem
+## KI-Fahrzeug dicht auf, warnt der Fahrlehrer; wer hinter einem
+## Vordermann laengere Zeit korrekten Abstand haelt, erledigt die
+## Aufgabe.
+var _dist_cd := 0.0
+var _dist_close := 0.0
+var _dist_ok := 0.0
+func _check_distance(p2: Vector2, spd: float, delta: float) -> void:
+	_dist_cd = maxf(_dist_cd - delta, 0.0)
+	if spd < 5.0:
+		_dist_close = 0.0
+		_dist_ok = 0.0
+		return
+	var fwd := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	if fwd == Vector2.ZERO:
+		return
+	# Vordermann suchen: gleiche Richtung, voraus, enge Seitenlage.
+	var gap := -1.0
+	for t in traffic:
+		if not is_instance_valid(t):
+			continue
+		# nur Fahrzeuge in gleicher Richtung — Gegenverkehr im
+		# Seitenkorridor loest sonst Fehlalarme aus.
+		var tf := Vector2(t.global_transform.basis.z.x,
+			t.global_transform.basis.z.z)
+		if tf.dot(fwd) < 0.5:
+			continue
+		var rel := Vector2(t.global_position.x,
+			t.global_position.z) - p2
+		var ahead := rel.dot(fwd)
+		if ahead < 2.0 or ahead > 40.0:
+			continue
+		var side := absf(rel.dot(Vector2(-fwd.y, fwd.x)))
+		if side > 3.0:
+			continue
+		if gap < 0.0 or ahead < gap:
+			gap = ahead
+	if gap < 0.0:
+		_dist_close = 0.0
+		_dist_ok = 0.0
+		return
+	var need: float = maxf(spd * 3.6 * 0.5, 8.0)   # halber Tacho, mind. 8 m
+	if gap < need:
+		_dist_ok = 0.0
+		_dist_close += delta
+		if _dist_close > 2.5 and _dist_cd <= 0.0:
+			_warn("Sicherheitsabstand — zum Vordermann fehlt der halbe Tacho!")
+			_dist_cd = 10.0
+			_dist_close = 0.0
+	else:
+		_dist_close = 0.0
+		_dist_ok += delta
+		if _dist_ok > 12.0:
+			_dist_ok = -9999.0   # einmal belohnen
+			_done("abstand",
+				"Sicherheitsabstand gehalten — halber Tacho passt.")
 
 
 func _check_rescue(spd: float) -> void:
