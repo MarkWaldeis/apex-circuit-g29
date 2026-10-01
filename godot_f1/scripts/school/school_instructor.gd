@@ -204,6 +204,7 @@ var _gyaw_acc := 0.0         ## akkumulierte Gierdrehung seit letztem Blinker
 var cam                    ## chase_camera.gd — fuer Schulterblick-Ersatz
 var _rear_ok_at: float = -99.0  ## letzte Rückblick-Kamera > 0,5 s
 var _rear_acc: float = 0.0
+var _lb_warn_cd: float = 0.0   ## Cooldown Rückblick-bei-Tempo-Warnung
 
 
 func _say(text: String, level: int) -> void:
@@ -238,6 +239,12 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 		_rear_acc = 0.0
 	var pos: Vector3 = car.global_position
 	var spd: float = linear_speed()
+	# Rückblick-Kamera bei Tempo: ein Blick ist erlaubt, Starren nicht.
+	_lb_warn_cd = maxf(_lb_warn_cd - delta, 0.0)
+	if cam != null and int(cam.mode) == 3 and spd > 14.0 \
+			and _rear_acc > 1.5 and _lb_warn_cd <= 0.0:
+		_say("Augen auf die Straße! Der Rückblick dauert bei Tempo zu lange — kurz schauen reicht.", 1)
+		_lb_warn_cd = 30.0
 	var p2 := Vector2(pos.x, pos.z)
 
 	_check_speed(spd, p2, delta)
