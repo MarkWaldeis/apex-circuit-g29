@@ -18,6 +18,11 @@ var _roads: Array = []
 var _lot_rect: Dictionary = {}
 var _island := {}
 var _junction_centers: Array = []
+var wet := false               ## Nässe: Grip lässt überall nach
+
+
+func set_wet(on: bool) -> void:
+	wet = on
 
 
 func setup() -> void:
@@ -46,7 +51,7 @@ func sample(pos: Vector3, _line_hint: int = -1) -> Dictionary:
 	var lr: Dictionary = _lot_rect
 	if pos.x >= lr.get("x0", 0.0) and pos.x <= lr.get("x1", 0.0) \
 			and pos.z >= lr.get("z0", 0.0) and pos.z <= lr.get("z1", 0.0):
-		return ASPHALT.duplicate()
+		return _wet_out(ASPHALT.duplicate())
 	# Fahrbahnen und ihre Gehwege.
 	for road in _roads:
 		var a: Vector2 = road["from"]
@@ -56,10 +61,19 @@ func sample(pos: Vector3, _line_hint: int = -1) -> Dictionary:
 		if d <= w * 0.5:
 			var out := ASPHALT.duplicate()
 			out["name"] = String(road["name"])
-			return out
+			return _wet_out(out)
 		if d <= w * 0.5 + 1.1:
-			return KERB.duplicate()
-	return GRASS.duplicate()
+			return _wet_out(KERB.duplicate())
+	return _wet_out(GRASS.duplicate())
+
+
+## Bei Nässe: Grip ~35 % weniger, etwas mehr Wasserwiderstand.
+func _wet_out(out: Dictionary) -> Dictionary:
+	if wet:
+		out["grip"] = float(out["grip"]) * 0.62
+		out["drag"] = float(out["drag"]) + 0.004
+		out["name"] = String(out["name"]) + " nass"
+	return out
 
 
 func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:

@@ -35,6 +35,7 @@ var cam
 var _lights_data: Dictionary = {}
 var _spawn := Transform3D.IDENTITY
 var _night := false
+var _wet := false
 
 
 func _ready() -> void:
@@ -147,6 +148,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				instructor._say("Nachtfahrt — Abblendlicht an (Taste L).", 0)
 			else:
 				instructor._say("Wieder hell — Licht kann aus bleiben.", 0)
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_N:
+		_wet = not _wet
+		if surfaces:
+			surfaces.set_wet(_wet)
+		if instructor:
+			if _wet:
+				instructor._say("Nasse Fahrbahn — Grip lässt nach: früher bremsen, sanfter lenken, mehr Abstand.", 0)
+			else:
+				instructor._say("Wieder trocken — normale Fahrbahnhaftung.", 0)
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_P:
 		if instructor:
