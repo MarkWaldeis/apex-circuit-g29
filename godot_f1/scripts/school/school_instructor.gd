@@ -1084,14 +1084,22 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			else:
 				_say("Zu schwach gebremst — bei der Gefahrbremsung gehört das Pedal ganz durchgetreten.", 1)
 
-	# Längsparken: still in einer Parallelbucht stehen.
+	# Längsparken: still in einer Parallelbucht stehen — erst wenn das
+	# Auto auch gerade und randnah steht, gilt die Uebung als gemacht.
 	for bay in lot["parallel_bays"]:
 		if bool(bay.get("occupied", false)):
 			continue
 		var bp: Vector2 = bay["pos"]
 		var rect := Rect2(bp.x - 2.3, bp.y - float(bay["len"]) * 0.5, 2.3, float(bay["len"]))
 		if _in_rect(p2, rect) and spd < 0.25:
-			_done("parallel", "Längsparken geschafft — Rückwärts rein, Räder gerade, fertig.")
+			var fwd_x := absf(car.global_transform.basis.z.x)
+			if fwd_x > 0.4:
+				_say("In der Parklücke, aber schief — das Auto noch gerade ausrichten.", 1)
+			elif absf(p2.x - bp.x) > 1.2:
+				_say("Parklücke getroffen — aber zu weit vom Rand: näher an den Bordstein.", 1)
+			else:
+				_done("parallel", "Längsparken geschafft — gerade und nah am Bordstein, vorbildlich.")
+			break
 	# Slalom: die Pylonen der Reihe nach auf der richtigen Seite passieren
 	# (von links oder rechts — die Richtung ist frei). Falsche Seite = Reset.
 	var cones: Array = lot["slalom"]
@@ -1117,14 +1125,20 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			if _slalom_from >= _slalom_to:
 				_done("slalom", "Slalom sauber — flüssig ums Hütchen, ohne zu streifen.")
 
-	# Querparken: still in einer freien Querbucht.
+	# Querparken: still in einer freien Querbucht — auch hier zaehlt nur
+	# ein sauber ausgerichteter Stand (Nasen-in-Buchten verlangen
+	# Geraudstand, sonst steht man schief im Bild der Praxis).
 	for bay in lot["perp_bays"]:
 		if bool(bay.get("occupied", false)):
 			continue
 		var bp: Vector2 = bay["pos"]
 		var rect := Rect2(bp.x - 1.2, bp.y - 4.9, 2.4, 4.8)
 		if _in_rect(p2, rect) and spd < 0.25:
-			_done("perp", "Querparken geschafft — in der Lücke gerade ausgerichtet.")
+			if absf(car.global_transform.basis.z.x) > 0.45:
+				_say("In der Bucht, aber schief — noch gerade einruecken.", 1)
+			else:
+				_done("perp", "Querparken geschafft — in der Lücke gerade ausgerichtet.")
+			break
 
 	# Berganfahren: auf der Rampe ohne Zurückrollen anfahren.
 	var hill: Dictionary = lot["hill"]
