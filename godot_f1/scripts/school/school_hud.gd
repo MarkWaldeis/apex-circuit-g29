@@ -25,6 +25,7 @@ var _stall_warn: Label
 var _mirror_cam: Camera3D
 var _mirror_l: Camera3D
 var _mirror_r: Camera3D
+var _dist_label: Label
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
@@ -176,6 +177,13 @@ func _build() -> void:
 	root.add_child(mr[0])
 	_mirror_r = mr[1]
 
+	# Einparkhilfe: Abstandsanzeige direkt unter dem Innenspiegel.
+	_dist_label = Label.new()
+	_dist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UI.label(_dist_label, 18, UI.GOOD)
+	_dist_label.visible = false
+	top.add_child(_dist_label)
+
 	_coach = Label.new()
 	UI.label(_coach, 24, UI.TEXT)
 	_coach.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -301,3 +309,18 @@ func _process(delta: float) -> void:
 		_mirror_r.global_transform = car.global_transform * Transform3D(
 			Basis.looking_at(Vector3(-0.62, -0.10, -0.78).normalized(), Vector3.UP),
 			Vector3(-1.05, 1.30, -0.40))
+
+	# Einparkhilfe: nur sichtbar, solange der Rueckwaertsgang drin ist.
+	if _dist_label:
+		if car.gear == -1 and car.has_method("rear_distance"):
+			_dist_label.visible = true
+			var d: float = car.rear_distance()
+			if d >= 4.0:
+				_dist_label.text = "hinten frei"
+				_dist_label.add_theme_color_override("font_color", UI.GOOD)
+			else:
+				_dist_label.text = "%.1f m" % d
+				var col: Color = UI.GOOD if d > 1.5 else (UI.WARN if d > 0.6 else Color(1.0, 0.35, 0.3))
+				_dist_label.add_theme_color_override("font_color", col)
+		else:
+			_dist_label.visible = false

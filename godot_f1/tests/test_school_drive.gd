@@ -88,6 +88,16 @@ func _finish() -> void:
 		_check(saw_gear2, "automatic_gearbox_shifts", "gear never >=2")
 		_check(int(player.stall_events) == 0 or true, "stall_counter_readable")
 	_check(lowest_y > -4.0, "nothing_falls_out_of_world", "lowest y=%.2f" % lowest_y)
+	if player:
+		# Einparkhilfe: am Stopp-Punkt (Zaun vorne) ist hinten frei,
+		# mit dem Heck zum Zaun gedreht muss er in 4 m auftauchen.
+		var d_free: float = player.rear_distance()
+		_check(d_free >= 4.0, "rear_sensor_sees_open_space", "d=%.2f" % d_free)
+		player.global_transform = Transform3D(
+			Basis(Vector3.UP, PI), Vector3(0.0, 0.3, 110.0))
+		var d_fence: float = player.rear_distance()
+		_check(d_fence > 0.5 and d_fence < 4.0,
+			"rear_sensor_detects_fence", "d=%.2f" % d_fence)
 	if failed > 0:
 		print("SCHOOL_DRIVE FAIL count=", failed)
 		quit(1)

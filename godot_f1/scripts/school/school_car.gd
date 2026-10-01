@@ -428,6 +428,25 @@ func assists_label() -> String:
 	return "SCHALTER"
 
 
+## Abstand zum naechsten Hindernis hinter dem Auto (Einparkhilfe).
+## INF, wenn in 4 m nichts liegt. Drei Strahlen an der Heckkante:
+## links/Mitte/rechts, jeweils von knapp ausserhalb des Stossfaengers aus.
+func rear_distance() -> float:
+	if not is_inside_tree():
+		return INF
+	var space := get_world_3d().direct_space_state
+	var best := INF
+	for x in [-0.7, 0.0, 0.7]:
+		var from := global_transform * Vector3(x, 0.35, -2.12)
+		var to := global_transform * Vector3(x, 0.35, -6.1)
+		var q := PhysicsRayQueryParameters3D.create(from, to)
+		q.exclude = [get_rid()]
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty():
+			best = minf(best, from.distance_to(hit["position"]))
+	return best
+
+
 ## Wo der Fahrlehrer "aktueller Gang" als Text liest.
 func gear_label() -> String:
 	match gear:
