@@ -52,6 +52,9 @@ func build(world: Node3D) -> Dictionary:
 	_trees(world)
 	_lamps(world)
 	out["cams"] = _speed_cams(world)
+	# Abgestellte Autos am Straßenrand — dazwischen rollt der Ball.
+	for cp in CityLayout.street_ball()["cars"]:
+		_parked_car(world, Vector3(cp.x, 0.0, cp.y), 0.0, Color(0.25, 0.4, 0.65))
 	var cyclist := Cyclist.new()
 	cyclist.name = "Cyclist"
 	world.add_child(cyclist)

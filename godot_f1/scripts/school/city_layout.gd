@@ -328,6 +328,18 @@ static func rail_crossing() -> Dictionary:
 	return {"center": Vector2(240.0, -150.0)}
 
 
+## Situationsgefahr Ball: auf der Kreisverkehr-Nordstraße rollt ein
+## Ball zwischen zwei parkenden Autos auf die Fahrbahn (Klassiker:
+## ein Kind koennte folgen). `cars` sind die abgestellten Fahrzeuge.
+static func street_ball() -> Dictionary:
+	return {
+		"from": Vector2(206.5, -110.0),
+		"to": Vector2(193.5, -110.0),
+		"road": Vector2(200.0, -110.0),
+		"cars": [Vector2(202.2, -105.5), Vector2(202.2, -114.5)],
+	}
+
+
 ## Radfahrer-Rundkurs: rechte Fahrbahnseite der Hauptstraße (ostwärts
 ## z=-57,2 — rechter Rand seiner Spur — westwärts z=-62,8), Wenden über
 ## die Fahrbahn an den Enden.

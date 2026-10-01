@@ -16,6 +16,7 @@ const SchoolInstructor = preload("res://scripts/school/school_instructor.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
 const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
+const StreetBall = preload("res://scripts/school/street_ball.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -106,10 +107,20 @@ func _ready() -> void:
 	rail.center = CityLayout.rail_crossing()["center"]
 	add_child(rail)
 
+	# Ball zwischen parkenden Autos auf der Kreisverkehr-Nordstrasse.
+	var ball := StreetBall.new()
+	ball.name = "StreetBall"
+	var sb := CityLayout.street_ball()
+	ball.from = sb["from"]
+	ball.to = sb["to"]
+	ball._road = sb["road"]
+	add_child(ball)
+
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrians = peds
 	instructor.rail = rail
+	instructor.ball = ball
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.traffic = traffic_cars

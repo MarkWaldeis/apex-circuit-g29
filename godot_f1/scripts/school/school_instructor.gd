@@ -28,6 +28,7 @@ const TASKS := [
 	{"id": "light", "name": "Ampelkreuzung bei Grün"},
 	{"id": "zebra", "name": "Zebrastreifen langsam"},
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
+	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -37,6 +38,7 @@ var cyclist
 var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrians: Array = []  ## Fussgaenger an den Zebrastreifen
 var rail                     ## rail_crossing.gd-Instanz (kann null sein)
+var ball                     ## street_ball.gd-Instanz (kann null sein)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
@@ -777,6 +779,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				_warn("Nicht auf dem Zebrastreifen halten — 5 m Abstand einhalten.")
 	_check_pedestrian(p2, spd)
 	_check_rail(p2, spd)
+	_check_ball(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -842,6 +845,22 @@ func _check_rail(p2: Vector2, spd: float) -> void:
 	# vor dem Andreaskreuz halten.
 	elif rail.is_closed() and absf(d.x) < 6.5 and absf(d.y) < 13.0 and spd > 2.0:
 		_warn("Schranken geschlossen — vor dem Andreaskreuz anhalten!")
+
+
+func _check_ball(p2: Vector2, spd: float) -> void:
+	if ball == null or not is_instance_valid(ball) or not ball.is_rolling() \
+			or not ball.on_road():
+		return
+	var bp := Vector2(ball.global_position.x, ball.global_position.z)
+	var d := p2.distance_to(bp)
+	if d > 22.0:
+		return
+	if d < 1.6 and spd > 1.0:
+		_warn("Den Ball überfahren — ein Kind könnte folgen, immer abbremsen!")
+	elif spd * 3.6 > 20.0:
+		_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
+	elif spd < 2.0:
+		_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
 
 
 var _brake_entry: float = -1.0
