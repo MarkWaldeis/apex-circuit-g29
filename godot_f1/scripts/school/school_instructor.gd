@@ -164,6 +164,32 @@ func setup(p_car, p_surfaces, p_lights = null) -> void:
 			var key := _arm_key(j, arm)
 			_arm_track[key] = {"d": 999.0, "arm": arm, "junction": j}
 			_stop_armed[key] = false
+	_load_stats()
+
+
+## Persistente Pruefungsbilanz (user://): Fahrten, bestandene
+## Pruefungen, beste Fahrt und Gesamt-km ueberleben den Sitzungsstart —
+## so sieht man seinen Lernfortschritt wie in der echten Fahrschule.
+var _stats := {"exams": 0, "passed": 0, "best": -1}
+var _km_base := 0.0
+
+
+func _load_stats() -> void:
+	var cf := ConfigFile.new()
+	if cf.load("user://fahrschule.cfg") == OK:
+		_stats["exams"] = int(cf.get_value("pruefung", "exams", 0))
+		_stats["passed"] = int(cf.get_value("pruefung", "passed", 0))
+		_stats["best"] = int(cf.get_value("pruefung", "best_errs", -1))
+		_km_base = float(cf.get_value("fahrt", "km", 0.0))
+
+
+func _save_stats() -> void:
+	var cf := ConfigFile.new()
+	cf.set_value("pruefung", "exams", int(_stats["exams"]))
+	cf.set_value("pruefung", "passed", int(_stats["passed"]))
+	cf.set_value("pruefung", "best_errs", int(_stats["best"]))
+	cf.set_value("fahrt", "km", _km_base + _km_driven)
+	cf.save("user://fahrschule.cfg")
 
 
 func _arm_key(junction: Dictionary, arm: Dictionary) -> String:
@@ -1501,10 +1527,20 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				"done":
 					# Haekchen nur bei bestandener Fahrt — ein durchgefallener
 					# Lauf bekommt die Ansage, aber keinen Listenpunkt.
+					_stats["exams"] = int(_stats["exams"]) + 1
 					if _exam_errs <= 2:
+						_stats["passed"] = int(_stats["passed"]) + 1
+						if int(_stats["best"]) < 0 or _exam_errs < int(_stats["best"]):
+							_stats["best"] = _exam_errs
 						_done("pruefung", "Prüfungsfahrt bestanden — %d Beanstandung(en)!" % _exam_errs)
 					else:
 						_say("Prüfungsfahrt beendet — %d Beanstandung(en): nicht bestanden!" % _exam_errs, 2)
+					_save_stats()
+					var best_txt := "%d" % int(_stats["best"]) \
+						if int(_stats["best"]) >= 0 else "—"
+					_say("Bilanz: %d Prüfung(en), %d bestanden, beste Fahrt %s, insgesamt %.1f km gefahren." % [
+						int(_stats["exams"]), int(_stats["passed"]), best_txt,
+						(_km_base + _km_driven) / 1000.0], 0)
 					_exam_protocol()
 	for c in cams:
 		if is_instance_valid(c) and c.check(p2, spd * 3.6):
