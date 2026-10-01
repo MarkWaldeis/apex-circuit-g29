@@ -26,6 +26,8 @@ var _mirror_cam: Camera3D
 var _mirror_l: Camera3D
 var _mirror_r: Camera3D
 var _dist_label: Label
+var _backup_panel: PanelContainer
+var _backup_cam: Camera3D
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
@@ -186,6 +188,16 @@ func _build() -> void:
 	_dist_label.visible = false
 	top.add_child(_dist_label)
 
+	# Rueckfahrkamera: blickt beim Rueckwaertsgang tief hinter das Auto —
+	# erfasst Pylonen/Bordsteine, die der Spiegel nicht sieht.
+	var bk := _mirror_panel(Vector2i(360, 170), 78.0)
+	_backup_panel = bk[0]
+	_backup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_backup_panel.position = Vector2(-184, -320)
+	_backup_panel.visible = false
+	root.add_child(_backup_panel)
+	_backup_cam = bk[1]
+
 	_coach = Label.new()
 	UI.label(_coach, 24, UI.TEXT)
 	_coach.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -324,6 +336,15 @@ func _process(delta: float) -> void:
 		_mirror_r.global_transform = car.global_transform * Transform3D(
 			Basis.looking_at(Vector3(-0.62, -0.10, -0.78).normalized(), Vector3.UP),
 			Vector3(-1.05, 1.30, -0.40))
+
+	# Rueckfahrkamera oben am Heck, steil nach unten — Sicht auf die
+	# ersten ~8 m hinter dem Stossfaenger.
+	if _backup_panel:
+		var rev: bool = car.gear == -1
+		_backup_panel.visible = rev
+		if rev and _backup_cam:
+			_backup_cam.global_transform = car.global_transform * Transform3D(
+				Basis(Vector3.RIGHT, -0.55), Vector3(0.0, 1.35, -2.05))
 
 	# Einparkhilfe: nur sichtbar, solange der Rueckwaertsgang drin ist.
 	if _dist_label:
