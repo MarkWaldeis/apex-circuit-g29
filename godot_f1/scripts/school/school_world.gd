@@ -21,6 +21,7 @@ const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 const StreetBall = preload("res://scripts/school/street_ball.gd")
 const RescueVehicle = preload("res://scripts/school/rescue_vehicle.gd")
 const DoorCar = preload("res://scripts/school/door_car.gd")
+const Cyclist = preload("res://scripts/school/cyclist.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -199,6 +200,8 @@ func _ready() -> void:
 	instructor.door_car = door_car
 	instructor.ped_crossing = _pedx
 	instructor.trainer_peds = _trainer_peds
+	instructor.trainer_cycles = _trainer_cycles
+	instructor.trainer_jc = func(): return _ct_jc
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.cam = cam
@@ -249,6 +252,7 @@ func _physics_process(delta: float) -> void:
 	_rbl_trainer_tick(delta)
 	_onc_trainer_tick(delta)
 	_ped_trainer_tick(delta)
+	_cyc_trainer_tick(delta)
 	if _rain and player:
 		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
@@ -275,6 +279,9 @@ var _peds: Array = []          ## Fussgaenger+Reh — KI-Spawn braucht sie zum B
 var _pedx                    ## Fussgaengerampel (ped_crossing.gd)
 var _trainer_peds: Array = []  ## Abbiege-Trainer-Fussgaenger (oneshot)
 var _pt_t := 20.0            ## Cooldown Abbiege-Fussgaenger-Trainer
+var _trainer_cycles: Array = []  ## Rechtsabbiege-Trainer-Radler (oneshot)
+var _ct_t := 40.0            ## Cooldown Rechtsabbiege-Radler-Trainer
+var _ct_jc := Vector2.ZERO   ## Kreuzungszentrum des aktiven Radler-Trainers
 
 
 ## Zufalls-RvL-Training: naehert sich der Schueler der RvL-Kreuzung
@@ -488,6 +495,68 @@ func _ped_trainer_tick(delta: float) -> void:
 		if is_instance_valid(tc):
 			tc.pedestrians.append(pd)
 	_pt_t = 45.0
+
+
+## Radfahrer beim Rechtsabbiegen (§9 Abs. 3): setzt der Schueler den
+## rechten Blinker an einer Kreuzung, ueberholt ein Trainer-Radler auf
+## der rechten Seite und faehrt geradeaus durch die Kreuzung — der
+## Schueler muss ihn durchlassen statt ihn abzuschneiden.
+func _cyc_trainer_tick(delta: float) -> void:
+	_ct_t = maxf(_ct_t - delta, 0.0)
+	if _ct_t > 0.0 or player == null or instructor == null \
+			or instructor.exam.active:
+		return
+	if not bool(player.get("indicator_right")):
+		return
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	var s_fwd := Vector2(player.global_transform.basis.z.x,
+		player.global_transform.basis.z.z).normalized()
+	if s_fwd == Vector2.ZERO or player.linear_velocity.length() > 6.0:
+		return
+	var best_j: Dictionary = {}
+	var bd := 1e9
+	for j in CityLayout.junctions().values():
+		if String(j["kind"]) == "roundabout" or j["arms"].size() < 3:
+			continue
+		var c: Vector2 = j["center"]
+		var d: float = p2.distance_to(c)
+		if d < 9.0 or d > 30.0:
+			continue
+		if (c - p2).normalized().dot(s_fwd) < 0.4:
+			continue
+		if d < bd:
+			bd = d
+			best_j = j
+	if best_j.is_empty():
+		return
+	var right := Vector2(-s_fwd.y, s_fwd.x)
+	# Radler-Spur parallel zur rechten Fahrbahnseite, knapp hinter dem
+	# Schulauto startend — wie ein Radler, den man gerade ueberholt hat.
+	var start := p2 - s_fwd * 20.0 + right * 3.1
+	var goal: Vector2 = best_j["center"] + s_fwd * 26.0 + right * 3.1
+	for c in _trainer_cycles:
+		if is_instance_valid(c):
+			_ct_t = 12.0
+			return
+	for t in instructor.traffic:
+		if is_instance_valid(t):
+			var tp := Vector2(t.global_position.x, t.global_position.z)
+			if tp.distance_to(goal) < 10.0:
+				_ct_t = 10.0
+				return
+	var cy := Cyclist.new()
+	cy.name = "CycleTurnTrainer"
+	add_child(cy)
+	cy.setup([start, goal], lights)
+	cy.player = player
+	cy.oneshot = true
+	cy.watchers = [player] + instructor.traffic
+	_trainer_cycles.append(cy)
+	for tc in instructor.traffic:
+		if is_instance_valid(tc):
+			tc.pedestrians.append(cy)
+	_ct_jc = best_j["center"]
+	_ct_t = 55.0
 
 
 ## Regen-Partikelstrahl ueber dem Spieler (Naesse-Taste M).

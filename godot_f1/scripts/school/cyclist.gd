@@ -9,6 +9,11 @@ const SPEED := 5.5          ## Radtempo in m/s
 var waypoints: Array = []   ## Vector2-Rundkurs (rechte Fahrbahnseite)
 var lights                  ## junction_lights.gd-Instanz (Ampelachtung)
 var player                  ## Schulauto — vor Fahrzeugen wird gebremst
+var oneshot := false        ## true: nach dem letzten Wegpunkt freigeben
+## KI-Bremsschnittstelle (wie Fussgaenger): immer "unterwegs" auf der
+## Fahrbahn — ein Radler im Kreuzungsbereich darf nicht uebersehen werden.
+var watchers: Array = []
+var _walking := false
 var _wp: int = 0
 var _wheel_a: Node3D
 var _wheel_b: Node3D
@@ -26,6 +31,11 @@ func setup(path: Array, p_lights = null) -> void:
 func pos2() -> Vector2:
 	var p: Vector3 = global_position
 	return Vector2(p.x, p.z)
+
+
+## KI bremst für alles, was auf der Fahrbahn ist — Radler sind es immer.
+func on_road() -> bool:
+	return true
 
 
 func _ready() -> void:
@@ -50,6 +60,9 @@ func _physics_process(delta: float) -> void:
 	var to := target - here
 	var dist := to.length()
 	if dist < 0.4:
+		if oneshot and _wp == waypoints.size() - 1:
+			queue_free()
+			return
 		_wp = (_wp + 1) % waypoints.size()
 		return
 	var spd := SPEED

@@ -50,6 +50,7 @@ const TASKS := [
 	{"id": "fernlicht", "name": "Fernlicht richtig benutzt (Taste F)"},
 	{"id": "fussampel", "name": "Fußgängerampel: bei Rot angehalten"},
 	{"id": "fussg_ab", "name": "Fußgänger beim Abbiegen durchgelassen (§9)"},
+	{"id": "radler_ab", "name": "Radfahrer beim Rechtsabbiegen durchgelassen (§9)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -66,7 +67,9 @@ var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
 var school_bus               ## school_bus.gd-Instanz (§20-Halt am Bus)
 var ped_crossing             ## ped_crossing.gd — Fussgaengerampel Hauptstrasse
-var trainer_peds: Array = [] ## Abbiege-Trainer-Fussgaenger (school_world)
+var trainer_peds: Array = []
+var trainer_cycles: Array = []
+var trainer_jc: Callable = Callable()   ## liefert Vector2 Kreuzungszentrum
 var _ped_waiting := {}         ## Fussgaenger-id -> Schueler laesst passieren
 var _ww_t: float = 0.0         ## Zeit gegen die Einbahnrichtung (Rate-Limit)
 var _speed_over: float = 0.0
@@ -1420,6 +1423,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_fernlicht(p2, spd, delta)
 	_check_fussampel(p2, spd, delta)
 	_check_ped_turn(p2, spd, delta)
+	_check_cycle_turn(p2, spd, delta)
 	_check_baustelle(p2, spd)
 	_check_spiel(p2, spd)
 	_check_schleif(spd, delta)
@@ -1715,6 +1719,50 @@ func _check_ped_turn(p2: Vector2, spd: float, delta: float) -> void:
 	if _ptw_waited and (ped == null or not bool(ped.call("on_road"))):
 		_ptw_waited = false
 		_done("fussg_ab", "Fußgänger beim Abbiegen durchgelassen — so sieht §9 aus.")
+
+
+## §9 Abs. 3 gilt auch fuer Radfahrer: wer rechts abbiegt, laesst den
+## Radler geradeaus durchfahren. Die Welt schickt einen Trainer-Radler
+## auf der rechten Seite in die Kreuzung; ihn bei Fahrt abzuschneiden
+## wird verwarnt, ihn durchzulassen erledigt die Aufgabe.
+var _ctw_cd := 0.0
+var _ctw_waited := false
+func _check_cycle_turn(p2: Vector2, spd: float, delta: float) -> void:
+	_ctw_cd = maxf(_ctw_cd - delta, 0.0)
+	var cyc: Node3D = null
+	var best := 30.0
+	for c in trainer_cycles:
+		if not is_instance_valid(c):
+			continue
+		var d := p2.distance_to(Vector2(c.global_position.x,
+			c.global_position.z))
+		if d < best:
+			best = d
+			cyc = c
+	if cyc == null:
+		if _ctw_waited:
+			_ctw_waited = false
+			_done("radler_ab",
+				"Radfahrer beim Rechtsabbiegen durchgelassen — §9 sitzt.")
+		return
+	var c2 := Vector2(cyc.global_position.x, cyc.global_position.z)
+	var jc: Vector2 = trainer_jc.call() if trainer_jc.is_valid() else c2
+	# Radler "im Konfliktbereich": in der Kreuzung oder unmittelbar
+	# davor (in der Einbieg-Zone des Schulautos).
+	var in_zone: bool = c2.distance_to(jc) < 14.0
+	if in_zone:
+		if spd < 0.8:
+			_ctw_waited = true
+		elif p2.distance_to(jc) < 9.5 and _ctw_cd <= 0.0:
+			_warn("Radfahrer rechts — beim Rechtsabbiegen durchlassen!")
+			_ctw_cd = 8.0
+			return
+	else:
+		# Radler hat die Kreuzung durchfahren oder die Spur verlassen.
+		if _ctw_waited:
+			_ctw_waited = false
+			_done("radler_ab",
+				"Radfahrer beim Rechtsabbiegen durchgelassen — §9 sitzt.")
 
 
 func _check_einfadeln(p2: Vector2, spd: float) -> void:
