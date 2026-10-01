@@ -37,6 +37,7 @@ const TASKS := [
 	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
 	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
 	{"id": "einfaden", "name": "Einfädeln auf die 100er-Straße"},
+	{"id": "einbahn", "name": "Einbahnstraße in Fahrtrichtung"},
 	{"id": "rettung", "name": "Blaulicht: Platz gemacht"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
@@ -111,6 +112,7 @@ var _slip_t := 0.0            ## Zeit am Schleifpunkt in Kriechfahrt
 var _clutch_ride := 0.0       ## getretene Kupplung bei Fahrt (Sekunden)
 var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
 var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
+var _einbahn_on := false      ## auf der Einbahnstrasse westwaerts unterwegs
 var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
 var _rescue_ann := false      ## Alarmfahrt schon angesagt
 var _rescue_near := false     ## Schueler war waehrend der Fahrt in Reichweite
@@ -197,6 +199,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_following(p2, spd, delta)
 	_check_engstelle_vorrang(p2, delta)
 	_check_schulbus(p2, spd)
+	_check_einbahn(pos, p2)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -663,6 +666,21 @@ func _check_schulbus(p2: Vector2, spd: float) -> void:
 	elif bool(school_bus.get("hazards_on")) and spd <= 2.8 and not _bus_passed:
 		_bus_passed = true
 		_say("Schulbus mit Warnblinker passiert — Schritttempo, richtig so.", 0)
+
+
+## Einbahnstraße: nur westwärts (Richtung Weststraße) — wer die
+## komplette Straße in Fahrtrichtung durchfaehrt, hat die Aufgabe.
+## Gegen die Richtung meldet schon der Geisterfahrer-Check.
+func _check_einbahn(pos: Vector3, p2: Vector2) -> void:
+	var on_street := String(surfaces.road_at(pos)) == "Einbahnstraße"
+	if on_street and car.linear_velocity.x < -1.5:
+		_einbahn_on = true
+	elif _einbahn_on and not on_street and p2.x < -90.0 \
+			and p2.y > -126.0 and p2.y < -114.0:
+		_einbahn_on = false
+		_done("einbahn", "Einbahnstraße in Fahrtrichtung durchfahren — richtig so.")
+	elif _einbahn_on and not on_street:
+		_einbahn_on = false   ## rausgefahren ohne Durchfahrt
 
 
 ## Engstelle Kreis-Nordstrasse: die parkenden Autos stehen auf der
