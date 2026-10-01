@@ -52,7 +52,7 @@ static func route_c() -> Array:
 		{"pos": Vector2(-98.2, -150.0), "text": "Der Weststraße nach Norden folgen."},
 		{"pos": Vector2(-98.2, -172.0), "text": "Gleich rechts in die Schulstraße — rechts vor links."},
 		{"pos": Vector2(60, -178.2), "text": "Der Schulstraße folgen — Tempo 30."},
-		{"pos": Vector2(98.2, -140.0), "text": "Rechts in die Oststraße — Vorfahrt gewähren."},
+		{"pos": Vector2(98.2, -140.0), "text": "Rechts in die Oststraße — der Vorfahrtstraße folgen, ohne Blinker."},
 		{"pos": Vector2(98.2, -80.0), "text": "Weiter zur Hauptstraße."},
 		{"pos": Vector2(40, -61.8), "text": "Rechts in die Hauptstraße abbiegen."},
 		{"pos": Vector2(-10, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},

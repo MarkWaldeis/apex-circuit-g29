@@ -42,6 +42,8 @@ const TASKS := [
 	{"id": "ueberhol", "name": "Lkw auf dem Ring überholt"},
 	{"id": "rettung", "name": "Blaulicht: Platz gemacht"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
+	{"id": "gegen", "name": "Gegenverkehr beim Linksabbiegen durchgelassen"},
+	{"id": "vorf_knick", "name": "Abknickende Vorfahrtstraße gefolgt (VZ 306/215)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -236,6 +238,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_ueberhol(p2, spd)
 	_check_lane_change(pos, spd, delta)
 	_check_pullout(p2, spd, delta)
+	_check_oncoming_credit(p2, spd, delta)
 	_check_door_car(p2, spd, delta)
 	_check_left_turn(p2, spd, delta)
 	_check_priority(p2, spd, delta)
@@ -807,10 +810,17 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			tr["r"] = true
 		if now_j - float(tr["t0"]) > 1.5:
 			var dyaw := wrapf(car.global_transform.basis.get_euler().y - float(tr["yaw0"]), -PI, PI)
-			if dyaw > 0.45 and not bool(tr.get("l", false)):
+			# Abknickende Vorfahrtstrasse: wer dem Knick der Vorfahrtstrasse
+			# folgt (arm["bend_yaw"] markiert die Kurvenrichtung), blinkt
+			# nicht — nur das Abbiegen WEG von der Vorfahrtstrasse braucht
+			# den Blinker (§9 + VZ 306/215).
+			var bend: float = float(tr["arm"].get("bend_yaw", 0.0))
+			if dyaw > 0.45 and not bool(tr.get("l", false)) and bend < 0.5:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen links blinken.")
-			elif dyaw < -0.45 and not bool(tr.get("r", false)):
+			elif dyaw < -0.45 and not bool(tr.get("r", false)) and bend > -0.5:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
+			elif bend != 0.0 and signf(dyaw) == signf(bend) and absf(dyaw) > 0.45:
+				_done("vorf_knick", "Der abknickenden Vorfahrtstraße gefolgt — ohne Blinken, genau richtig.")
 			if dyaw < -0.45:
 				_check_shoulder(p2)
 			if dyaw > 0.45:
@@ -946,6 +956,28 @@ func _check_ueberhol(p2: Vector2, spd: float) -> void:
 			_done("ueberhol", "Überholvorgang sauber beendet — gute Arbeit.")
 	elif absf(along2) > 75.0 or side2 > 25.0:
 		_ov_armed = false    ## aus der Situation rausgefahren
+
+
+## Gegenverkehr-Trainer (von der Welt gespawnt, Meta "oncoming_j"):
+## hat der Schueler mit Linksblinker angehalten und das Auto
+## durchgelassen, wird die Aufgabe gutgeschrieben.
+var _onc_waited := false
+func _check_oncoming_credit(p2: Vector2, spd: float, _delta: float) -> void:
+	var found := false
+	for tc in traffic:
+		if not is_instance_valid(tc) or not tc.has_meta("oncoming_j"):
+			continue
+		found = true
+		var jc: Vector2 = tc.get_meta("oncoming_j")
+		var td: float = Vector2(tc.global_position.x,
+			tc.global_position.z).distance_to(jc)
+		var pd: float = p2.distance_to(jc)
+		if td < 20.0 and pd < 14.0 and spd < 1.5 \
+				and bool(car.get("indicator_left")):
+			_onc_waited = true
+	if not found and _onc_waited:
+		_onc_waited = false
+		_done("gegen", "Gegenverkehr beim Linksabbiegen erst durchgelassen — genau richtig.")
 
 
 ## Anfahren nach dem Halt: kommt ein KI-Fahrzeug von hinten

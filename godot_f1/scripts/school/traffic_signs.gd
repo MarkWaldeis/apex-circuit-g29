@@ -146,6 +146,30 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var inner := _tri(0.38, white, true)
 			inner.position.z = 0.004
 			face.add_child(inner)
+		"vorf215":
+			## Zeichen 215: Vorrang an der abknickenden Vorfahrtstrasse —
+			## weisser Grund, dicke schwarze Linie zeigt den Knick der
+			## Vorfahrtstrasse (von oben nach links; arg "r" spiegelt den
+			## Knick nach rechts), die duennen Striche sind die
+			## wartepflichtigen Nebenstrassen.
+			var back := _bar(Vector3(0.56, 0.56, 0.02), white)
+			face.add_child(back)
+			var rim := _bar(Vector3(0.58, 0.58, 0.015), black)
+			rim.position.z = -0.012
+			face.add_child(rim)
+			var sx: float = -1.0 if arg != "r" else 1.0
+			var stem := _bar(Vector3(0.10, 0.30, 0.01), black)
+			stem.position = Vector3(0.0, -0.13, 0.03)
+			face.add_child(stem)
+			var curve := _bar(Vector3(0.24, 0.10, 0.01), black)
+			curve.position = Vector3(0.07 * sx, 0.07, 0.03)
+			face.add_child(curve)
+			var thin_r := _bar(Vector3(0.10, 0.02, 0.01), black)
+			thin_r.position = Vector3(-0.10 * sx, 0.0, 0.03)
+			face.add_child(thin_r)
+			var thin_b := _bar(Vector3(0.02, 0.16, 0.01), black)
+			thin_b.position = Vector3(0.0, 0.19, 0.03)
+			face.add_child(thin_b)
 		"priority":
 			var back := _disc(0.34, 4, white, 0.03)
 			face.add_child(back)

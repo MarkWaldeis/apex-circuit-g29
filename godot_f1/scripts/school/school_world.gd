@@ -237,6 +237,7 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(light):
 			light.set_phase(lights.phase_of(String(item["arm"])))
 	_rbl_trainer_tick(delta)
+	_onc_trainer_tick(delta)
 	if _rain and player:
 		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
@@ -258,6 +259,7 @@ func _physics_process(delta: float) -> void:
 ## entfernen — so laesst sich die Stadt zwischen "ruhig zum Ueben" und
 ## "voll wie Berufsverkehr" umstellen (Taste G).
 var _rbl_t: float = 20.0       ## Cooldown fuer den RvL-Trainer
+var _onc_t: float = 30.0       ## Cooldown fuer den Gegenverkehr-Trainer
 var _peds: Array = []          ## Fussgaenger+Reh — KI-Spawn braucht sie zum Bremsen
 
 
@@ -311,6 +313,88 @@ func _rbl_trainer_tick(delta: float) -> void:
 				return
 	var tc := TrafficCar.new()
 	tc.name = "RvlTrainer"
+	add_child(tc)
+	tc.setup(lights, player, 1, -1, [start, goal])
+	tc.pedestrians = _peds
+	tc.night = _night
+	instructor.traffic.append(tc)
+
+
+## Linksabbiegen mit Gegenverkehr: blinkt der Schueler links an einer
+## Kreuzung, schickt die Welt gelegentlich ein KI-Auto vom Gegenarm
+## geradeaus durch — es hat Vorfahrt, der Schueler muss warten (§9).
+## Nur ausserhalb der Pruefungsfahrt.
+func _onc_trainer_tick(delta: float) -> void:
+	_onc_t = maxf(_onc_t - delta, 0.0)
+	if _onc_t > 0.0 or player == null or instructor == null \
+			or instructor.exam.active:
+		return
+	if not bool(player.get("indicator_left")):
+		return
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	var s_fwd := Vector2(player.global_transform.basis.z.x,
+		player.global_transform.basis.z.z).normalized()
+	if s_fwd == Vector2.ZERO:
+		return
+	var spd: float = player.linear_velocity.length()
+	if spd > 5.0:
+		return
+	# Naechste Kreuzung vor dem Schueler (kein Kreisverkehr: dort gilt
+	# ein anderes Regelwerk).
+	var best_j: Dictionary = {}
+	var bd := 1e9
+	for j in CityLayout.junctions().values():
+		if String(j["kind"]) == "roundabout" or j["arms"].size() < 3:
+			continue
+		var c: Vector2 = j["center"]
+		var d: float = p2.distance_to(c)
+		if d < 7.0 or d > 24.0:
+			continue
+		if (c - p2).normalized().dot(s_fwd) < 0.35:
+			continue
+		if d < bd:
+			bd = d
+			best_j = j
+	if best_j.is_empty():
+		return
+	# Schueler-Arm (naehester) und der gegenueberliegende Arm —
+	# dessen enter zeigt dem des Schuelers entgegen.
+	var s_arm: Dictionary = {}
+	var o_arm: Dictionary = {}
+	var sd := 1e9
+	for arm in best_j["arms"]:
+		var d: float = Vector2(arm["pos"]).distance_to(p2)
+		if d < sd:
+			sd = d
+			s_arm = arm
+	if s_arm.is_empty():
+		return
+	var s_enter: Vector2 = s_arm["enter"]
+	var od := 1e9
+	for arm in best_j["arms"]:
+		var e: Vector2 = arm["enter"]
+		var d: float = (e + s_enter).length()   # ~0 wenn genau entgegengesetzt
+		if d < od:
+			od = d
+			o_arm = arm
+	if o_arm.is_empty() or o_arm == s_arm or od > 0.4:
+		return
+	_onc_t = 60.0
+	var enter: Vector2 = o_arm["enter"]
+	# Rechte Spur des Gegenarms; der Kurs fuehrt mittig durch die Kreuzung
+	# in den Schueler-Arm — so muss der Linksabbieger wirklich warten.
+	var off := Vector2(-enter.y, enter.x) * 1.8
+	var start := Vector2(o_arm["pos"]) - enter * 18.0 + off
+	var goal := Vector2(o_arm["pos"]) + enter * 30.0 + off
+	for t in instructor.traffic:
+		if is_instance_valid(t):
+			var tp := Vector2(t.global_position.x, t.global_position.z)
+			if tp.distance_to(start) < 12.0 or tp.distance_to(goal) < 12.0:
+				_onc_t = 10.0
+				return
+	var tc := TrafficCar.new()
+	tc.name = "OncomingTrainer"
+	tc.set_meta("oncoming_j", best_j["center"])
 	add_child(tc)
 	tc.setup(lights, player, 1, -1, [start, goal])
 	tc.pedestrians = _peds

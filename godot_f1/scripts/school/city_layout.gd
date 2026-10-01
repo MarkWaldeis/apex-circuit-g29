@@ -92,12 +92,17 @@ static func junctions() -> Dictionary:
 		"yield_ost": {
 			"kind": "yield",
 			"center": Vector2(100, -180),
-			# Schulstraße gibt Vorfahrt, Oststraße (50) ist die Vorfahrtstraße.
+			# Abknickende Vorfahrtstraße: die Vorfahrtstraße biegt von der
+			# Oststraße (Nordarm) in die Schulstraße nach Westen ab
+			# (VZ 306 auf den Biegungsarmen, VZ 215 an den Nebenarmen).
+			# "bend_yaw" markiert die Gier-Richtung des Kurvenverlaufs —
+			# wer ihr folgt, faehrt der Vorfahrtstrasse nach und blinkt
+			# nicht (die Gegenrichtung bleibt blinkerpflichtig).
 			"arms": [
-				{"pos": Vector2(94, -180), "enter": Vector2(1, 0), "yield": true},
+				{"pos": Vector2(94, -180), "enter": Vector2(1, 0), "bend_yaw": -1.0},
 				{"pos": Vector2(106, -180), "enter": Vector2(-1, 0), "yield": true},
-				{"pos": Vector2(100, -174), "enter": Vector2(0, -1)},
-				{"pos": Vector2(100, -186), "enter": Vector2(0, 1)},
+				{"pos": Vector2(100, -174), "enter": Vector2(0, -1), "bend_yaw": 1.0},
+				{"pos": Vector2(100, -186), "enter": Vector2(0, 1), "yield": true},
 			],
 		},
 		# Vier T-Einfahrten auf den 100er-Ring: die mündende Straße
@@ -226,8 +231,12 @@ static func signs() -> Array:
 		{"kind": "rbl", "pos": Vector3(-94.0, 0, -183.8), "rot_y": 90.0},
 		{"kind": "rbl", "pos": Vector3(-108.0, 0, -176.2), "rot_y": 270.0},
 		# Vorfahrt gewähren Schulstraße/Oststraße.
-		{"kind": "yield", "pos": Vector3(94.0, 0, -176.2), "rot_y": 270.0},
-		{"kind": "yield", "pos": Vector3(106.0, 0, -183.8), "rot_y": 90.0},
+		# Abknickende Vorfahrtstrasse Ost->Schul-West: VZ 306 auf den
+		# Biegungsarmen (Ost-Sued-Einfahrt + Schul-West), VZ 215 an den
+		# wartenden Armen (Schul-Ost + Ost-Nord).
+		{"kind": "priority", "pos": Vector3(94.0, 0, -176.2), "rot_y": 270.0},
+		{"kind": "vorf215", "pos": Vector3(106.0, 0, -183.8), "rot_y": 90.0},
+		{"kind": "vorf215", "pos": Vector3(96.5, 0, -188.0), "rot_y": 180.0, "arg": "r"},
 		# Einbahnstraße: blaues Pfeilschild am Anfang, Durchfahrt verboten am Ende.
 		{"kind": "one_way", "pos": Vector3(96.0, 0, -116.0), "rot_y": 90.0},
 		{"kind": "one_way", "pos": Vector3(96.0, 0, -124.0), "rot_y": 90.0},
@@ -274,11 +283,15 @@ static func signs() -> Array:
 		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
 		{"kind": "yield", "pos": Vector3(4.4, 0, -57.0), "rot_y": 0.0},
 		# Zeichen 306 Vorfahrtstraße: die Hauptstraße hat vor der Zufahrt
-		# Vorfahrt, die Oststraße vor der Schulstraße.
+		# Vorfahrt; an der abknickenden Vorfahrtstraße bestaetigt es die
+		# Biegungsarme.
 		{"kind": "priority", "pos": Vector3(-10.0, 0, -56.5), "rot_y": 270.0},
 		{"kind": "priority", "pos": Vector3(10.0, 0, -63.5), "rot_y": 90.0},
+		# VZ 306 hinter der Kreuzung (Suedausfahrt, fuer die Biegungs-
+		# Nachfolger Richtung Sueden) und vor der Biegungs-Einfahrt auf
+		# der Oststrasse fuer Nordfahrer.
 		{"kind": "priority", "pos": Vector3(96.5, 0, -174.0), "rot_y": 180.0},
-		{"kind": "priority", "pos": Vector3(103.5, 0, -186.0), "rot_y": 0.0},
+		{"kind": "priority", "pos": Vector3(103.5, 0, -168.0), "rot_y": 0.0},
 		# Zebrastreifen Hauptstraße bei x = -40.
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 270.0},
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 90.0},
