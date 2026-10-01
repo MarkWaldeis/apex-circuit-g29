@@ -119,6 +119,7 @@ var _slalom_to: int = -1      ## ... und von Osten (-1 = noch nicht init)
 var _slalom_armed := {}       ## Pylone -> darf wieder gezaehlt werden
 var _in_circle := false       ## Schueler aktuell auf der Kreisverkehr-Insel
 var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
+var _kreis_hint_cd := 0.0     ## Cooldown Einfahrt-Blinker-Hinweis
 var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
 var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
 var _wt_hinted := false       ## Warndreieck-Hinweis schon gegeben
@@ -1198,7 +1199,7 @@ func _check_tasks(p2: Vector2, spd: float, delta: float) -> void:
 			_turning = false
 
 	_check_lot_tasks(p2, spd, forward, delta)
-	_check_roundabout(p2, spd)
+	_check_roundabout(p2, spd, delta)
 
 
 func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> void:
@@ -2068,7 +2069,8 @@ var _stop_still := {}
 var _jturn := {}
 
 
-func _check_roundabout(p2: Vector2, spd: float) -> void:
+func _check_roundabout(p2: Vector2, spd: float, delta: float) -> void:
+	_kreis_hint_cd = maxf(_kreis_hint_cd - delta, 0.0)
 	var j: Dictionary = CityLayout.junctions()["kreis"]
 	var c: Vector2 = j["center"]
 	var d := p2.distance_to(c)
@@ -2082,9 +2084,14 @@ func _check_roundabout(p2: Vector2, spd: float) -> void:
 				_done("roundabout", "Kreisverkehr durchfahren — beim Rausfahren blinken.")
 				_warn("Beim Verlassen des Kreisverkehrs rechts blinken — sonst denkt der Kreis wartet auf dich.")
 	# Einfahrt in den Kreis gilt als aktiv, sobald man auf der
-	# Kreisbahn steht — die Ringkante liegt bei r=16.
+	# Kreisbahn steht — die Ringkante liegt bei r=16. Beim EINfahren
+	# wird NICHT geblinkt (§ 9a) — nur das Ausfahren braucht Blinker.
 	elif d < 16.5 and spd > 2.0:
 		_roundabout_in = true
+		if _kreis_hint_cd <= 0.0 and (bool(car.get("indicator_left"))
+				or bool(car.get("indicator_right"))):
+			_say("Beim Einfahren in den Kreisverkehr nicht blinken — erst beim Rausfahren rechts.", 1)
+			_kreis_hint_cd = 20.0
 
 
 func _in_rect(p: Vector2, r: Rect2) -> bool:
