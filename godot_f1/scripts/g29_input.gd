@@ -1,5 +1,6 @@
 extends Node
-## Logitech G29 (and compatible) wheel, three pedals and paddle shifters.
+## Logitech G29 (and compatible) wheel, three pedals, paddle shifters and the
+## six-speed H-pattern Driving Force Shifter (Schaltknüppel).
 ##
 ## Everything is learned from the device instead of assumed: the module samples
 ## the rest position of every axis, remembers the value reached when a pedal is
@@ -7,24 +8,40 @@ extends Node
 ## released = +1, released = -1 or even a frozen 0.0, and it is what fixes the
 ## "gas shows up as brake" problem.
 ##
+## The shifter needs no axis work: each gear gate is simply a joystick button
+## (Logitech documents G29 buttons 12-18 for gears 1-6 and reverse). Because
+## drivers and operating systems can renumber them, `begin_shifter_teach()`
+## lets the driver click through the gates once and the learnt map is saved in
+## the profile.
+##
 ## Public API (used by the HUD and the menu/calibration screen):
 ##   signals  connection_changed, calibrated, calibration_step_changed,
-##            shift_up, shift_down
+##            shift_up, shift_down, gear_changed, button_pressed,
+##            shifter_teach_step
 ##   state    device, device_name, connected, steer, throttle, brake, clutch,
 ##            steer_axis, throttle_axis, brake_axis, clutch_axis, invert_*,
 ##            steer_invert, steer_deadzone, cal_phase (0..5), cal_hint,
-##            axes_live, hardware_hint
+##            axes_live, hardware_hint,
+##            shifter_gear (-1 = R, 0 = N, 1..6), shifter_seen, last_button
 ##   methods  begin_calibration(), begin_pedal_calibration(which),
 ##            begin_steer_calibration(), skip_calibration(),
 ##            cancel_calibration(), reset_to_defaults(), save_profile(),
 ##            load_profile(), apply_manual(which, axis, invert),
-##            axis_snapshot(), axis_moved(), has_axis_data(), has_driver_input()
+##            begin_shifter_teach(), cancel_shifter_teach(), reset_shifter_map(),
+##            joy_button(i), axis_snapshot(), axis_moved(), has_axis_data(),
+##            has_driver_input()
 
 signal connection_changed(connected: bool, device_name: String)
 signal calibrated
 signal calibration_step_changed(step: int, hint: String)
 signal shift_up
 signal shift_down
+## Der Schaltknüppel hat einen anderen Gang eingelegt (-1 = R, 0 = N, 1..6).
+signal gear_changed(gear: int)
+## Irgendein Knopf am Lenkrad wurde gedrückt — Diagnose für die Einstellungen.
+signal button_pressed(index: int)
+## Der Anlern-Modus des Schaltknüppels wartet auf das nächste Gatter.
+signal shifter_teach_step(step_index: int, label: String)
 
 const PROFILE_PATH := "user://g29_profile.json"
 const PROFILE_VERSION := 2
@@ -33,6 +50,11 @@ const BUTTONS := 24
 const PADDLE_UP := [4, 10]   ## right paddle
 const PADDLE_DOWN := [5, 9]  ## left paddle
 const DEVICE_HINTS := ["g29", "g920", "g923", "driving force", "trueforce", "logitech"]
+## Logitech-Doku (support.logi.com, Driving Force Shifter): auf dem G29 liegen
+## die Gatter 1-6 auf den DirectX-Knöpfen 12-17, der Rückwärtsgang auf 18.
+## Ein Treiber, der anders zählt, wird über `begin_shifter_teach()` erfasst.
+const SHIFTER_DEFAULT := {"1": 12, "2": 13, "3": 14, "4": 15, "5": 16, "6": 17, "R": 18}
+const SHIFTER_TEACH_ORDER := ["1", "2", "3", "4", "5", "6", "R"]
 
 const REST_TIME := 0.8        ## seconds of rest sampling before calibration
 const DETECT_MIN := 0.25      ## smallest movement that counts at all
@@ -104,6 +126,22 @@ var cal_target: String = "all"
 var axes_live: bool = true
 var hardware_hint: String = ""
 var last_axis_moved: int = -1
+## Zuletzt gedrückter Knopf (Diagnose, damit der Fahrer seine Tasten sieht).
+var last_button: int = -1
+
+## ---- Schaltknüppel --------------------------------------------------------
+## Aktuell eingelegter Gang: -1 = R, 0 = Leerlauf, 1..6. Neutral ist "kein
+## Gatter gedrückt" — so meldet die Hardware es auch.
+var shifter_gear: int = 0
+## True, sobald einmal eine Schalterposition gesehen wurde (Knüppel angeschlossen
+## und benutzt). Das HUD kann damit den Knüppel-Hinweis aus-/einblenden.
+var shifter_seen: bool = false
+## Gangname -> Knopfindex. Wird im Profil gespeichert.
+var shifter_map: Dictionary = SHIFTER_DEFAULT.duplicate()
+## Anlern-Modus aktiv? (Einstellungen -> Schaltknüppel anlernen)
+var shifter_teach: bool = false
+var _teach_index: int = 0
+var _teach_result: Dictionary = {}
 
 ## ---- test hooks -----------------------------------------------------------
 var sim_enabled: bool = false
@@ -141,6 +179,7 @@ var _auto_press: Dictionary = {}   ## pedal -> extreme reached while pressing
 ## corrected rest position); written to disk a few seconds later.
 var _profile_dirty: bool = false
 var _save_timer: float = 0.0
+var _sim_buttons: PackedByteArray = PackedByteArray()
 
 
 ## Ein Diagnose-/Messlauf (z. B. tools/ffb_direction_check.ps1) darf das
@@ -738,6 +777,7 @@ func save_profile() -> void:
 		"brake_press": float(_pedal_press.get("brake", 0.0)),
 		"clutch_rest": float(_pedal_rest.get("clutch", 0.0)),
 		"clutch_press": float(_pedal_press.get("clutch", 0.0)),
+		"shifter_map": shifter_map,
 		"saved_at": Time.get_datetime_string_from_system(),
 	}
 	var f := FileAccess.open(profile_path, FileAccess.WRITE)
@@ -783,6 +823,13 @@ func load_profile() -> bool:
 	for name in ["throttle", "brake", "clutch"]:
 		_auto_rest.erase(name)
 		_auto_press.erase(name)
+	if d.has("shifter_map") and typeof(d["shifter_map"]) == TYPE_DICTIONARY:
+		var sm: Dictionary = d["shifter_map"]
+		# Gatter, die der Treiber beigebracht hat, gelten — der Rest bleibt auf
+		# dem dokumentierten Standard.
+		for gate in SHIFTER_DEFAULT.keys():
+			if sm.has(gate):
+				shifter_map[gate] = int(sm[gate])
 	_profile_loaded = true
 	print("G29 profile loaded: gas=", throttle_axis, " brake=", brake_axis,
 		" clutch=", clutch_axis, " steer=", steer_axis, " invert=", steer_invert)
@@ -836,20 +883,91 @@ func _rescan() -> void:
 			_set_step(1, "Pedale loslassen — Ruhewerte werden gemessen…")
 
 
+## ---- Schaltknüppel --------------------------------------------------------
+
+## Rohzustand eines Knopfes am erkannten Lenkrad (auch Buttons, die weder
+## Paddle noch Schalter sind — Blinker/Handbremse liegen in der Fahrschule
+## darauf). Tests schreiben über `sim_press_button`.
+func joy_button(index: int) -> bool:
+	if index < 0 or index >= BUTTONS:
+		return false
+	return _prev_buttons[index] == 1
+
+
+## Schaltknüppel-Anlernen: das Menü startet es, der Fahrer legt nacheinander
+## die Gänge 1..6 und R ein; jeder neu gedrückte Knopf wird dem Gatter
+## zugeordnet und in `shifter_map` (und damit im Profil) gespeichert.
+func begin_shifter_teach() -> void:
+	shifter_teach = true
+	_teach_index = 0
+	_teach_result = {}
+	shifter_teach_step.emit(0, SHIFTER_TEACH_ORDER[0])
+
+
+func cancel_shifter_teach() -> void:
+	shifter_teach = false
+
+
+func reset_shifter_map() -> void:
+	shifter_map = SHIFTER_DEFAULT.duplicate()
+	save_profile()
+
+
+func _teach_take(index: int) -> void:
+	if _teach_result.values().has(index):
+		return
+	var gate: String = SHIFTER_TEACH_ORDER[_teach_index]
+	_teach_result[gate] = index
+	_teach_index += 1
+	if _teach_index >= SHIFTER_TEACH_ORDER.size():
+		shifter_teach = false
+		shifter_map = _teach_result.duplicate()
+		if not shifter_map.has("R"):
+			shifter_map["R"] = -1
+		save_profile()
+		print("G29 shifter map learned: ", shifter_map)
+		shifter_teach_step.emit(-1, "fertig")
+	else:
+		shifter_teach_step.emit(_teach_index, SHIFTER_TEACH_ORDER[_teach_index])
+
+
 func _read_paddles() -> void:
 	for i in BUTTONS:
 		var down: bool = false
 		if sim_enabled:
-			down = false
+			down = _sim_buttons[i] == 1
 		elif device >= 0:
 			down = Input.is_joy_button_pressed(device, i)
 		var was: bool = _prev_buttons[i] == 1
 		if down and not was:
+			last_button = i
+			button_pressed.emit(i)
 			if i in PADDLE_UP:
 				shift_up.emit()
 			if i in PADDLE_DOWN:
 				shift_down.emit()
+			if shifter_teach:
+				_teach_take(i)
 		_prev_buttons[i] = 1 if down else 0
+	_read_shifter()
+
+
+func _read_shifter() -> void:
+	var found := 0
+	for gate in ["1", "2", "3", "4", "5", "6"]:
+		var idx: int = int(shifter_map.get(gate, -1))
+		if idx >= 0 and idx < BUTTONS and _prev_buttons[idx] == 1:
+			found = int(gate)
+			break
+	if found == 0:
+		var ridx: int = int(shifter_map.get("R", -1))
+		if ridx >= 0 and ridx < BUTTONS and _prev_buttons[ridx] == 1:
+			found = -1
+	if found != 0:
+		shifter_seen = true
+	if found != shifter_gear:
+		shifter_gear = found
+		gear_changed.emit(shifter_gear)
 
 
 ## ---- test helpers ---------------------------------------------------------
@@ -857,6 +975,7 @@ func _read_paddles() -> void:
 func enable_sim() -> void:
 	sim_enabled = true
 	sim_axes.resize(AXES)
+	_sim_buttons.resize(BUTTONS)
 	for i in AXES:
 		sim_axes[i] = 0.0
 	device = 0
@@ -867,3 +986,9 @@ func enable_sim() -> void:
 func sim_set(axis: int, value: float) -> void:
 	if axis >= 0 and axis < AXES:
 		sim_axes[axis] = value
+
+
+func sim_press_button(index: int, down: bool = true) -> void:
+	## Test hook: simuliert einen Knopfdruck (Schaltknüppel, Paddles).
+	if index >= 0 and index < _sim_buttons.size():
+		_sim_buttons[index] = 1 if down else 0

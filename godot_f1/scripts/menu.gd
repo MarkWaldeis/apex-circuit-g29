@@ -225,6 +225,8 @@ func _build_start() -> Control:
 
 	var drive := _make_button(col, "Fahren", true, 460, 34)
 	drive.pressed.connect(resume_game)
+	var worlds := _make_button(col, "Weltwahl", false, 460)
+	worlds.pressed.connect(_open_world_picker)
 	var settings := _make_button(col, "Einstellungen", false, 460)
 	settings.pressed.connect(_open_settings.bind(Screen.START))
 	var quit := _make_button(col, "Beenden", false, 460)
@@ -267,6 +269,8 @@ func _build_pause() -> Control:
 	restart.pressed.connect(_restart_race)
 	var to_start := _make_button(col, "Hauptmenü", false, 420, 28)
 	to_start.pressed.connect(_back_to_start)
+	var worlds := _make_button(col, "Weltwahl", false, 420, 28)
+	worlds.pressed.connect(_open_world_picker)
 	var quit := _make_button(col, "Beenden", false, 420, 28)
 	quit.pressed.connect(_quit_game)
 
@@ -349,6 +353,8 @@ func _build_settings() -> Control:
 	steer.pressed.connect(_start_calibration.bind("steer"))
 	var all := _make_button(right, "Alles kalibrieren", false, 0, 26)
 	all.pressed.connect(_start_calibration.bind("all"))
+	var shifter := _make_button(right, "Schalthebel (H) einlernen", false, 0, 26)
+	shifter.pressed.connect(_start_shifter_teach)
 	_swap_button = _make_button(right, "Gas ⟷ Bremse tauschen", false, 0, 26)
 	_swap_button.pressed.connect(_swap_pedals)
 	var defaults := _make_button(right, "Kalibrierung zurücksetzen", false, 0, 26)
@@ -770,6 +776,8 @@ func _connect_g29() -> void:
 		g29.connect("calibration_step_changed", _on_calibration_step)
 	if g29.has_signal("connection_changed") and not g29.is_connected("connection_changed", _on_connection_changed):
 		g29.connect("connection_changed", _on_connection_changed)
+	if g29.has_signal("shifter_teach_step") and not g29.is_connected("shifter_teach_step", _on_shifter_teach_step):
+		g29.connect("shifter_teach_step", _on_shifter_teach_step)
 
 
 func _g29_get(prop: String, fallback):
@@ -833,6 +841,23 @@ func _on_connection_changed(_connected: bool, _device_name: String) -> void:
 	pass
 
 
+## Schalthebel-Anlernen (Fahrschule): der Fahrer legt der Reihe nach die
+## Gänge ein, jeder gedrückte Knopf wird dem Gatter zugeordnet. Das Profil
+## speichert die Zuordnung, sodass sie einmalig nötig ist.
+func _start_shifter_teach() -> void:
+	if _g29_call("begin_shifter_teach"):
+		_note(_settings_note, "Schalthebel einlernen: Gang 1 einlegen …", 30.0)
+	else:
+		_note(_settings_note, "Eingabe-Modul ohne Schalthebel-Erkennung.", 2.6)
+
+
+func _on_shifter_teach_step(_step: int, label: String) -> void:
+	if label == "fertig":
+		_note(_settings_note, "Schalthebel eingelernt — Zuordnung gespeichert.", 4.0)
+	else:
+		_note(_settings_note, "Schalthebel einlernen: Gang %s einlegen …" % label, 30.0)
+
+
 func _on_calibration_step(_step: int, hint: String) -> void:
 	if _cal_hint_label != null and hint != "":
 		_cal_hint_label.text = hint
@@ -882,6 +907,16 @@ func _open_settings(return_to: int) -> void:
 
 func _back_to_start() -> void:
 	_show_screen(Screen.START)
+
+
+## Zur Weltwahl: das Boot-Menü entscheidet zwischen F1-Strecke und
+## Fahrschule. Szene wechseln geht nur mit unpausiertem Baum.
+func _open_world_picker() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	tree.paused = false
+	tree.change_scene_to_file("res://scenes/boot.tscn")
 
 
 func _quit_game() -> void:
