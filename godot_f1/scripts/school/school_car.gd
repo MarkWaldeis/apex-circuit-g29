@@ -60,6 +60,7 @@ var _wheels: Array = []                   ## {vis, wheel, front, rear}
 var _wheel_roll: float = 0.0
 var _prev_vel := Vector3.ZERO
 var _prev_vel_y: float = 0.0
+var _prev_speed: float = 0.0
 var _vert_ready: bool = false
 var _vertical_g: float = 1.0
 var _lateral_g: float = 0.0
@@ -83,6 +84,9 @@ func setup(wheel_input, surface_model, start: Transform3D) -> void:
 	center_of_mass = Vector3(0.0, -0.06, 0.12)   ## Motor vorne: leicht kopflastig
 	continuous_cd = true
 	can_sleep = false
+	contact_monitor = true
+	max_contacts_reported = 4
+	body_entered.connect(_on_body_hit)
 	_build_chassis()
 	var mesh: Dictionary = CarMesh.build()
 	add_child(mesh["root"])
@@ -112,6 +116,16 @@ func setup(wheel_input, surface_model, start: Transform3D) -> void:
 			g29.gear_changed.connect(_on_wheel_gear)
 		if g29.has_signal("button_pressed") and not g29.button_pressed.is_connected(_on_wheel_button):
 			g29.button_pressed.connect(_on_wheel_button)
+
+
+func _on_body_hit(_body: Node) -> void:
+	# Blechschaden zählt erst bei echtem Tempo — ein leichtes Antippen
+	# des Bordsteins bleibt rumble, wird aber nicht bewertet.
+	var kmh := maxf(linear_velocity.length(), _prev_speed) * 3.6
+	if kmh > 12.0:
+		_last_impact_v = kmh
+		if feedback:
+			feedback.poke("bump", 0.8)
 
 
 func _build_chassis() -> void:
@@ -361,6 +375,7 @@ func _physics_process(delta: float) -> void:
 	_prev_vel_y = linear_velocity.y
 	_vertical_g += (clampf(raw_vert_g, -1.0, 4.0) - _vertical_g) * clampf(delta / 0.09, 0.0, 1.0)
 	_prev_vel = linear_velocity
+	_prev_speed = linear_velocity.length()
 
 	# Antrieb: H-Getriebe mit Kupplung.
 	var gb: Dictionary = gearbox.update(delta, {

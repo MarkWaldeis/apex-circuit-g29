@@ -55,6 +55,7 @@ var _hill_ref := 0.0           ## tiefster Punkt seit Beginn der Bergfahrt
 var _hill_armed: bool = false
 var _grinds_seen: int = 0
 var _stalls_seen: int = 0
+var _impact_seen: float = 0.0
 var _offroad_t: float = 0.0
 var _left_lane_t: float = 0.0
 var _hb_t: float = 0.0
@@ -299,6 +300,13 @@ func _check_stalls_and_shifts() -> void:
 		_say("Gang knirscht — die Kupplung muss ganz durchgetreten sein, bevor du schaltest.", 2)
 	if float(car.get("clutch_heat")) > 2.0:
 		_warn("Kupplung zu lange schleifen lassen — ein bisschen Schleifpunkt ist gut, eine halbe Minute ruiniert sie.")
+	var imp: float = float(car.get("_last_impact_v"))
+	if imp > _impact_seen:
+		_impact_seen = imp
+		if imp > 45.0:
+			_say("Crash mit %.0f km/h — so eine Prüfungsfahrt ist vorbei, zum Glück nur Übung." % imp, 2)
+		else:
+			_say("Blechschaden (%.0f km/h) — Abstand und Geschwindigkeit anpassen." % imp, 2)
 
 
 func _check_junctions(p2: Vector2, spd: float) -> void:
