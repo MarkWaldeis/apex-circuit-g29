@@ -14,6 +14,7 @@ var saw_gear2: bool = false
 var lowest_y: float = INF
 var samples: int = 0
 var failed: int = 0
+var _done: bool = false
 
 
 func _initialize() -> void:
@@ -40,6 +41,8 @@ func _boot() -> void:
 
 
 func _on_phys() -> void:
+	if _done:
+		return
 	frames += 1
 	var player = world.get("player") if world else null
 	if frames == 5:
@@ -74,6 +77,7 @@ func _on_phys() -> void:
 
 
 func _finish() -> void:
+	_done = true
 	var player = world.get("player") if world else null
 	_check(samples > 0, "car_was_simulated", "samples=%d" % samples)
 	if player and got_pos:
@@ -89,3 +93,4 @@ func _finish() -> void:
 		quit(1)
 	else:
 		print("SCHOOL_DRIVE PASS")
+		quit(0)

@@ -22,6 +22,7 @@ var _status: Label
 var _ind_l: Label
 var _ind_r: Label
 var _stall_warn: Label
+var _mirror_cam: Camera3D
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
@@ -155,6 +156,26 @@ func _build() -> void:
 	UI.label(_status, 20, UI.GOOD)
 	limitrow.add_child(_status)
 
+	# Innenspiegel: kleiner Viewport mit eigener Kamera, die hinter das Auto
+	# schaut — unverzichtbar für Einparken und Rückwärtsfahren.
+	var mirror := PanelContainer.new()
+	mirror.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 6))
+	mirror.custom_minimum_size = Vector2(368, 148)
+	top.add_child(mirror)
+	var sub_wrap := SubViewportContainer.new()
+	sub_wrap.stretch = true
+	sub_wrap.custom_minimum_size = Vector2(360, 140)
+	mirror.add_child(sub_wrap)
+	var vp := SubViewport.new()
+	vp.size = Vector2i(360, 140)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	sub_wrap.add_child(vp)
+	_mirror_cam = Camera3D.new()
+	_mirror_cam.fov = 64.0
+	_mirror_cam.far = 400.0
+	vp.add_child(_mirror_cam)
+	_mirror_cam.current = true
+
 	_coach = Label.new()
 	UI.label(_coach, 24, UI.TEXT)
 	_coach.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -243,3 +264,10 @@ func _process(delta: float) -> void:
 	# Übungsliste.
 	if instructor and instructor.has_method("task_board"):
 		_tasks.text = instructor.task_board()
+
+	# Innenspiegel folgt dem Auto: gleiche Basis, leicht nach unten geneigt —
+	# die Kamera blickt entlang -Z von der Heckkante aus hinter das Auto,
+	# sodass die Karosserie nur den unteren Bildrand füllt.
+	if _mirror_cam:
+		_mirror_cam.global_transform = car.global_transform * Transform3D(
+			Basis(Vector3.RIGHT, -0.07), Vector3(0.0, 1.75, -1.10))
