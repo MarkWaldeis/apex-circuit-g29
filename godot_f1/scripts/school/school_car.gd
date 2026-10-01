@@ -461,7 +461,9 @@ func _physics_process(delta: float) -> void:
 		# mass * Faktor. Mit 0,00006 landet der Delta-v bei ~1,1 m/s.
 		apply_central_impulse(global_transform.basis.z * float(gb["judder"]) * mass * 0.00006 * 60.0 * delta)
 	# Kupplung schleifen lassen = Hitze (Fahrlehrerhinweis, kein Schaden).
-	if clutch_pedal > 0.25 and clutch_pedal < 0.85 and absf(forward_vel) < 4.0 and throttle_in > 0.2:
+	# Hitzefenster endet am BITE_OUT (0.72): darueber ist die Kupplung
+	# sauber getrennt und schleift nichts mehr.
+	if clutch_pedal > 0.25 and clutch_pedal < 0.72 and absf(forward_vel) < 4.0 and throttle_in > 0.2:
 		clutch_heat = minf(clutch_heat + delta * 0.25, 3.0)
 	else:
 		clutch_heat = maxf(clutch_heat - delta, 0.0)
@@ -538,6 +540,11 @@ func _physics_process(delta: float) -> void:
 	_engine_sound(throttle_in)
 
 	if global_position.y < VOID_Y:
+		_reset()
+	# Wer ueber die Stadtkarte hinausfaehrt, wird auf den naechsten
+	# Reset-Punkt zurueckgesetzt (sonst rollt man ins Leere).
+	var bb := CityLayout.bounds()
+	if not bb.has_point(Vector2(global_position.x, global_position.z)):
 		_reset()
 
 
@@ -687,7 +694,18 @@ func _reset() -> void:
 	reset_count += 1
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
-	global_transform = spawn_transform
+	# Naechster festgelegter Reset-Punkt statt immer zum Start — nach
+	# einem Malheur auf dem Ring steht man nicht wieder am Platz.
+	var spot := spawn_transform
+	var bd := 1e9
+	for s in CityLayout.reset_spots():
+		var d := Vector2(global_position.x, global_position.z).distance_to(s["pos"])
+		if d < bd:
+			bd = d
+			var p: Vector2 = s["pos"]
+			spot = Transform3D(Basis(Vector3.UP, deg_to_rad(float(s["rot"]))),
+				Vector3(p.x, 0.4, p.y))
+	global_transform = spot
 	engine_force = 0.0
 	brake = BRAKE_MAX * 0.2
 	steering = 0.0

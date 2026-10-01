@@ -71,8 +71,8 @@ static func junctions() -> Dictionary:
 			"kind": "rbl",
 			"center": Vector2(-100, -180),
 			"arms": [
-				{"pos": Vector2(-100, -174), "enter": Vector2(0, 1)},
-				{"pos": Vector2(-100, -186), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-100, -174), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-100, -186), "enter": Vector2(0, 1)},
 				{"pos": Vector2(-94, -180), "enter": Vector2(-1, 0)},
 				{"pos": Vector2(-106, -180), "enter": Vector2(1, 0)},
 			],
@@ -96,8 +96,8 @@ static func junctions() -> Dictionary:
 			"arms": [
 				{"pos": Vector2(94, -180), "enter": Vector2(1, 0), "yield": true},
 				{"pos": Vector2(106, -180), "enter": Vector2(-1, 0), "yield": true},
-				{"pos": Vector2(100, -174), "enter": Vector2(0, 1)},
-				{"pos": Vector2(100, -186), "enter": Vector2(0, -1)},
+				{"pos": Vector2(100, -174), "enter": Vector2(0, -1)},
+				{"pos": Vector2(100, -186), "enter": Vector2(0, 1)},
 			],
 		},
 		# T-Knoten ohne Licht/Schild: Rechts vor links gilt. Sie werden
@@ -107,16 +107,16 @@ static func junctions() -> Dictionary:
 			"kind": "rbl",
 			"center": Vector2(100, -120),
 			"arms": [
-				{"pos": Vector2(100, -114), "enter": Vector2(0, 1)},
-				{"pos": Vector2(100, -126), "enter": Vector2(0, -1)},
+				{"pos": Vector2(100, -114), "enter": Vector2(0, -1)},
+				{"pos": Vector2(100, -126), "enter": Vector2(0, 1)},
 			],
 		},
 		"einbahn_west": {
 			"kind": "rbl",
 			"center": Vector2(-100, -120),
 			"arms": [
-				{"pos": Vector2(-100, -114), "enter": Vector2(0, 1)},
-				{"pos": Vector2(-100, -126), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-100, -114), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-100, -126), "enter": Vector2(0, 1)},
 				{"pos": Vector2(-94, -120), "enter": Vector2(-1, 0)},
 			],
 		},
@@ -183,8 +183,8 @@ static func signs() -> Array:
 		# Rechts vor links: Schild 102 an allen vier Zufahrten des Knotens
 		# Schulstraße/Weststraße (jeweils rechter Fahrbahnrand, Sichtseite
 		# zum ankommenden Verkehr).
-		{"kind": "rbl", "pos": Vector3(-96.5, 0, -183.8), "rot_y": 0.0},
-		{"kind": "rbl", "pos": Vector3(-103.5, 0, -171.5), "rot_y": 180.0},
+		{"kind": "rbl", "pos": Vector3(-96.5, 0, -183.8), "rot_y": 180.0},
+		{"kind": "rbl", "pos": Vector3(-103.5, 0, -171.5), "rot_y": 0.0},
 		{"kind": "rbl", "pos": Vector3(-94.0, 0, -183.8), "rot_y": 90.0},
 		{"kind": "rbl", "pos": Vector3(-108.0, 0, -176.2), "rot_y": 270.0},
 		# Vorfahrt gewähren Schulstraße/Oststraße.
@@ -231,6 +231,9 @@ static func signs() -> Array:
 		# Zebrastreifen Hauptstraße bei x = -40.
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 270.0},
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 90.0},
+		# Zebrastreifen Weststraße bei z = -150.
+		{"kind": "zebra", "pos": Vector3(-96.3, 0, -143.0), "rot_y": 0.0},
+		{"kind": "zebra", "pos": Vector3(-103.7, 0, -157.0), "rot_y": 180.0},
 		# Parkplatz-Schild am Übungsplatz-Eingang.
 		{"kind": "parking", "pos": Vector3(4.0, 0, 36.0), "rot_y": 180.0},
 		{"kind": "board", "arg": "Fahrschul-Übungsplatz", "pos": Vector3(-4.0, 0, 36.0), "rot_y": 180.0},
@@ -383,6 +386,16 @@ static func cyclist() -> Array:
 
 
 ## Fußgängerzonen usw.: wo der Fahrlehrer "Neben der Fahrbahn" meldet.
+## Anschlusspunkte ohne Vorfahrtsregelung: Enden, die ineinander
+## uebergehen (Kurve/Einmuendung). Nur fuer Bordstein-Luecken und
+## Asphaltpatches — keine Haltelinie, kein Fahrlehrer-Check.
+static func corners() -> Array:
+	return [
+		{"center": Vector2(240, -60), "r": 12.0},
+		{"center": Vector2(216, -20), "r": 12.0},
+	]
+
+
 ## bounds des Spielfelds (über die Karte hinaus = aus der Welt fallen).
 static func bounds() -> Rect2:
 	return Rect2(-260, -260, 520, 420)

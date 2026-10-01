@@ -118,14 +118,14 @@ func _physics_process(delta: float) -> void:
 			alert()
 		return
 	# Alarmfahrt: dem Wegpunkten folgen, beim Schueler warten.
-	var target := RUN[_i]
+	var target: Vector2 = RUN[_i]
 	var p2 := Vector2(global_position.x, global_position.z)
-	var to := target - p2
+	var to: Vector2 = target - p2
 	var dist := to.length()
 	var wish := CRUISE
 	if player:
 		var dp := global_position.distance_to(player.global_position)
-		var pv := player.linear_velocity.length()
+		var pv: float = player.linear_velocity.length()
 		# Bleibt der Schueler auf der Spur stehen, wartet der Wagen auf 7 m.
 		if dp < 11.0 and pv < 1.0:
 			wish = 0.0
@@ -140,7 +140,7 @@ func _physics_process(delta: float) -> void:
 		target = RUN[_i]
 		to = target - p2
 	if to.length() > 0.1:
-		var dir := to.normalized()
+		var dir: Vector2 = to.normalized()
 		global_position += Vector3(dir.x, 0.0, dir.y) * speed_ms * delta
 		var yaw := atan2(dir.x, dir.y)
 		rotation.y = lerp_angle(rotation.y, yaw, minf(delta * 5.0, 1.0))
@@ -162,7 +162,7 @@ func _siren(delta: float) -> void:
 		_siren_t = 0.0
 		_siren_hi = not _siren_hi
 	var freq := 720.0 if _siren_hi else 520.0
-	var frames := _siren_gen.get_frames_available()
+	var frames: int = _siren_gen.get_frames_available()
 	for _n in range(frames):
 		_siren_phase += freq / 22050.0
 		var s := sin(_siren_phase * TAU) * 0.22

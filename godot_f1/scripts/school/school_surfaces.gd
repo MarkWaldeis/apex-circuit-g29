@@ -18,6 +18,7 @@ var _roads: Array = []
 var _lot_rect: Dictionary = {}
 var _island := {}
 var _junction_centers: Array = []
+var _last_limit := -1         ## letztes Strassenlimit (Kreuzungsbereich)
 var wet := false               ## Nässe: Grip lässt überall nach
 
 
@@ -47,6 +48,11 @@ func sample(pos: Vector3, _line_hint: int = -1) -> Dictionary:
 		var d2: Vector2 = Vector2(pos.x, pos.z) - c
 		if d2.length() < r:
 			return _wet_out(ISLAND.duplicate())
+		# Fahrting um die Insel ist Asphalt (kein roads()-Segment).
+		if d2.length() < 16.5:
+			var ring := ASPHALT.duplicate()
+			ring["name"] = "Kreisverkehr"
+			return _wet_out(ring)
 	# Übungsplatz-Fläche.
 	var lr: Dictionary = _lot_rect
 	if pos.x >= lr.get("x0", 0.0) and pos.x <= lr.get("x1", 0.0) \
@@ -92,6 +98,13 @@ func limit_at(pos: Vector3) -> int:
 	var ba: Dictionary = CityLayout.baustelle()
 	if Rect2(ba["zone"]).has_point(Vector2(pos.x, pos.z)):
 		return int(ba["limit"])
+	# Mitten im Kreuzungsbereich gilt kein eigenes Limit — das Limit
+	# der Strasse behalten, von der man kommt (sonst gewinnt eine
+	# zufaellige Straße aus der Liste).
+	var p2q := Vector2(pos.x, pos.z)
+	for c in _junction_centers:
+		if p2q.distance_to(c) < 14.0:
+			return _last_limit
 	var best := 999.0
 	var limit := -1
 	for road in _roads:
@@ -100,6 +113,7 @@ func limit_at(pos: Vector3) -> int:
 		if d <= w and d < best:
 			best = d
 			limit = int(road["limit"])
+	_last_limit = limit
 	return limit
 
 

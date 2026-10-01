@@ -79,8 +79,15 @@ func _physics_process(delta: float) -> void:
 				var wp := Vector2(w.global_position.x, w.global_position.z)
 				if wp.distance_to(_road) > 13.0:
 					continue
+				# Starre Karosserie: RigidBody -> linear_velocity,
+				# KI-AnimatableBody -> speed_ms; ohne Wert gilt "steht".
+				var wspd := 0.0
 				var wv = w.get("linear_velocity")
-				if wv == null or Vector2(wv.x, wv.z).length() > 0.6:
+				if wv != null:
+					wspd = Vector2(wv.x, wv.z).length()
+				elif w.get("speed_ms") != null:
+					wspd = float(w.get("speed_ms"))
+				if wspd > 0.6:
 					blocked = true
 			if blocked:
 				_wait = 0.7

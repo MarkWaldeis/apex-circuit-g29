@@ -149,7 +149,8 @@ static func build() -> Dictionary:
 		torus.ring_segments = 24
 		tyre.mesh = torus
 		tyre.material_override = _mat(TYRE, 0.95, 0.0)
-		tyre.rotation_degrees = Vector3(0, 90, 0)
+		# Torusachse ist Y: um Z drehen, damit der Reifen im Rad steht.
+		tyre.rotation_degrees = Vector3(0, 0, 90)
 		w.add_child(tyre)
 		var rim := MeshInstance3D.new()
 		var cyl := CylinderMesh.new()

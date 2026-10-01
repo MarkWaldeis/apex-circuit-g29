@@ -34,7 +34,7 @@ static func route_b() -> Array:
 		{"pos": Vector2(-101.8, -150.0), "text": "Links in die Weststraße abbiegen."},
 		{"pos": Vector2(-101.8, -70.0), "text": "Links zurück in die Hauptstraße."},
 		{"pos": Vector2(-40, -58.2), "text": "Zurück in Richtung Zentrum — Achtung Zebrastreifen."},
-		{"pos": Vector2(14, -58.2), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(14, -58.2), "text": "Gleich rechts in die Zufahrt zum Übungsplatz."},
 		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
 	]
 
@@ -45,17 +45,17 @@ static func route_c() -> Array:
 	return [
 		{"pos": Vector2(0, -55.0), "text": "Biegen Sie rechts in die Hauptstraße ab."},
 		{"pos": Vector2(60, -58.2), "text": "Gleich Stoppschild — zum Stillstand kommen, dann vorsichtig weiter."},
-		{"pos": Vector2(98.2, -95.0), "text": "Rechts in die Oststraße abbiegen."},
-		{"pos": Vector2(98.2, -117.0), "text": "Gleich rechts in die Einbahnstraße."},
+		{"pos": Vector2(101.8, -95.0), "text": "Links in die Oststraße abbiegen."},
+		{"pos": Vector2(101.8, -117.0), "text": "Gleich links in die Einbahnstraße."},
 		{"pos": Vector2(60, -121.4), "text": "Einbahnstraße — nur in diese Richtung erlaubt."},
 		{"pos": Vector2(-94, -120.0), "text": "Am Ende links in die Weststraße — rechts vor links beachten."},
 		{"pos": Vector2(-101.8, -150.0), "text": "Der Weststraße nach Süden folgen."},
 		{"pos": Vector2(-101.8, -172.0), "text": "Gleich links in die Schulstraße — rechts vor links."},
 		{"pos": Vector2(60, -178.2), "text": "Der Schulstraße folgen — Tempo 30."},
-		{"pos": Vector2(98.2, -140.0), "text": "Links in die Oststraße — rechts vor links."},
-		{"pos": Vector2(98.2, -80.0), "text": "Weiter zur Hauptstraße."},
+		{"pos": Vector2(101.8, -140.0), "text": "Links in die Oststraße — rechts vor links."},
+		{"pos": Vector2(101.8, -80.0), "text": "Weiter zur Hauptstraße."},
 		{"pos": Vector2(40, -61.8), "text": "Links in die Hauptstraße abbiegen."},
-		{"pos": Vector2(-10, -61.8), "text": "Gleich rechts in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(-10, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
 		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
 	]
 
@@ -66,9 +66,9 @@ static func default_route() -> Array:
 		{"pos": Vector2(-85, -61.8), "text": "Geradeaus über die Ampelkreuzung — Achtung Zebrastreifen."},
 		{"pos": Vector2(-98.2, -110.0), "text": "Rechts in die Weststraße abbiegen."},
 		{"pos": Vector2(-98.2, -170.0), "text": "An der nächsten Kreuzung rechts — rechts vor links beachten."},
-		{"pos": Vector2(80, -178.2), "text": "Der Schulstraße folgen (Tempo 30), dann rechts in die Oststraße."},
-		{"pos": Vector2(98.2, -140.0), "text": "Geradeaus über die Kreuzungen weiter."},
-		{"pos": Vector2(98.2, -80.0), "text": "Rechts in die Hauptstraße abbiegen."},
+		{"pos": Vector2(80, -178.2), "text": "Der Schulstraße folgen (Tempo 30), dann links in die Oststraße."},
+		{"pos": Vector2(101.8, -140.0), "text": "Geradeaus über die Kreuzungen weiter."},
+		{"pos": Vector2(101.8, -80.0), "text": "Links in die Hauptstraße abbiegen."},
 		{"pos": Vector2(30, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
 		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
 	]

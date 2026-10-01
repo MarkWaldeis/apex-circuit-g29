@@ -188,9 +188,10 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	var torque_nm: float = 0.0
 	if motor_on and not stalled:
 		torque_nm = torque_at(rpm) * throttle
-		# Schleifpunkt-Kriechen: bei halb getretener Kupplung gibt der Motor
-		# auch ohne Gas etwas Moment weiter (Anfahren im Schritttempo).
-		if engage > 0.05 and engage < 1.0 and throttle < 0.12 and gear > 0:
+		# Leerlauf-Kriechen: mit eingekuppeltem 1./2. Gang schiebt der Motor
+		# im Leerlauf weiter — auch ganz ohne Gas (Anfahren nur mit
+		# Kupplung, Kriechen im Stau). Gebremst zum Stand wuergt er ab.
+		if engage > 0.05 and throttle < 0.12 and gear > 0 and absf(speed) < 2.5:
 			torque_nm = maxf(torque_nm, 60.0 * engage)
 		# Automatik-Kriechen wie ein Wandler: im Stand mit Gang rollt das Auto
 		# langsam los, ohne dass man Gas gibt.

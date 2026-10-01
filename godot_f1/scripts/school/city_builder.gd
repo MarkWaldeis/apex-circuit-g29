@@ -187,6 +187,14 @@ func _kerb_gaps(a: Vector2, dir: Vector2, length: float) -> Array:
 			"roundabout": r = 18.0
 		if nearest.distance_to(c) < r:
 			gaps.append(Vector2(tproj - r, tproj + r))
+	# Anschlusspunkte (Kurven/Einmuendungen) bekommen ebenfalls eine Luecke.
+	for cor in CityLayout.corners():
+		var cc: Vector2 = cor["center"]
+		var tcor: float = clampf((cc - a).dot(dir), 0.0, length)
+		var ncor: Vector2 = a + dir * tcor
+		var rcor: float = float(cor["r"])
+		if ncor.distance_to(cc) < rcor:
+			gaps.append(Vector2(tcor - rcor, tcor + rcor))
 	gaps.sort_custom(func(p, q): return p.x < q.x)
 	return gaps
 
@@ -202,6 +210,15 @@ func _roads(world: Node3D) -> StaticBody3D:
 
 ## Auf den Kreuzungen liegt ein glattes Asphaltfeld ohne Markierungen.
 func _junction_patches(world: Node3D) -> void:
+	for cor in CityLayout.corners():
+		var cc: Vector2 = cor["center"]
+		var cvis := MeshInstance3D.new()
+		var cbox := BoxMesh.new()
+		cbox.size = Vector3(14.0, 0.02, 14.0)
+		cvis.mesh = cbox
+		cvis.material_override = _mat(ASPHALT_C)
+		cvis.position = Vector3(cc.x, 0.012, cc.y)
+		world.add_child(cvis)
 	for j in CityLayout.junctions().values():
 		var c: Vector2 = j["center"]
 		var size := 15.0

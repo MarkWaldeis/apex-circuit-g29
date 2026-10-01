@@ -477,9 +477,9 @@ func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:
 			_say("Seitenabstand zum Radfahrer — mindestens 1,5 m, sonst warten.", 1)
 			_cyc_cd = 8.0
 	# Ueberhol-Aufgabe: Radfahrer mit >= 1,8 m Abstand passieren.
-	var fwd := -car.global_transform.basis.z
-	var rel := cyclist.global_position - car.global_position
-	var ahead := fwd.dot(rel) > 0.0
+	var fwd: Vector3 = -car.global_transform.basis.z
+	var rel: Vector3 = cyclist.global_position - car.global_position
+	var ahead: bool = fwd.dot(rel) > 0.0
 	if not _cyc_armed and ahead and d < 25.0 and spd > 3.0:
 		_cyc_armed = true
 		_cyc_min = d
@@ -513,7 +513,7 @@ func _check_stalls_and_shifts() -> void:
 		if hit == "Hutchen":
 			_warn("Pylone umgefahren — im Slalom zählt jedes Hütchen.")
 		elif hit in ["Pedestrian", "Cyclist", "Fussgaenger", "Radfahrer"]:
-			_say("Person angefahren! In der Fahrschule: sofort anhalten. Schulblick, Zebrastreifen und Radfahrer-Abstand sind Pflicht — das ist der schwerste Fehler überhaupt.", 2)
+			_say("Person angefahren! In der Fahrschule: sofort anhalten. Schulterblick, Zebrastreifen und Radfahrer-Abstand sind Pflicht — das ist der schwerste Fehler überhaupt.", 2)
 		elif imp > 45.0:
 			_say("Crash mit %.0f km/h — so eine Prüfungsfahrt ist vorbei, zum Glück nur Übung." % imp, 2)
 		else:
@@ -585,7 +585,10 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 		_gyaw0 = yaw_now
 		_gyaw_ok = false
 	elif absf(dgy) > 0.45:
-		if spd > 4.0 and not _gyaw_ok \
+		# Im Kreisverkehr dreht sich die Karosserie staendig — das
+		# ist kein Abbiegevorgang im Sinne der Blinkerpflicht.
+		var on_ring := p2.distance_to(Vector2(200.0, -60.0)) < 17.0
+		if spd > 4.0 and not _gyaw_ok and not on_ring \
 				and String(surfaces.sample(car.global_position).get("surface", "asphalt")) != "grass":
 			_warn("Abbiegen ohne Blinker — rechtzeitig blinken.")
 		_gyaw0 = yaw_now
@@ -661,8 +664,10 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 	match kind:
 		"light":
 			var phase: String = lights.phase_of(String(arm["arm"])) if lights else "green"
-			if phase in ["red", "amber", "red_amber"]:
+			if phase == "red":
 				_say("Rotlicht! Bei Rot hält man an der Haltelinie — das ist ein Verstoß.", 2)
+			elif phase == "amber":
+				_say("Gelb gefahren — wer noch gefahrlos anhalten kann, hält. Fürs nächste Mal: früher vom Gas.", 1)
 			else:
 				_done("light", "Ampelkreuzung bei Grün — gut!")
 		"stop":
@@ -746,8 +751,12 @@ func _check_tasks(p2: Vector2, spd: float, delta: float) -> void:
 
 func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> void:
 	var lot: Dictionary = CityLayout.lot()
-	# Schritttempo-Gebot: wer ueber den Platz ballert, wird abgemahnt.
-	if spd * 3.6 > 30.0:
+	# Schritttempo-Gebot: wer ueber den Platz ballert, wird abgemahnt —
+	# nur innerhalb des Platzes (sonst gilt das Tempolimit der Strasse).
+	var lr: Dictionary = lot["rect"]
+	var on_lot := p2.x >= float(lr["x0"]) and p2.x <= float(lr["x1"]) \
+		and p2.y >= float(lr["z0"]) and p2.y <= float(lr["z1"])
+	if on_lot and spd * 3.6 > 30.0:
 		_warn("Auf dem Übungsplatz gilt Schritttempo — deutlich langsamer fahren.")
 	# Gefahrbremsung: auf der Bremsbahn von >25 km/h auf 0 mit Vollbremsung.
 	var bl: Dictionary = lot["brake_lane"]

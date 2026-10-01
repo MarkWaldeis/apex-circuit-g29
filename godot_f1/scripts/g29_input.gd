@@ -46,7 +46,7 @@ signal shifter_teach_step(step_index: int, label: String)
 const PROFILE_PATH := "user://g29_profile.json"
 const PROFILE_VERSION := 2
 const AXES := 12
-const BUTTONS := 24
+const BUTTONS := 32
 const PADDLE_UP := [4, 10]   ## right paddle
 const PADDLE_DOWN := [5, 9]  ## left paddle
 const DEVICE_HINTS := ["g29", "g920", "g923", "driving force", "trueforce", "logitech"]

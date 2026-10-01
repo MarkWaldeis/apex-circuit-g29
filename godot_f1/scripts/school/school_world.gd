@@ -49,6 +49,9 @@ func _ready() -> void:
 	surfaces.setup()
 	var built: Dictionary = CityBuilder.new().build(self)
 	_lights_data = built.get("lights", {})
+	# Der Radfahrer bekommt den Ampel-Controller — er haelt bei Rot.
+	if built.get("cyclist") != null:
+		built["cyclist"].lights = lights
 
 	ffb_settings = FfbSettings.new()
 	ffb_settings.load_profile()

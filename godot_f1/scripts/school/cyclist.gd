@@ -7,13 +7,15 @@ extends Node3D
 const SPEED := 5.5          ## Radtempo in m/s
 
 var waypoints: Array = []   ## Vector2-Rundkurs (rechte Fahrbahnseite)
+var lights                  ## junction_lights.gd-Instanz (Ampelachtung)
 var _wp: int = 0
 var _wheel_a: Node3D
 var _wheel_b: Node3D
 
 
-func setup(path: Array) -> void:
+func setup(path: Array, p_lights = null) -> void:
 	waypoints = path
+	lights = p_lights
 	if waypoints.size() > 0:
 		var p: Vector2 = waypoints[0]
 		global_position = Vector3(p.x, 0.0, p.y)
@@ -49,7 +51,17 @@ func _physics_process(delta: float) -> void:
 	if dist < 0.4:
 		_wp = (_wp + 1) % waypoints.size()
 		return
-	var step := to.normalized() * SPEED * delta
+	var spd := SPEED
+	# Ampelkreuzung (-100,-60) auf der Hauptstrasse respektieren: vor
+	# der Haltelinie ~7,6 m vor dem Zentrum bei Rot/Amber anhalten.
+	if lights != null and lights.phase_of("a") != "green":
+		var dirx := to.normalized().x
+		if absf(dirx) > 0.5:
+			var stopx := -100.0 - 7.6 * dirx
+			var s := (stopx - global_position.x) * dirx
+			if s > -1.0 and s < 12.0:
+				spd = SPEED * clampf(s / 6.0, 0.0, 1.0) if s > 0.0 else 0.0
+	var step := to.normalized() * spd * delta
 	global_position += Vector3(step.x, 0.0, step.y)
 	# Blickrichtung entlang der Fahrt: +Z-Modellachse zeigt vorn.
 	rotation.y = atan2(step.x, step.y)

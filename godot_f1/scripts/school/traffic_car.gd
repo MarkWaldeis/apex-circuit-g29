@@ -33,9 +33,10 @@ const ROUTE_B := [
 	Vector2(204.5, -51.0),    # 3 Ring Suedviertel Richtung Ost
 	Vector2(211.0, -58.0),    # 4 Ring Ost
 	Vector2(217.0, -60.0),    # 5 Ausfahrt Ostarm
-	Vector2(232.0, -58.0),    # 6 Ostarm -> Ring Ost
-	Vector2(222.0, -36.0),    # 7 Diagonale Ring Ost -> Suedstrasse
-	Vector2(213.0, -26.0),    # 8 Suedstrasse zurueck
+	Vector2(230.0, -58.4),    # 6 Ostarm Ausfahrt
+	Vector2(240.0, -60.0),    # 7 Ecke Ostarm -> Ring Ost Diagonale
+	Vector2(224.0, -32.0),    # 8 Diagonale Ring Ost -> Suedstrasse
+	Vector2(213.0, -26.0),    # 9 Suedstrasse zurueck
 ]
 const CORNERS_B := [2, 5, 7]
 const CRUISE := 8.3                    ## ~30 km/h
@@ -123,7 +124,7 @@ func _physics_process(delta: float) -> void:
 	speed_ms = move_toward(speed_ms, v, accel * delta)
 	# Bremslichter: an, sobald die KI bremst oder (fuer Regeln) steht.
 	if not _brake_lamps.is_empty():
-		var on := v < speed_ms + 0.01 or speed_ms < 0.05
+		var on := v < speed_ms - 0.05 or speed_ms < 0.05
 		_brake_lamps[0].material_override.emission_energy_multiplier = 3.0 if on else 0.05
 	pos += dir * speed_ms * delta
 	# Eine einzige Transform-Zuweisung: global_position lesen liefert im
@@ -162,12 +163,17 @@ func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
 			v = minf(v, 0.0)
 	# Fussgaenger auf der Querung: Vorrang, wie es die StVO verlangt.
 	for pd in pedestrians:
-		if not is_instance_valid(pd) or not bool(pd.call("on_road")):
+		if not is_instance_valid(pd):
 			continue
 		var pp := Vector2(pd.global_position.x, pd.global_position.z)
 		var rel2 := pp - pos
 		var ahead2 := rel2.dot(dir)
-		if ahead2 > 0.0 and ahead2 < 13.0 and absf(rel2.dot(Vector2(-dir.y, dir.x))) < 3.4:
+		var side2 := absf(rel2.dot(Vector2(-dir.y, dir.x)))
+		# Auf der Fahrbahn querend: bis 13 m voraus halten.
+		if bool(pd.call("on_road")) and ahead2 > 0.0 and ahead2 < 13.0 and side2 < 3.4:
+			v = 0.0
+		# Am Bordstein wartend: rechtzeitig bremsen — er darf losgehen.
+		elif not bool(pd.get("_walking")) and ahead2 > 0.0 and ahead2 < 16.0 and side2 < 5.5:
 			v = 0.0
 	v = _yield_check(pos, dir, v)
 	return v
@@ -237,12 +243,11 @@ func _student_has_priority(j: Dictionary, p2: Vector2, p_spd: float, dir: Vector
 		var on_yield_arm: bool = bool(ai_arm.get("yield", false)) and ai_best < 7.0 and dir.normalized().dot(e.normalized()) > 0.6
 		return on_yield_arm
 	if String(j["kind"]) == "stop":
-		# Nach dem eigenen Halt: quert der Schueler schon im Knoten oder
-		# kommt er auf der freien Achse (Oststrasse) heran, wartet die KI.
-		if p2.distance_to(c) < 9.0:
-			return true
-		var e2: Vector2 = p_arm["enter"]
-		return absf(e2.y) > 0.5 and p_spd > 2.0
+		# Vorfahrt hat der Schueler erst, wenn er die Haltelinie
+		# ueberfahren hat und im Knoten quert (Linien liegen 7,6 m
+		# vor dem Zentrum) — ein korrekt wartender Schueler soll
+		# den Vorfahrtsverkehr nicht aufhalten.
+		return p2.distance_to(c) < 5.8
 	if String(j["kind"]) == "roundabout":
 		# Wer IM Ring faehrt, hat Vorfahrt vor der Einfahrt.
 		return p2.distance_to(c) < 13.5
