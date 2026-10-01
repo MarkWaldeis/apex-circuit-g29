@@ -61,6 +61,7 @@ var last_spot: String = ""             ## zuletzt angesteuerte Uebungsstation
 var _spot_i: int = -1
 var clutch_heat: float = 0.0              ## Lern-Feedback: zu lange schleifen
 var brake_strength: float = 0.0           ## aktueller Fußbremse-Input 0..1
+var throttle_level: float = 0.0           ## aktueller Gas-Input 0..1 (fuer Fahrlehrer)
 
 var _wheels: Array = []                   ## {vis, wheel, front, rear}
 var _wheel_roll: float = 0.0
@@ -392,6 +393,7 @@ func _physics_process(delta: float) -> void:
 		var g := int(get_meta("script_gear"))
 		if g != gearbox.gear:
 			gearbox.request_gear(g, 1.0, forward_vel)
+	throttle_level = throttle_in
 
 	if Input.is_action_just_pressed("reset_car"):
 		_reset()

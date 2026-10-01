@@ -267,7 +267,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_left_turn(p2, spd, delta)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
-	_check_stalls_and_shifts()
+	_check_stalls_and_shifts(delta)
 	_check_tasks(p2, spd, delta)
 	_check_alaram_exercise(p2, spd, delta)
 	# Warnblinker im fliessenden Verkehr ist kein zulaessiges Blinken.
@@ -758,7 +758,7 @@ func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:
 			# zu dicht kam oben schon die Ermahnung
 
 
-func _check_stalls_and_shifts() -> void:
+func _check_stalls_and_shifts(delta: float) -> void:
 	var gb = car.get("gearbox")
 	if gb == null:
 		return
@@ -784,6 +784,33 @@ func _check_stalls_and_shifts() -> void:
 			_say("Crash mit %.0f km/h — so eine Prüfungsfahrt ist vorbei, zum Glück nur Übung." % imp, 2)
 		else:
 			_say("Blechschaden (%.0f km/h) — Abstand und Geschwindigkeit anpassen." % imp, 2)
+
+	# Drehzahl-Coaching: zu hoch heisst hochschalten, zu tief runter —
+	# nur mit angetriebenem Gang und bei Tempo, damit Leerlauf-Rollen
+	# und Schleifpunkt-Anfahren keinen Fehlalarm geben.
+	_rpm_cd = maxf(_rpm_cd - delta, 0.0)
+	var gear := int(car.get("gear"))
+	var rpm := float(car.get("rpm"))
+	if gear > 0 and rpm > 3400.0 and linear_speed() > 8.0:
+		_rpm_high_t += delta
+		if _rpm_high_t > 9.0 and _rpm_cd <= 0.0:
+			_say("Drehzahl hoch — der Motor dreht sich tot: rechtzeitig hochschalten, das spart Sprit.", 1)
+			_rpm_cd = 45.0
+			_rpm_high_t = 0.0
+	elif gear >= 3 and rpm < 1100.0 and float(car.get("throttle_level")) > 0.4:
+		_rpm_low_t += delta
+		if _rpm_low_t > 3.0 and _rpm_cd <= 0.0:
+			_say("Gang zu hoch — bei so wenig Drehzahl besser runterschalten, sonst ruckelt er.", 1)
+			_rpm_cd = 45.0
+			_rpm_low_t = 0.0
+	else:
+		_rpm_high_t = 0.0
+		_rpm_low_t = 0.0
+
+
+var _rpm_high_t := 0.0
+var _rpm_low_t := 0.0
+var _rpm_cd := 0.0
 
 
 func _check_junctions(p2: Vector2, spd: float) -> void:
