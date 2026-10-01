@@ -52,6 +52,7 @@ var _rpm_fill: ColorRect
 var _rpm_bar: Control
 var _limit_label: Label
 var _clutch_bar: ColorRect
+var _fuel: Label
 var _clutch_mark: ColorRect
 var _coach: Label
 var _tasks: Label
@@ -186,6 +187,11 @@ func _build() -> void:
 	_clutch_mark.anchor_left = 0.72
 	_clutch_mark.anchor_right = 0.72
 	clbar.add_child(_clutch_mark)
+	# Tankuhr: Prozentanzeige, unter ~20 % wird sie rot.
+	_fuel = Label.new()
+	_fuel.text = "Tank 100 %"
+	UI.label(_fuel, 14, UI.TEXT_DIM)
+	clrow.add_child(_fuel)
 
 	# --- Oben Mitte: Fahrlehrer + Tempolimit ---------------------------------
 	var top := VBoxContainer.new()
@@ -388,6 +394,12 @@ func _process(delta: float) -> void:
 	if car.has_method("_clutch_pedal"):
 		clutch_v = car._clutch_pedal()
 	_clutch_bar.anchor_right = clutch_v
+
+	# Tankuhr: unter ~20 % rot markieren.
+	var f: float = float(car.get("fuel"))
+	_fuel.text = "Tank %d %%" % int(round(f))
+	_fuel.add_theme_color_override("font_color",
+		Color(1.0, 0.35, 0.3) if f < 20.0 else UI.TEXT_DIM)
 
 	# Blinker-Pfeile blinken.
 	_blink_t += delta

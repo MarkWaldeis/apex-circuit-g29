@@ -45,6 +45,7 @@ var rpm: float = 800.0
 var last_steer: float = 0.0
 var stalled: bool = false
 var motor_on: bool = true
+var fuel: float = 100.0       ## Tankstand in Prozent — bei 0 geht der Motor aus
 var handbrake_on: bool = false
 var indicator_left: bool = false
 var indicator_right: bool = false
@@ -473,6 +474,12 @@ func _physics_process(delta: float) -> void:
 		_stall_note_t = 3.0
 	stalled = now_stalled
 	motor_on = bool(gb["motor_on"])
+	# Kraftstoff: Grundverbrauch + Last-Anteil; leer -> kein Schub,
+	# Motor wirkt aus (Tanke an der Oststrasse fuellt wieder auf).
+	fuel = maxf(fuel - (0.02 + throttle_in * 1.4) * delta * 0.05, 0.0)
+	if fuel <= 0.0:
+		engine_force = 0.0
+		motor_on = false
 	if stalled:
 		# Tastatur hat kein Kupplungspedal: Anlasser dreht von allein.
 		var crank_clutch: float = clutch_pedal
@@ -736,6 +743,7 @@ func _reset() -> void:
 	gear = 0
 	stalled = false
 	motor_on = true
+	fuel = maxf(fuel, 5.0)      ## Reset laesst eine Notreserve uebrig
 	clutch_heat = 0.0
 	indicator_left = false
 	indicator_right = false

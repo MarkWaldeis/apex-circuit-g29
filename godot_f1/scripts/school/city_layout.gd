@@ -321,6 +321,8 @@ static func signs() -> Array:
 		{"kind": "orts311", "pos": Vector3(236.0, 0, -56.2), "rot_y": 270.0},
 		{"kind": "orts310", "pos": Vector3(196.4, 0, -234.0), "rot_y": 180.0},
 		{"kind": "orts311", "pos": Vector3(203.6, 0, -222.0), "rot_y": 0.0},
+		# Tankstellen-Hinweis an der Oststraße.
+		{"kind": "board", "arg": "Tankstelle", "pos": Vector3(103.5, 0, -46.0), "rot_y": 0.0},
 	]
 
 
@@ -452,6 +454,17 @@ static func pannen_zone() -> Rect2:
 	return Rect2(Vector2(-80.0, -183.8), Vector2(60.0, 6.0))
 
 
+## Tankstelle an der Oststraße (ostseitig, suedlich der Hauptstraße):
+## wer langsam reinrollt und steht, tankt auf — die Tankuhr (HUD) sinkt
+## beim Fahren, bei 0 geht der Motor aus.
+static func tankstelle() -> Dictionary:
+	return {
+		"zone": Rect2(Vector2(103.0, -42.0), Vector2(10.0, 14.0)),
+		"pump": Vector2(108.0, -34.0),
+		"shop": Vector2(109.0, -30.0),
+	}
+
+
 ## Rueckwaerts-Ausparken: Parkbucht am oestlichen Fahrbahnrand der
 ## Oststraße (suedlich der Einbahnstraße). Die KI-Route A faehrt dort
 ## nordwaerts vorbei — der Schueler lernt, beim Herausfahren aus der
@@ -539,4 +552,5 @@ static func exercise_spots() -> Array:
 		{"name": "Kreisverkehr", "pos": Vector2(172, -60), "dir": Vector2(1, 0)},
 		{"name": "Einbahnstraße", "pos": Vector2(101.8, -95), "dir": Vector2(0, -1)},
 		{"name": "Bahnübergang", "pos": Vector2(240, -168), "dir": Vector2(0, 1)},
+		{"name": "Tankstelle", "pos": Vector2(101.8, -36), "dir": Vector2(1, 0)},
 	]

@@ -53,6 +53,7 @@ const TASKS := [
 	{"id": "radler_ab", "name": "Radfahrer beim Rechtsabbiegen durchgelassen (§9)"},
 	{"id": "abstand", "name": "Sicherheitsabstand gehalten (halber Tacho)"},
 	{"id": "witterung", "name": "Geschwindigkeit an Nässe/Glätte angepasst"},
+	{"id": "tanken", "name": "Tankstelle angefahren und aufgetankt"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -1433,6 +1434,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_einfadeln(p2, spd)
 	_check_distance(p2, spd, delta)
 	_check_weather_speed(spd, delta)
+	_check_fuel()
 	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -1880,6 +1882,23 @@ func _check_weather_speed(spd: float, delta: float) -> void:
 			_wx_m = -99999.0   # einmal belohnen
 			_done("witterung",
 				"Tempo der Witterung angepasst — §3 sitzt.")
+
+
+## Tankuhr: unter ~18 % Hinweis auf die Tankstelle an der Oststrasse,
+## bei 0 der Hinweis, dass nur noch die Reserve/Teleport hilft.
+var _fuel_lvl := 0   ## 0 = ok, 1 = knapp gemeldet, 2 = leer gemeldet
+func _check_fuel() -> void:
+	var f: float = float(car.get("fuel"))
+	if f > 20.0:
+		_fuel_lvl = 0
+		return
+	if f <= 0.5:
+		if _fuel_lvl < 2:
+			_fuel_lvl = 2
+			_warn("Tank leer — der Motor geht aus! Zurücksetzen lässt eine Notreserve — dann zur Tankstelle an der Oststraße.")
+	elif _fuel_lvl < 1:
+		_fuel_lvl = 1
+		_say("Der Tank wird knapp — die Tankstelle liegt an der Oststraße, südlich der Hauptstraße.", 0)
 
 
 func _check_rescue(spd: float) -> void:

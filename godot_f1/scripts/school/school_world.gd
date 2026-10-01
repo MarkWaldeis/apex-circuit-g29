@@ -153,6 +153,7 @@ func _ready() -> void:
 	rail.center = CityLayout.rail_crossing()["center"]
 	add_child(rail)
 	_make_rain()
+	_build_tankstelle()
 
 	# Ball zwischen parkenden Autos auf der Kreisverkehr-Nordstrasse.
 	var ball := StreetBall.new()
@@ -253,6 +254,7 @@ func _physics_process(delta: float) -> void:
 	_onc_trainer_tick(delta)
 	_ped_trainer_tick(delta)
 	_cyc_trainer_tick(delta)
+	_tank_tick(delta)
 	if _rain and player:
 		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
@@ -754,6 +756,56 @@ func _build_warndreieck() -> Node3D:
 		mi.rotation_degrees.z = spec[2]
 		w.add_child(mi)
 	return w
+
+
+## Tankstelle an der Oststrasse: Shop-Gebaeude, Dach auf zwei Saeulen,
+## zwei Zapfsaeulen. Wer in der Zone steht, wird aufgetankt.
+func _build_tankstelle() -> void:
+	var t: Dictionary = CityLayout.tankstelle()
+	var root := Node3D.new()
+	root.name = "Tankstelle"
+	var white := StandardMaterial3D.new()
+	white.albedo_color = Color(0.92, 0.92, 0.90)
+	var red := StandardMaterial3D.new()
+	red.albedo_color = Color(0.85, 0.12, 0.10)
+	var grey := StandardMaterial3D.new()
+	grey.albedo_color = Color(0.4, 0.4, 0.42)
+	for spec in [
+		# [Größe, Position, Material]
+		[Vector3(6.0, 3.2, 4.0), Vector3(float(t["shop"].x), 1.6,
+			float(t["shop"].y)), white],                 # Verkaufsraum
+		[Vector3(9.0, 0.4, 7.0), Vector3(float(t["pump"].x), 4.4,
+			float(t["pump"].y)), red],                  # Tankdach
+		[Vector3(0.25, 4.2, 0.25), Vector3(float(t["pump"].x) - 3.5, 2.1,
+			float(t["pump"].y) - 2.5), grey],           # Dachsäule W
+		[Vector3(0.25, 4.2, 0.25), Vector3(float(t["pump"].x) + 3.5, 2.1,
+			float(t["pump"].y) + 2.5), grey],           # Dachsäule O
+		[Vector3(0.7, 1.3, 0.5), Vector3(float(t["pump"].x), 0.65,
+			float(t["pump"].y) - 1.5), red],            # Zapfsäule 1
+		[Vector3(0.7, 1.3, 0.5), Vector3(float(t["pump"].x), 0.65,
+			float(t["pump"].y) + 1.5), red],            # Zapfsäule 2
+	]:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = spec[0]
+		mi.mesh = bm
+		mi.material_override = spec[2]
+		mi.position = spec[1]
+		root.add_child(mi)
+	add_child(root)
+
+
+## Wer in der Tankstellen-Zone steht, tankt auf (~30 %/s).
+func _tank_tick(delta: float) -> void:
+	if player == null:
+		return
+	var z: Rect2 = CityLayout.tankstelle()["zone"]
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	if z.has_point(p2) and player.linear_velocity.length() < 0.5 \
+			and player.fuel < 100.0:
+		player.fuel = minf(player.fuel + delta * 30.0, 100.0)
+		if player.fuel >= 100.0 and instructor != null:
+			instructor._done("tanken", "Vollgetankt — Tankstelle angefahren, richtig gestanden, weiter geht's!")
 
 
 func _update_exam_beam() -> void:
