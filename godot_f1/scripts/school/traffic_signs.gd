@@ -343,6 +343,27 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var txt := _text(arg, 0.0038, Color(0.05, 0.05, 0.06))
 			txt.position.z = 0.03
 			face.add_child(txt)
+		"orts310", "orts311":
+			## Ortsanfang (310)/Ortsende (311): gelbe Tafel mit schwarzem
+			## Rand und Ortsname; 311 mit diagonalen roten Balken.
+			var back := _bar(Vector3(0.9, 0.55, 0.03), yellow)
+			face.add_child(back)
+			var rim := _bar(Vector3(0.96, 0.61, 0.015), black)
+			rim.position.z = -0.012
+			face.add_child(rim)
+			var top := _bar(Vector3(0.86, 0.10, 0.01), black)
+			top.position = Vector3(0.0, 0.20, 0.02)
+			face.add_child(top)
+			var txt := _text("FAHRSCHULSTADT", 0.0022,
+				Color(0.05, 0.05, 0.06))
+			txt.position.z = 0.03
+			face.add_child(txt)
+			if kind == "orts311":
+				for i in range(3):
+					var bar := _bar(Vector3(0.06, 0.62, 0.012), red)
+					bar.rotation_degrees = Vector3(0, 0, -38)
+					bar.position = Vector3(-0.22 + i * 0.22, 0.0, 0.025)
+					face.add_child(bar)
 		_:
 			var back := _disc(0.3, 32, grey)
 			face.add_child(back)

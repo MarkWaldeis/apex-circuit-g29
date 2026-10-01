@@ -312,6 +312,15 @@ static func signs() -> Array:
 		# Gegenverkehr (VZ 308); die freie Seite darf zuerst (VZ 208).
 		{"kind": "engst_wait", "pos": Vector3(203.6, 0, -100.0), "rot_y": 0.0},
 		{"kind": "engst_prio", "pos": Vector3(196.4, 0, -119.0), "rot_y": 180.0},
+		# Ortsschilder (VZ 310/311) an den drei Stadteinfahrten:
+		# Hauptstraße West/Ost und Kreisverkehr-Nordstraße. 310 zeigt der
+		# einfahrenden, 311 der ausfahrenden Richtung (Rücken an Rücken).
+		{"kind": "orts310", "pos": Vector3(-228.0, 0, -56.2), "rot_y": 270.0},
+		{"kind": "orts311", "pos": Vector3(-228.0, 0, -63.8), "rot_y": 90.0},
+		{"kind": "orts310", "pos": Vector3(236.0, 0, -63.8), "rot_y": 90.0},
+		{"kind": "orts311", "pos": Vector3(236.0, 0, -56.2), "rot_y": 270.0},
+		{"kind": "orts310", "pos": Vector3(196.4, 0, -234.0), "rot_y": 180.0},
+		{"kind": "orts311", "pos": Vector3(203.6, 0, -222.0), "rot_y": 0.0},
 	]
 
 

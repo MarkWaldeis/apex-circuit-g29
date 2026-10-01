@@ -411,6 +411,8 @@ const SIGN_LESSON := {
 	"wild": "Wildwechsel — Tiere springen hier unvermittelt auf die Straße; vom Gas, bremsbereit, nicht ausweichen.",
 	"spiel": "Verkehrsberuhigter Bereich — Schritttempo Pflicht, Kinder duerfen die ganze Strasse bespielen.",
 	"parking": "Parkplatz — hier werden die Einpark-Übungen gemacht.",
+	"orts310": "Ortsanfang — ab dem Ortsschild gilt geschlossene Ortschaft: Tempo 50.",
+	"orts311": "Ortsende — Ortschaft zu Ende: wieder 100 erlaubt (ausserorts).",
 }
 
 func _check_signs(p2: Vector2) -> void:
