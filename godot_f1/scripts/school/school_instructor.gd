@@ -1471,6 +1471,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_fuel()
 	_check_right_lane(p2, spd, delta)
 	_check_blindspot(spd, delta)
+	_check_free_junction(p2, spd, delta)
 	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -2028,6 +2029,52 @@ func _check_blindspot(spd: float, delta: float) -> void:
 		if ahead2 > -4.0 and ahead2 < 5.0 and lat2 > 1.4 and lat2 < 4.2:
 			_say("Radfahrer im toten Winkel — Schulterblick vor dem Abbiegen oder Ausscheren!", 1)
 			_bs_cd = 15.0
+
+
+## Kreuzung freihalten (§11): bei stockendem Verkehr darf man nicht
+## mitten in der Kreuzung zum Stehen kommen. Wer links blinkt und auf
+## eine Luecke im Gegenverkehr wartet, steht erlaubt — ebenso wer
+## einem Fussgaenger Platz macht.
+var _fj_t := 0.0
+var _fj_cd := 0.0
+func _check_free_junction(p2: Vector2, spd: float, delta: float) -> void:
+	_fj_cd = maxf(_fj_cd - delta, 0.0)
+	if spd > 1.0 or bool(car.get("indicator_left")):
+		_fj_t = 0.0
+		return
+	var in_junction := false
+	for j in CityLayout.junctions().values():
+		var c: Vector2 = j["center"]
+		var r: float = 16.0 if String(j["kind"]) == "roundabout" else 11.0
+		if p2.distance_to(c) < r:
+			in_junction = true
+			break
+	if not in_junction:
+		_fj_t = 0.0
+		return
+	# Fahrzeug dicht voraus = Stau-Schlange — hinter dem Vordermann
+	# darf man natuerlich warten, das ist kein Verstoss.
+	var fwd := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	for tc in traffic:
+		if not is_instance_valid(tc):
+			continue
+		var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
+		if rel.dot(fwd) > 0.0 and rel.length() < 8.0:
+			_fj_t = 0.0
+			return
+	# Fussgaenger voraus? Dann ist Warten Pflicht, kein Verstoss.
+	for pd in pedestrians:
+		if is_instance_valid(pd) and pd.on_road() \
+				and p2.distance_to(Vector2(pd.global_position.x,
+					pd.global_position.z)) < 10.0:
+			_fj_t = 0.0
+			return
+	_fj_t += delta
+	if _fj_t > 3.0 and _fj_cd <= 0.0:
+		_say("Kreuzung freihalten! Bei Rückstau erst hinter der Haltelinie warten — mitten drin zu stehen blockiert alle.", 1)
+		_fj_cd = 30.0
+		_fj_t = 0.0
 
 
 func _check_rescue(spd: float) -> void:
