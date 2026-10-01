@@ -61,6 +61,7 @@ var _idle_rev_t: float = 0.0
 var _rev_t: float = 0.0
 var _coach_cd: float = 0.0
 var _signs_seen := {}
+var _door_cd: float = 0.0
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -130,6 +131,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_wrong_way(pos, delta)
 	_check_offroad(pos, delta)
 	_check_habits(spd, delta)
+	_check_door_zone(p2, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
 	if _coach_cd <= 0.0 and _coach_t_upcoming():
@@ -247,6 +249,23 @@ func _check_habits(spd: float, delta: float) -> void:
 			_rev_t = -8.0
 	else:
 		_rev_t = minf(_rev_t + delta, 0.0)
+
+
+# Belegte Parkbuchten: an parkenden Autos vorbeifahren heißt Tür-Zone —
+# schnell und dicht vorbei ist ein Verstoß.
+func _check_door_zone(p2: Vector2, spd: float, delta: float) -> void:
+	_door_cd = maxf(_door_cd - delta, 0.0)
+	if _door_cd > 0.0 or spd < 4.0 or spd > 20.0:
+		return
+	var lot: Dictionary = CityLayout.lot()
+	for bay in lot["parallel_bays"] + lot["perp_bays"]:
+		if not bool(bay.get("occupied", false)):
+			continue
+		var bp: Vector2 = bay["pos"]
+		if p2.distance_to(bp) < 3.0:
+			_say("Sicherheitsabstand! An einem parkenden Auto vorbei — eine Tür kann aufgehen.", 1)
+			_door_cd = 9.0
+			return
 
 
 func _check_stalls_and_shifts() -> void:
