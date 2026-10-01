@@ -21,6 +21,7 @@ var _dir_i: int = 1          ## 1 = von _from nach _to, -1 = zurueck
 var _wait: float = 3.0
 var _walking := false
 var watchers: Array = []     ## Fahrzeuge, vor denen gewartet wird
+var oneshot := false         ## Trainer-Ped: nach einer Querung verschwinden
 
 
 func setup_crossing(from: Vector2, to: Vector2, road: Vector2, half: float) -> void:
@@ -61,6 +62,9 @@ func _physics_process(delta: float) -> void:
 		if d.length() <= step:
 			global_position = Vector3(target.x, 0.0, target.y)
 			_walking = false
+			if oneshot:
+				queue_free()
+				return
 			_dir_i *= -1
 			_wait = randf_range(WAIT_MIN, WAIT_MAX)
 		else:

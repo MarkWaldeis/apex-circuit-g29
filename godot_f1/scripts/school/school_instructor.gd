@@ -49,6 +49,7 @@ const TASKS := [
 	{"id": "rueck", "name": "Rückwärts im Pylonen-Korridor"},
 	{"id": "fernlicht", "name": "Fernlicht richtig benutzt (Taste F)"},
 	{"id": "fussampel", "name": "Fußgängerampel: bei Rot angehalten"},
+	{"id": "fussg_ab", "name": "Fußgänger beim Abbiegen durchgelassen (§9)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -65,6 +66,7 @@ var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
 var school_bus               ## school_bus.gd-Instanz (§20-Halt am Bus)
 var ped_crossing             ## ped_crossing.gd — Fussgaengerampel Hauptstrasse
+var trainer_peds: Array = [] ## Abbiege-Trainer-Fussgaenger (school_world)
 var _ped_waiting := {}         ## Fussgaenger-id -> Schueler laesst passieren
 var _ww_t: float = 0.0         ## Zeit gegen die Einbahnrichtung (Rate-Limit)
 var _speed_over: float = 0.0
@@ -1415,6 +1417,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_nebel(spd, delta)
 	_check_fernlicht(p2, spd, delta)
 	_check_fussampel(p2, spd, delta)
+	_check_ped_turn(p2, spd, delta)
 	_check_baustelle(p2, spd)
 	_check_spiel(p2, spd)
 	_check_schleif(spd, delta)
@@ -1680,6 +1683,36 @@ func _check_fussampel(p2: Vector2, spd: float, delta: float) -> void:
 			_done("fussampel", "Fußgängerampel: bei Rot gehalten, bei Grün weiter — genau so.")
 	elif absf(dx) > 20.0:
 		_fa_waited = false
+
+
+## §9 Abs. 3: wer abbiegt, muss Fussgaenger auf der Zielstrasse
+## durchlassen. Die Welt legt Trainer-Peds quer ueber die Einbiege-
+## strasse; wer sie bei Fahrt anfaehrt, wird verwarnt — wer wartet,
+## bis der Weg frei ist, erledigt die Aufgabe.
+var _ptw_cd := 0.0
+var _ptw_waited := false
+func _check_ped_turn(p2: Vector2, spd: float, delta: float) -> void:
+	_ptw_cd = maxf(_ptw_cd - delta, 0.0)
+	var ped: Node3D = null
+	var best := 20.0
+	for pd in trainer_peds:
+		if not is_instance_valid(pd):
+			continue
+		var d := p2.distance_to(Vector2(pd.global_position.x,
+			pd.global_position.z))
+		if d < best:
+			best = d
+			ped = pd
+	if ped != null and bool(ped.call("on_road")):
+		if spd < 0.6:
+			_ptw_waited = true
+		elif spd > 1.2 and _ptw_cd <= 0.0:
+			_warn("Fußgänger auf der Zielstraße — beim Abbiegen durchlassen!")
+			_ptw_cd = 8.0
+			return
+	if _ptw_waited and (ped == null or not bool(ped.call("on_road"))):
+		_ptw_waited = false
+		_done("fussg_ab", "Fußgänger beim Abbiegen durchgelassen — so sieht §9 aus.")
 
 
 func _check_einfadeln(p2: Vector2, spd: float) -> void:

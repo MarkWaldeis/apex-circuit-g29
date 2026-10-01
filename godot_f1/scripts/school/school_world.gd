@@ -198,6 +198,7 @@ func _ready() -> void:
 	instructor.rescue = rescue
 	instructor.door_car = door_car
 	instructor.ped_crossing = _pedx
+	instructor.trainer_peds = _trainer_peds
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.cam = cam
@@ -247,6 +248,7 @@ func _physics_process(delta: float) -> void:
 			light.set_phase(lights.phase_of(String(item["arm"])))
 	_rbl_trainer_tick(delta)
 	_onc_trainer_tick(delta)
+	_ped_trainer_tick(delta)
 	if _rain and player:
 		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
@@ -271,6 +273,8 @@ var _rbl_t: float = 20.0       ## Cooldown fuer den RvL-Trainer
 var _onc_t: float = 30.0       ## Cooldown fuer den Gegenverkehr-Trainer
 var _peds: Array = []          ## Fussgaenger+Reh — KI-Spawn braucht sie zum Bremsen
 var _pedx                    ## Fussgaengerampel (ped_crossing.gd)
+var _trainer_peds: Array = []  ## Abbiege-Trainer-Fussgaenger (oneshot)
+var _pt_t := 20.0            ## Cooldown Abbiege-Fussgaenger-Trainer
 
 
 ## Zufalls-RvL-Training: naehert sich der Schueler der RvL-Kreuzung
@@ -417,6 +421,73 @@ func _onc_trainer_tick(delta: float) -> void:
 	tc.pedestrians = _peds
 	tc.night = _night
 	instructor.traffic.append(tc)
+
+
+## Fussgaenger beim Abbiegen (§9 Abs. 3): blinkt der Schueler an einer
+## Kreuzung, quert gelegentlich ein Fussgaenger die Zielstrasse — der
+## Schueler muss ihn durchlassen. Der Ped wartet am Bordstein, bis der
+## Schueler bremst, quert einmal und verschwindet (oneshot).
+func _ped_trainer_tick(delta: float) -> void:
+	_pt_t = maxf(_pt_t - delta, 0.0)
+	if _pt_t > 0.0 or player == null or instructor == null \
+			or instructor.exam.active:
+		return
+	var il := bool(player.get("indicator_left"))
+	var ir := bool(player.get("indicator_right"))
+	if not il and not ir:
+		return
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	var s_fwd := Vector2(player.global_transform.basis.z.x,
+		player.global_transform.basis.z.z).normalized()
+	if s_fwd == Vector2.ZERO or player.linear_velocity.length() > 5.0:
+		return
+	var best_j: Dictionary = {}
+	var bd := 1e9
+	for j in CityLayout.junctions().values():
+		if String(j["kind"]) == "roundabout" or j["arms"].size() < 3:
+			continue
+		var c: Vector2 = j["center"]
+		var d: float = p2.distance_to(c)
+		if d < 7.0 or d > 26.0:
+			continue
+		if (c - p2).normalized().dot(s_fwd) < 0.35:
+			continue
+		if d < bd:
+			bd = d
+			best_j = j
+	if best_j.is_empty():
+		return
+	var s_arm: Dictionary = {}
+	var sd := 1e9
+	for arm in best_j["arms"]:
+		var d: float = Vector2(arm["pos"]).distance_to(p2)
+		if d < sd:
+			sd = d
+			s_arm = arm
+	if s_arm.is_empty():
+		return
+	var e: Vector2 = Vector2(s_arm["enter"]).normalized()
+	# Ausfahrtsrichtung des Blinkers (links/rechts von enter); der Ped
+	# quert die Strasse, in die der Schueler einbiegen will.
+	var exit_d := Vector2(e.y, -e.x) if il else Vector2(-e.y, e.x)
+	var pt: Vector2 = best_j["center"] + exit_d * 10.0
+	for pd in _trainer_peds:
+		if is_instance_valid(pd) and Vector2(pd.global_position.x,
+				pd.global_position.z).distance_to(pt) < 16.0:
+			_pt_t = 12.0
+			return
+	var pd := Pedestrian.new()
+	pd.name = "PedTurnTrainer"
+	add_child(pd)
+	pd.setup_crossing(pt + e * 5.5, pt - e * 5.5, pt, 4.0)
+	pd.oneshot = true
+	pd._wait = 0.8
+	pd.watchers = [player] + instructor.traffic
+	_trainer_peds.append(pd)
+	for tc in instructor.traffic:
+		if is_instance_valid(tc):
+			tc.pedestrians.append(pd)
+	_pt_t = 45.0
 
 
 ## Regen-Partikelstrahl ueber dem Spieler (Naesse-Taste M).
