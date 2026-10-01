@@ -39,6 +39,37 @@ const ROUTE_B := [
 	Vector2(213.0, -26.0),    # 9 Suedstrasse zurueck
 ]
 const CORNERS_B := [2, 5, 7]
+
+## Route C: ueber den Kreis zur Kreis-Nordstrasse, dort durch die
+## Engstelle zwischen den parkenden Autos, wenden und zurueck.
+## Lerneffekt: wer auf der blockierten Seite ankommt (Nordwaerts),
+## muss dem Gegenverkehr in der Luecke Vorrang lassen (VZ 208).
+const ROUTE_C := [
+	Vector2(207.0, -28.0),    # 0  Suedstrasse Richtung Kreis
+	Vector2(200.0, -40.0),    # 1  Suedarm-Einfahrt
+	Vector2(199.0, -50.0),    # 2  Ring-Einfahrt Sued (Vorfahrt wartet)
+	Vector2(204.5, -51.0),    # 3  Ring Suedviertel
+	Vector2(211.0, -58.0),    # 4  Ring Ostviertel
+	Vector2(215.5, -64.0),    # 5
+	Vector2(212.0, -70.0),    # 6  Ring Nordostviertel
+	Vector2(205.0, -74.5),    # 7
+	Vector2(200.0, -80.0),    # 8  Nordarm Ausfahrt
+	Vector2(201.6, -95.0),    # 9  eigene Nordspur vor der Engstelle
+	Vector2(198.4, -106.0),   # 10 in die Luecke einscheren
+	Vector2(198.5, -134.0),   # 11 Nordende
+	Vector2(201.0, -139.0),   # 12 Wende am Ende
+	Vector2(199.0, -134.5),   # 13
+	Vector2(198.2, -100.0),   # 14 zurueck suedwaerts (freie Spur)
+	Vector2(200.0, -79.0),    # 15 Nordarm Einfahrt (Vorfahrt wartet)
+	Vector2(196.5, -73.0),    # 16 Ring Nordwestviertel
+	Vector2(189.0, -66.0),    # 17
+	Vector2(184.5, -60.0),    # 18 Ring West
+	Vector2(189.0, -54.0),    # 19
+	Vector2(196.0, -50.5),    # 20 Ring Suedwest
+	Vector2(200.0, -45.5),    # 21 Suedarm Ausfahrt
+	Vector2(207.0, -30.0),    # 22 Suedstrasse -> Schleife
+]
+const CORNERS_C := [2, 8, 12, 15, 21]
 const CRUISE := 8.3                    ## ~30 km/h
 const CORNER_V := 3.5
 const ACCEL := 6.0
@@ -73,6 +104,9 @@ func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
 	if route == 1:
 		_path = ROUTE_B
 		_corners = CORNERS_B
+	elif route == 2:
+		_path = ROUTE_C
+		_corners = CORNERS_C
 	_i = start_i % _path.size()
 	var from: Vector2 = _path[(_i - 1 + _path.size()) % _path.size()]
 	var to: Vector2 = _path[_i]
@@ -176,6 +210,35 @@ func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
 		elif not bool(pd.get("_walking")) and ahead2 > 0.0 and ahead2 < 16.0 and side2 < 5.5:
 			v = 0.0
 	v = _yield_check(pos, dir, v)
+	v = _engstelle_check(pos, dir, v)
+	return v
+
+
+# Engstelle auf der Kreis-Nordstrasse: die parkenden Autos stehen auf
+# der Ostspur — die Nordfahrt (blockierte Seite, VZ 208) laesst den
+# Suedverkehr erst durch die Luecke.
+func _engstelle_check(pos: Vector2, dir: Vector2, v: float) -> float:
+	if player == null or dir.y > -0.5:
+		return v
+	# Nur nordwaerts auf der Engstellen-Zufahrt aktiv.
+	if pos.x < 192.0 or pos.x > 208.0 or pos.y < -106.0 or pos.y > -95.0:
+		return v
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	var p_lv = player.get("linear_velocity")
+	if p_lv == null:
+		return v
+	var pv := Vector2(p_lv.x, p_lv.z)
+	# Spieler in der Luecke oder suedwaerts darauf zurollend.
+	var in_gap := p2.x > 194.0 and p2.x < 206.0 \
+		and p2.y > -120.0 and p2.y < -101.0
+	var coming := p2.y > -145.0 and p2.y < -100.0 and pv.y > 0.8 \
+		and p2.x > 192.0 and p2.x < 208.0
+	if in_gap or coming:
+		# Vor der Luecke (Suedkante z=-101) zum Stehen kommen.
+		if pos.y > -101.0:
+			v = minf(v, maxf(0.0, (-101.0 - pos.y) * 0.8))
+		else:
+			v = 0.0
 	return v
 
 

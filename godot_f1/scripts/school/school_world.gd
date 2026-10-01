@@ -92,6 +92,14 @@ func _ready() -> void:
 	add_child(tc_ring)
 	tc_ring.setup(lights, player, 3, 1)
 	traffic_cars.append(tc_ring)
+	# Viertes Stadtauto auf Route C: Kreis -> Kreis-Nordstrasse, dort
+	# Engstelle mit parkenden Autos — die VZ-208-Lektion braucht
+	# echten Gegenverkehr in der Luecke.
+	var tc_narrow := TrafficCar.new()
+	tc_narrow.name = "TrafficCarNarrow"
+	add_child(tc_narrow)
+	tc_narrow.setup(lights, player, 2, 2)
+	traffic_cars.append(tc_narrow)
 
 	var ped := Pedestrian.new()
 	ped.name = "Pedestrian"

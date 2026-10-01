@@ -193,6 +193,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_door_zone(p2, spd, delta)
 	_check_cyclist(p2, spd, delta)
 	_check_following(p2, spd, delta)
+	_check_engstelle_vorrang(p2, delta)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -630,6 +631,31 @@ func _check_left_turn_oncoming(j: Dictionary, arm: Dictionary) -> void:
 
 
 var _follow_t := 0.0
+var _engstelle_cd := 0.0
+
+
+## Engstelle Kreis-Nordstrasse: die parkenden Autos stehen auf der
+## Ostseite — die Nordfahrt traegt VZ 208 und muss Gegenverkehr in der
+## Luecke erst durchlassen. Kommt ein KI-Auto suedwaerts entgegen,
+## waehrend der Schueler nordwaerts auf die Luecke zufaellt: mahnen.
+func _check_engstelle_vorrang(p2: Vector2, delta: float) -> void:
+	_engstelle_cd = maxf(_engstelle_cd - delta, 0.0)
+	var pv: Vector3 = car.linear_velocity
+	# nur wenn der Schueler nordwaerts (-z) auf die Luecke zufaellt
+	if pv.z > -0.8 or absf(p2.x - 200.0) > 7.0 or p2.y > -96.0 or p2.y < -120.0:
+		return
+	for tc in traffic:
+		if not is_instance_valid(tc):
+			continue
+		var tp := Vector2(tc.global_position.x, tc.global_position.z)
+		if absf(tp.x - 200.0) > 6.0 or tp.y > -98.0 or tp.y < -124.0:
+			continue
+		var tdir := Vector2(tc.global_transform.basis.z.x,
+			tc.global_transform.basis.z.z)
+		if tdir.y > 0.5 and _engstelle_cd <= 0.0:
+			_warn("Engstelle: Gegenverkehr in der Lücke — hier warten (VZ 208).")
+			_engstelle_cd = 12.0
+			return
 
 
 ## Sicherheitsabstand: halber Tacho — klebt der Schueler laenger als ~2 s
