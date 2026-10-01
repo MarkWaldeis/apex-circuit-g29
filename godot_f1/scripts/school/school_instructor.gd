@@ -1044,6 +1044,9 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		_brake_peak = 0.0
 		_brake_prev = spd
 		_brake_v0 = -1.0
+		_brake_t0 = Time.get_ticks_msec() / 1000.0
+		_brake_p_start = p2
+		_brake_t_v = -1.0
 	elif _brake_entry > 0.0:
 		_brake_dec = maxf(_brake_dec, (_brake_prev - spd) / maxf(delta, 0.001))
 		_brake_peak = maxf(_brake_peak, float(car.get("brake_strength")))
@@ -1052,10 +1055,13 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		if _brake_v0 < 0.0 and _brake_peak > 0.5:
 			_brake_v0 = spd
 			_brake_p0 = p2
+			_brake_t_v = Time.get_ticks_msec() / 1000.0
 		if spd < 0.2:
 			_brake_entry = -1.0
 			if _brake_v0 > 0.0:
 				var weg := _brake_p0.distance_to(p2)
+				var anhalt := _brake_p_start.distance_to(p2)
+				var react := maxf(_brake_t_v - _brake_t0, 0.0)
 				var vergleich := ""
 				if surfaces != null and bool(surfaces.get("wet")):
 					_brake_wet = weg
@@ -1065,8 +1071,13 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 					_brake_dry = weg
 					if _brake_wet > 0.0:
 						vergleich = " — nass waren es %.1f m." % _brake_wet
-				_say("Bremsweg %.1f m aus %.0f km/h%s — Faustregel: Anhalteweg ≈ (v/10)² + (v/10)×3 Meter." % [
-					weg, _brake_v0 * 3.6, vergleich], 0)
+				var tempo_warn := ""
+				if react > 1.0:
+					tempo_warn = " — Reaktion zu spät, beim Gefahrenbremsen zählt jede Zehntel."
+				elif react > 0.0:
+					tempo_warn = " — gute Reaktionszeit."
+				_say("Anhalteweg %.1f m (Reaktion %.1f s, Bremsweg %.1f m) aus %.0f km/h%s%s — Faustregel: Anhalteweg ≈ (v/10)² + (v/10)×3 Meter." % [
+					anhalt, react, weg, _brake_v0 * 3.6, tempo_warn, vergleich], 0)
 				_brake_v0 = -1.0
 			if _brake_dec > 4.0 and _brake_peak > 0.55:
 				_done("brake", "Gefahrbremsung geschafft — voller Tritt, gerade bleiben, Kupplung treten kurz vor dem Stillstand.")
@@ -1453,12 +1464,14 @@ func _check_engstelle(p2: Vector2, spd: float) -> void:
 
 
 var _brake_entry: float = -1.0
-var _brake_at: float = 0.0
 var _brake_dec: float = 0.0
 var _brake_peak: float = 0.0
 var _brake_prev: float = 0.0
 var _brake_v0: float = -1.0       ## Tempo beim Bremsbeginn (Bremsweg-Messung)
 var _brake_p0 := Vector2.ZERO     ## Ort beim Bremsbeginn
+var _brake_t0: float = 0.0        ## Zeitpunkt des Einfahrens in die Bremsbahn
+var _brake_p_start := Vector2.ZERO  ## Ort des Einfahrens (Anhalteweg-Messung)
+var _brake_t_v: float = -1.0      ## Zeitpunkt des ersten kräftigen Tritts
 var _brake_dry := -1.0            ## letzter gemessener Bremsweg trocken
 var _brake_wet := -1.0            ## letzter gemessener Bremsweg nass
 var _stop_still := {}
