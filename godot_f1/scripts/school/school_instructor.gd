@@ -36,6 +36,7 @@ const TASKS := [
 	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
 	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
 	{"id": "einfaden", "name": "Einfädeln auf die 100er-Straße"},
+	{"id": "rettung", "name": "Blaulicht: Platz gemacht"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
@@ -104,6 +105,9 @@ var _ba_clean := true         ## Durchfahrt ohne Tempoverstoss
 var _slip_t := 0.0            ## Zeit am Schleifpunkt in Kriechfahrt
 var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
 var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
+var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
+var _rescue_ann := false      ## Alarmfahrt schon angesagt
+var _rescue_near := false     ## Schueler war waehrend der Fahrt in Reichweite
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -862,6 +866,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_baustelle(p2, spd)
 	_check_schleif(spd, delta)
 	_check_einfadeln(p2, spd)
+	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -996,6 +1001,35 @@ func _check_einfadeln(p2: Vector2, spd: float) -> void:
 	elif p2.y > -200.0:
 		_auf_armed = false
 		_auf_slow = false
+
+
+func _check_rescue(spd: float) -> void:
+	if rescue == null:
+		return
+	if not rescue.alarm:
+		_rescue_ann = false
+		if _rescue_near and not bool(_tasks_done.get("rettung", false)):
+			_warn("Bei Blaulicht und Martinshorn machst du frei — nach rechts ran und anhalten.")
+		_rescue_near = false
+		return
+	var dist: float = car.global_position.distance_to(rescue.global_position)
+	if dist < 60.0:
+		_rescue_near = true
+		if not _rescue_ann:
+			_rescue_ann = true
+			_say("Blaulicht im Rückspiegel! Rechts ranfahren und frei machen.", 0)
+	if _rescue_near and dist < 30.0 and spd < 4.0:
+		# Spurversatz auch beim Stehen werten: Fahrzeugfront als
+		# Referenzrichtung, wenn lane_offset zu langsam ist.
+		var vel: Vector3 = car.linear_velocity
+		if vel.length() < 2.0:
+			vel = -car.global_transform.basis.z * 3.0
+		var off: float = surfaces.lane_offset(car.global_position, vel)
+		# Abseits der Fahrbahn (Standstreifen/Seitenstreifen) zaehlt
+		# ebenfalls als frei gemacht.
+		var aside: bool = surfaces.road_at(car.global_position) == ""
+		if (off > 1.2 and off < 9000.0) or aside:
+			_done("rettung", "Platz gemacht — der Rettungswagen kommt durch!")
 
 
 func _check_schleif(spd: float, delta: float) -> void:

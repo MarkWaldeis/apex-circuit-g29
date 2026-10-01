@@ -17,6 +17,7 @@ const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
 const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 const StreetBall = preload("res://scripts/school/street_ball.gd")
+const RescueVehicle = preload("res://scripts/school/rescue_vehicle.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -120,11 +121,19 @@ func _ready() -> void:
 	ball._road = sb["road"]
 	add_child(ball)
 
+	# Rettungswagen: faehrt alle ~2,5 Min eine Alarmrunde ueber die
+	# Hauptstrasse — Schueler muss Platz machen.
+	var rescue := RescueVehicle.new()
+	rescue.name = "RescueVehicle"
+	add_child(rescue)
+	rescue.setup(player)
+
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrians = peds
 	instructor.rail = rail
 	instructor.ball = ball
+	instructor.rescue = rescue
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.traffic = traffic_cars
