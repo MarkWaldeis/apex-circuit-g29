@@ -90,6 +90,8 @@ var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
 var night := false            ## wird von school_world gesetzt (Taste U)
 var _night_dist := 0.0        ## gefahrene Meter bei Nacht mit Licht
 var _night_cd := 0.0
+var _km_driven := 0.0         ## Gesamtstrecke fuer die Zwischenbilanz (Z)
+var _warn_cnt := 0            ## abgegebene Hinweise/Verwarnungen
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -148,6 +150,7 @@ func _say(text: String, level: int) -> void:
 
 func _warn(text: String) -> void:
 	if _coach_cd <= 0.0:
+		_warn_cnt += 1
 		_say(text, 1)
 		_coach_cd = 3.0
 
@@ -155,6 +158,7 @@ func _warn(text: String) -> void:
 func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	if car == null or surfaces == null:
 		return
+	_km_driven += car.linear_velocity.length() * delta
 	_coach_cd = maxf(_coach_cd - delta, 0.0)
 	var pos: Vector3 = car.global_position
 	var spd: float = linear_speed()
@@ -893,6 +897,20 @@ func _check_ball(p2: Vector2, spd: float) -> void:
 		_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
 	elif spd < 2.0:
 		_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
+
+
+## Zwischenbilanz (Taste Z): Fahrlehrer zieht ein Zwischenfazit —
+## Strecke, Abwuerger, Beanstandungen und der naechste Schritt.
+func report() -> void:
+	var done := 0
+	var next := "bereit für die Prüfungsfahrt (P)!"
+	for t in TASKS:
+		if _tasks_done.get(String(t["id"]), false):
+			done += 1
+		elif next == "bereit für die Prüfungsfahrt (P)!":
+			next = "nächste Übung: " + String(t["name"])
+	_say("Zwischenbilanz — %.1f km · %d× abgewürgt · %d Hinweise · Aufgaben %d/%d · %s" % [
+		_km_driven / 1000.0, _stalls_seen, _warn_cnt, done, TASKS.size(), next], 0)
 
 
 func _check_nacht(spd: float, delta: float) -> void:
