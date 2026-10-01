@@ -133,10 +133,10 @@ func _test_surfaces() -> void:
 	_check(s.wrong_way(Vector3(0, 0, -120), Vector3(-5, 0, 0)) == "", "oneway_correct_way_free")
 	_check(s.wrong_way(Vector3(0, 0, -120), Vector3(5, 0, 0)) != "", "oneway_wrong_way_flagged")
 	# Rechtsfahrgebot: rechte Spur frei, linke Spur bei Fahrt gemeldet.
-	_check(s.left_lane(Vector3(0, 0, -58.2), Vector3(5, 0, 0)) == "", "left_lane_right_free")
-	_check(s.left_lane(Vector3(0, 0, -61.8), Vector3(5, 0, 0)) != "", "left_lane_flagged")
+	_check(s.left_lane(Vector3(20, 0, -58.2), Vector3(5, 0, 0)) == "", "left_lane_right_free")
+	_check(s.left_lane(Vector3(20, 0, -61.8), Vector3(5, 0, 0)) != "", "left_lane_flagged")
 	_check(s.left_lane(Vector3(-100, 0, -60), Vector3(5, 0, 0)) == "", "left_lane_junction_free")
-	_check(s.left_lane(Vector3(0, 0, -61.8), Vector3(0.5, 0, 0)) == "", "left_lane_slow_free")
+	_check(s.left_lane(Vector3(20, 0, -61.8), Vector3(0.5, 0, 0)) == "", "left_lane_slow_free")
 
 
 func _test_layout() -> void:
