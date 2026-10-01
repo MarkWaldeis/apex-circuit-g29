@@ -121,6 +121,9 @@ var _ov_tc = null             ## gerade ueberholtes KI-Fahrzeug
 var _pullout_armed := false   ## stand still -> koennte anfahren
 var _still_t: float = 0.0     ## Standzeit vor dem Anfahren
 var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
+var door_car                  ## door_car.gd-Instanz: Dooring-Ueberraschung
+var _door_open_cd: float = 0.0
+var _door_praised := false
 var _rescue_ann := false      ## Alarmfahrt schon angesagt
 var _rescue_near := false     ## Schueler war waehrend der Fahrt in Reichweite
 
@@ -209,6 +212,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_einbahn(pos, p2)
 	_check_ueberhol(p2, spd)
 	_check_pullout(p2, spd)
+	_check_door_car(p2, spd, delta)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -415,6 +419,27 @@ func _check_door_zone(p2: Vector2, spd: float, delta: float) -> void:
 			_say("Sicherheitsabstand! An einem parkenden Auto vorbei — eine Tür kann aufgehen.", 1)
 			_door_cd = 9.0
 			return
+
+
+## Dooring: die Tuer des parkenden Autos schwingt auf — wer schnell
+## vorbeifaegert, wird gewarnt; wer abgebremst hat, wird gelobt.
+func _check_door_car(p2: Vector2, spd: float, delta: float) -> void:
+	_door_open_cd = maxf(_door_open_cd - delta, 0.0)
+	if door_car == null or not is_instance_valid(door_car):
+		return
+	if door_car.open_frac < 0.4:
+		_door_praised = false
+		return
+	var d := p2.distance_to(Vector2(door_car.global_position.x,
+		door_car.global_position.z))
+	if d > 14.0 or d < 1.0 or _door_open_cd > 0.0:
+		return
+	if spd > 4.0:
+		_warn("Achtung: Eine Autotür geht auf — weiträumig ausweichen oder anhalten!")
+		_door_open_cd = 12.0
+	elif not _door_praised:
+		_door_praised = true
+		_say("Gut reagiert — an der offenen Tür in Schrittgeschwindigkeit vorbei.", 0)
 
 
 # Radfahrer-Seitenabstand: Überholen erst ab ~1,5 m Seitenabstand.

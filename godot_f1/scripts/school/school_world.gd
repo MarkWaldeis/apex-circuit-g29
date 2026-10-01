@@ -18,6 +18,7 @@ const Pedestrian = preload("res://scripts/school/pedestrian.gd")
 const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 const StreetBall = preload("res://scripts/school/street_ball.gd")
 const RescueVehicle = preload("res://scripts/school/rescue_vehicle.gd")
+const DoorCar = preload("res://scripts/school/door_car.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -141,6 +142,13 @@ func _ready() -> void:
 	ball._road = sb["road"]
 	add_child(ball)
 
+	# Dooring-Gefahr: parkendes Auto an der Weststrasse, dessen
+	# Fahrertuer sich gelegentlich zur Fahrbahn oeffnet.
+	var door_car := DoorCar.new()
+	door_car.name = "DoorCar"
+	door_car.position = Vector3(-102.4, 0.0, -90.0)
+	add_child(door_car)
+
 	# Rettungswagen: faehrt alle ~2,5 Min eine Alarmrunde ueber die
 	# Hauptstrasse — Schueler muss Platz machen.
 	var rescue := RescueVehicle.new()
@@ -157,6 +165,7 @@ func _ready() -> void:
 	instructor.rail = rail
 	instructor.ball = ball
 	instructor.rescue = rescue
+	instructor.door_car = door_car
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.traffic = traffic_cars
