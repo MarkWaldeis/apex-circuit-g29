@@ -45,6 +45,7 @@ const TASKS := [
 	{"id": "gegen", "name": "Gegenverkehr beim Linksabbiegen durchgelassen"},
 	{"id": "vorf_knick", "name": "Abknickende Vorfahrtstraße gefolgt (VZ 306/215)"},
 	{"id": "warndreieck", "name": "Warndreieck abgesichert (Taste D)"},
+	{"id": "auspark", "name": "Rückwärts aus der Parkbucht ausgefahren"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -1363,6 +1364,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_ball(p2, spd)
 	_check_engstelle(p2, spd)
 	_check_panne(p2, spd, delta)
+	_check_auspark(p2, spd, delta)
 	_check_nacht(spd, delta)
 	_check_nebel(spd, delta)
 	_check_baustelle(p2, spd)
@@ -1706,6 +1708,42 @@ func _check_panne(p2: Vector2, spd: float, delta: float) -> void:
 			_warn("Bei einer Panne den Warnblinker einschalten!")
 	else:
 		_panne_t = 0.0
+
+
+## Parkbucht an der Oststrasse: wer sich hineinparkt (Stand >2 s) und
+## wieder herausfaehrt, muss den fliessenden Verkehr vorbeilassen —
+## ob rueckwaerts oder vorwaerts gespielt wird, ist dabei egal.
+var _auspark_t := 0.0
+var _auspark_armed := false
+var _auspark_hint := false
+func _check_auspark(p2: Vector2, spd: float, delta: float) -> void:
+	var z := CityLayout.auspark_zone()
+	if not _auspark_hint and p2.distance_to(z.get_center()) < 26.0:
+		_auspark_hint = true
+		_say("Parkbucht rechts — gute Übung: reinfahren, und beim Rausfahren den Verkehr vorbeilassen.", 0)
+	if z.has_point(p2):
+		if spd < 0.4:
+			_auspark_t += delta
+			if _auspark_t > 2.0:
+				_auspark_armed = true
+		else:
+			_auspark_t = 0.0
+		return
+	if not _auspark_armed:
+		return
+	_auspark_armed = false
+	var d_min := 1e9
+	for tc in traffic:
+		if not is_instance_valid(tc):
+			continue
+		var td: float = Vector2(tc.global_position.x,
+			tc.global_position.z).distance_to(p2)
+		if td < d_min:
+			d_min = td
+	if d_min < 22.0:
+		_warn("Beim Ausparken den fliessenden Verkehr vorbeilassen — sonst muss der andere stark abbremsen.")
+	elif not _tasks_done.get("auspark", false):
+		_done("auspark", "Sicher aus der Parkbucht gefahren — Verkehr beobachtet und die Lücke genutzt. Gut!")
 
 
 func _check_engstelle(p2: Vector2, spd: float) -> void:

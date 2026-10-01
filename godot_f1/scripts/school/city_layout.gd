@@ -292,6 +292,8 @@ static func signs() -> Array:
 		# der Oststrasse fuer Nordfahrer.
 		{"kind": "priority", "pos": Vector3(96.5, 0, -174.0), "rot_y": 180.0},
 		{"kind": "priority", "pos": Vector3(103.5, 0, -168.0), "rot_y": 0.0},
+		# Parkbucht Oststraße Ost-Rand: fuer die Rueckwaerts-Auspark-Uebung.
+		{"kind": "parking", "pos": Vector3(103.8, 0, -146.0), "rot_y": 0.0},
 		# Zebrastreifen Hauptstraße bei x = -40.
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 270.0},
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 90.0},
@@ -436,6 +438,14 @@ static func baustelle() -> Dictionary:
 ## Schulstraße — hier simuliert der Schueler eine Panne (Warnblinker an).
 static func pannen_zone() -> Rect2:
 	return Rect2(Vector2(-80.0, -183.8), Vector2(60.0, 6.0))
+
+
+## Rueckwaerts-Ausparken: Parkbucht am oestlichen Fahrbahnrand der
+## Oststraße (suedlich der Einbahnstraße). Die KI-Route A faehrt dort
+## nordwaerts vorbei — der Schueler lernt, beim Herausfahren aus der
+## Bucht den fliessenden Verkehr vorbeizulassen.
+static func auspark_zone() -> Rect2:
+	return Rect2(Vector2(103.2, -148.0), Vector2(5.0, 8.0))
 
 
 ## Situationsgefahr Ball: auf der Kreisverkehr-Nordstraße rollt ein
