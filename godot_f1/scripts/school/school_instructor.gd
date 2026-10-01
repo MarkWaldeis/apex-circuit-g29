@@ -97,6 +97,7 @@ var _prio_cd: float = 0.0
 var _weave_side: int = 0
 var _weave_hits: Array = []
 var _weave_cd: float = 0.0
+var _park_stood: int = -1     ## Index der Parallelbucht, in der gestanden wurde
 var _slalom_from: int = 0     ## korrekt passierte Pylonen von Westen
 var _slalom_to: int = -1      ## ... und von Osten (-1 = noch nicht init)
 var _slalom_armed := {}       ## Pylone -> darf wieder gezaehlt werden
@@ -1155,12 +1156,15 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 
 	# Längsparken: still in einer Parallelbucht stehen — erst wenn das
 	# Auto auch gerade und randnah steht, gilt die Uebung als gemacht.
+	var bay_i := 0
 	for bay in lot["parallel_bays"]:
 		if bool(bay.get("occupied", false)):
+			bay_i += 1
 			continue
 		var bp: Vector2 = bay["pos"]
 		var rect := Rect2(bp.x - 2.3, bp.y - float(bay["len"]) * 0.5, 2.3, float(bay["len"]))
 		if _in_rect(p2, rect) and spd < 0.25:
+			_park_stood = bay_i
 			var fwd_x := absf(car.global_transform.basis.z.x)
 			if fwd_x > 0.4:
 				_say("In der Parklücke, aber schief — das Auto noch gerade ausrichten.", 1)
@@ -1169,6 +1173,19 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			else:
 				_done("parallel", "Längsparken geschafft — gerade und nah am Bordstein, vorbildlich. Auf der Strasse dabei vorher rechts blinken und Ausschau nach rückwärtigem Verkehr halten.")
 			break
+		bay_i += 1
+	# Ausparken: rollt das Auto wieder los, ohne den Linksblinker zu
+	# setzen, fehlt das wichtigste Signal an den fliessenden Verkehr.
+	if _park_stood >= 0:
+		var bay2: Dictionary = lot["parallel_bays"][_park_stood]
+		var bp2: Vector2 = bay2["pos"]
+		var rect2 := Rect2(bp2.x - 3.5, bp2.y - float(bay2["len"]) * 0.5 - 1.5, 3.5, float(bay2["len"]) + 3.0)
+		if spd > 0.5 and _in_rect(p2, rect2):
+			if not bool(car.get("indicator_left")):
+				_warn("Beim Ausparken links blinken — der fliessende Verkehr muss sehen, dass du rausfährst.")
+			_park_stood = -1
+		elif not _in_rect(p2, rect2):
+			_park_stood = -1
 	# Slalom: die Pylonen der Reihe nach auf der richtigen Seite passieren
 	# (von links oder rechts — die Richtung ist frei). Falsche Seite = Reset.
 	var cones: Array = lot["slalom"]
