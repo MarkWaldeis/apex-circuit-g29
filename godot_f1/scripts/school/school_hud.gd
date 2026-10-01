@@ -29,6 +29,8 @@ var _dist_label: Label
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
+var _spot_t: float = 0.0
+var _spot_shown: String = ""
 
 
 func _ready() -> void:
@@ -278,7 +280,20 @@ func _process(delta: float) -> void:
 		speeding = instructor.is_speeding()
 	_limit_label.text = ("Limit %d" % limit) if limit > 0 else "Übungsplatz"
 	_limit_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3) if speeding else UI.TEXT_DIM)
-	_status.text = "Motor aus" if car.get("stalled") else ("Handbremse" if car.get("handbrake_on") else "")
+	var status_text := ""
+	if car.get("stalled"):
+		status_text = "Motor aus"
+	elif car.get("handbrake_on"):
+		status_text = "Handbremse"
+	# Nach einem Uebungs-Teleport (T) kurz die Station einblenden.
+	var spot_now := String(car.get("last_spot")) if car.get("last_spot") != null else ""
+	if spot_now != "" and spot_now != _spot_shown:
+		_spot_shown = spot_now
+		_spot_t = 4.0
+	_spot_t -= delta
+	if _spot_t > 0.0:
+		status_text = "Übung: %s" % _spot_shown
+	_status.text = status_text
 
 	_stall_warn.visible = bool(car.get("stalled"))
 

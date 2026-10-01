@@ -218,3 +218,22 @@ static func reset_spots() -> Array:
 		{"pos": Vector2(0, 60), "rot": 180.0},
 		{"pos": Vector2(-40, -60), "rot": 90.0},
 	]
+
+
+## Übungs-Startpunkte: die Taste T stellt das Auto abwechselnd an jede
+## Station. `dir` ist die Blickrichtung des Autos (+Z-Basis), damit man
+## sofort auf Fahrposition steht, ohne erst wenden zu muessen.
+static func exercise_spots() -> Array:
+	return [
+		{"name": "Übungsplatz", "pos": Vector2(0, 60), "dir": Vector2(0, 1)},
+		{"name": "Längsparken", "pos": Vector2(52, 70), "dir": Vector2(1, 0)},
+		{"name": "Querparken", "pos": Vector2(-22, 96), "dir": Vector2(0, 1)},
+		{"name": "Slalom", "pos": Vector2(-62, 64), "dir": Vector2(1, 0)},
+		{"name": "Bremsbahn", "pos": Vector2(-62, 46), "dir": Vector2(1, 0)},
+		{"name": "Berganfahren", "pos": Vector2(-66, 50), "dir": Vector2(0, 1)},
+		{"name": "Wendekreis", "pos": Vector2(30, 104), "dir": Vector2(0, -1)},
+		{"name": "Ampelkreuzung", "pos": Vector2(-78, -60), "dir": Vector2(-1, 0)},
+		{"name": "Stopp-Kreuzung", "pos": Vector2(78, -60), "dir": Vector2(1, 0)},
+		{"name": "Kreisverkehr", "pos": Vector2(172, -60), "dir": Vector2(1, 0)},
+		{"name": "Einbahnstraße", "pos": Vector2(96, -95), "dir": Vector2(0, -1)},
+	]

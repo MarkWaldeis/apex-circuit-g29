@@ -98,6 +98,11 @@ func _finish() -> void:
 		var d_fence: float = player.rear_distance()
 		_check(d_fence > 0.5 and d_fence < 4.0,
 			"rear_sensor_detects_fence", "d=%.2f" % d_fence)
+		# Uebungs-Teleport (T): erstes Ziel ist der Uebungsplatz.
+		player._teleport_next()
+		_check(player.global_position.distance_to(Vector3(0.0, 0.4, 60.0)) < 1.0,
+			"teleport_lands_on_spot", "pos=%s" % str(player.global_position))
+		_check(player.last_spot != "", "teleport_names_spot", player.last_spot)
 	if failed > 0:
 		print("SCHOOL_DRIVE FAIL count=", failed)
 		quit(1)

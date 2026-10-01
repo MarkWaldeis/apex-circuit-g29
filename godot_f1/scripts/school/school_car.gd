@@ -11,6 +11,7 @@ extends VehicleBody3D
 
 const CarMesh = preload("res://scripts/school/school_car_mesh.gd")
 const HGearbox = preload("res://scripts/school/h_gearbox.gd")
+const CityLayout = preload("res://scripts/school/city_layout.gd")
 const WheelFeedback = preload("res://scripts/wheel_feedback.gd")
 const FfbLink = preload("res://scripts/ffb_link.gd")
 
@@ -50,6 +51,8 @@ var assists := {"auto_gearbox": false, "traction_control": true, "clutch_assist"
 var spawn_transform: Transform3D
 var reset_count: int = 0
 var stall_events: int = 0
+var last_spot: String = ""             ## zuletzt angesteuerte Uebungsstation
+var _spot_i: int = -1
 var clutch_heat: float = 0.0              ## Lern-Feedback: zu lange schleifen
 
 var _wheels: Array = []                   ## {vis, wheel, front, rear}
@@ -173,11 +176,37 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_V: _kb_gear(-1)
 		KEY_Q: _toggle_indicator("l")
 		KEY_E: _toggle_indicator("r")
+		KEY_T: _teleport_next()
 		KEY_H:
 			hazard = not hazard
 			if hazard:
 				indicator_left = false
 				indicator_right = false
+
+
+## Taste T: direkt an die naechste Uebungsstation springen - das Auto
+## steht sofort auf Fahrposition, alle Uebungen bleiben ein Klick entfernt.
+func _teleport_next() -> void:
+	var spots: Array = CityLayout.exercise_spots()
+	_spot_i = (_spot_i + 1) % spots.size()
+	var spot: Dictionary = spots[_spot_i]
+	var dir: Vector2 = spot["dir"]
+	var pos: Vector2 = spot["pos"]
+	# +Z-Basis zeigt die Fahrtrichtung: looking_at(-d) macht +Z -> d.
+	var basis := Basis.looking_at(Vector3(-dir.x, 0.0, -dir.y).normalized(), Vector3.UP)
+	global_transform = Transform3D(basis, Vector3(pos.x, 0.4, pos.y))
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	engine_force = 0.0
+	brake = BRAKE_MAX * 0.2
+	steering = 0.0
+	gearbox.reset()
+	gear = 0
+	stalled = false
+	motor_on = true
+	last_spot = String(spot["name"])
+	if feedback:
+		feedback.poke("reset", 0.0)
 
 
 func _kb_gear(g: int) -> void:
