@@ -168,6 +168,7 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(light):
 			light.set_phase(lights.phase_of(String(item["arm"])))
 	if instructor:
+		instructor.night = _night
 		instructor.update(delta)
 		_update_exam_beam()
 	if player and DisplayServer.get_name() == "headless":
@@ -183,6 +184,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_U:
 		_night = not _night
+		if instructor:
+			instructor.night = _night
 		WorldEnv.set_night(self, _night)
 		if instructor:
 			if _night:

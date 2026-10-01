@@ -30,6 +30,7 @@ const TASKS := [
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
 	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
 	{"id": "vorfahrt", "name": "Vorfahrt gewährt"},
+	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
@@ -86,6 +87,9 @@ var _in_circle := false       ## Schueler aktuell auf der Kreisverkehr-Insel
 var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
 var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
 var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
+var night := false            ## wird von school_world gesetzt (Taste U)
+var _night_dist := 0.0        ## gefahrene Meter bei Nacht mit Licht
+var _night_cd := 0.0
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -807,6 +811,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_ball(p2, spd)
 	_check_engstelle(p2, spd)
 	_check_panne(p2, spd, delta)
+	_check_nacht(spd, delta)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -888,6 +893,22 @@ func _check_ball(p2: Vector2, spd: float) -> void:
 		_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
 	elif spd < 2.0:
 		_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
+
+
+func _check_nacht(spd: float, delta: float) -> void:
+	# Nachtfahrt-Uebung: 150 m im Dunkeln mit Abblendlicht unterwegs
+	# sein — wer ohne Licht faehrt, bekommt den Hinweis.
+	_night_cd = maxf(_night_cd - delta, 0.0)
+	if not night or _tasks_done.get("nacht", false):
+		_night_dist = 0.0
+		return
+	if bool(car.get("headlights_on")):
+		_night_dist += spd * delta
+		if _night_dist > 150.0:
+			_done("nacht", "Nachtfahrt mit Abblendlicht — Abstand und Tempo anpassen!")
+	elif spd > 3.0 and _night_cd <= 0.0:
+		_warn("Bei Dunkelheit Abblendlicht an — Taste L.")
+		_night_cd = 8.0
 
 
 func _check_panne(p2: Vector2, spd: float, delta: float) -> void:
