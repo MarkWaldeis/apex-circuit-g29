@@ -149,6 +149,12 @@ static func signs() -> Array:
 		{"kind": "roundabout", "pos": Vector3(216.0, 0, -63.5), "rot_y": 90.0},
 		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
 		{"kind": "yield", "pos": Vector3(-4.4, 0, -57.0), "rot_y": 0.0},
+		# Zeichen 306 Vorfahrtstraße: die Hauptstraße hat vor der Zufahrt
+		# Vorfahrt, die Oststraße vor der Schulstraße.
+		{"kind": "priority", "pos": Vector3(-10.0, 0, -56.5), "rot_y": 270.0},
+		{"kind": "priority", "pos": Vector3(10.0, 0, -63.5), "rot_y": 90.0},
+		{"kind": "priority", "pos": Vector3(96.5, 0, -174.0), "rot_y": 180.0},
+		{"kind": "priority", "pos": Vector3(103.5, 0, -186.0), "rot_y": 0.0},
 		# Zebrastreifen Hauptstraße bei x = -40.
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 270.0},
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 90.0},

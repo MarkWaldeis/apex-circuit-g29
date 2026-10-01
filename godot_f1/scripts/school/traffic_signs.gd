@@ -123,7 +123,7 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			core.rotation_degrees.z = 22.5
 			core.position.z = 0.004
 			face.add_child(core)
-			var txt := _text("STOP", 0.0062, Color(0.96, 0.96, 0.94))
+			var txt := _text("STOP", 0.0030, Color(0.96, 0.96, 0.94))
 			txt.position.z = 0.03
 			face.add_child(txt)
 		"yield":
@@ -157,7 +157,7 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var inner := _disc(DISC_R - 0.03, 40, white)
 			inner.position.z = 0.004
 			face.add_child(inner)
-			var txt := _text(arg, 0.0058, Color(0.05, 0.05, 0.06))
+			var txt := _text(arg, 0.0040, Color(0.05, 0.05, 0.06))
 			txt.position.z = 0.03
 			face.add_child(txt)
 		"limit_end":
@@ -222,13 +222,13 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var rim := _bar(Vector3(1.56, 0.61, 0.015), black)
 			rim.position.z = -0.012
 			face.add_child(rim)
-			var txt := _text(arg, 0.0042, Color(0.05, 0.05, 0.06))
+			var txt := _text(arg, 0.0020, Color(0.05, 0.05, 0.06))
 			txt.position.z = 0.03
 			face.add_child(txt)
 		"marker":
 			var back := _bar(Vector3(0.42, 0.55, 0.03), white)
 			face.add_child(back)
-			var txt := _text(arg, 0.0055, Color(0.05, 0.05, 0.06))
+			var txt := _text(arg, 0.0038, Color(0.05, 0.05, 0.06))
 			txt.position.z = 0.03
 			face.add_child(txt)
 		_:

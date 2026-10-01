@@ -46,8 +46,8 @@ const ACCEL := 6.0
 const STOP_POS := Vector2(92.0, -58.2)
 const STOP_WAIT := 1.2
 
-## Ampel-Haltelinie fuer Ost-Richtung (Hauptstrasse Ost, Achse "a").
-const LIGHT_X := -92.6
+## Ampel-Check achsneutral: Arm-Achse ueber die Fahrtrichtung gewaehlt,
+## Abstand zur Kreuzungsmitte entscheidet ueber das Halten.
 
 var lights
 var player

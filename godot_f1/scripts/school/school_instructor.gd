@@ -189,6 +189,7 @@ const SIGN_LESSON := {
 	"limit": "Tempolimit — ab hier gilt die Zahl auf dem Schild als Höchsttempo.",
 	"limit_end": "Tempolimit aufgehoben — wieder normale Geschwindigkeit erlaubt.",
 	"roundabout": "Kreisverkehr — wer im Kreis fährt, hat Vorfahrt. Beim Rausfahren blinken.",
+	"priority": "Vorfahrtstraße — auf dieser Straße hat man Vorfahrt, Querstraßen müssen warten.",
 	"zebra": "Zebrastreifen — Fußgänger haben Vorrang, rechtzeitig abbremsen.",
 	"parking": "Parkplatz — hier werden die Einpark-Übungen gemacht.",
 }
