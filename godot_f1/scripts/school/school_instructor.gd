@@ -52,6 +52,7 @@ var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrians: Array = []  ## Fussgaenger an den Zebrastreifen
 var rail                     ## rail_crossing.gd-Instanz (kann null sein)
 var ball                     ## street_ball.gd-Instanz (kann null sein)
+var balls: Array = []        ## weitere Baelle (z. B. Spielflaeche)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
@@ -1397,19 +1398,22 @@ func _check_rail(p2: Vector2, spd: float) -> void:
 
 
 func _check_ball(p2: Vector2, spd: float) -> void:
-	if ball == null or not is_instance_valid(ball) or not ball.is_rolling() \
-			or not ball.on_road():
-		return
-	var bp := Vector2(ball.global_position.x, ball.global_position.z)
-	var d := p2.distance_to(bp)
-	if d > 22.0:
-		return
-	if d < 1.6 and spd > 1.0:
-		_warn("Den Ball überfahren — ein Kind könnte folgen, immer abbremsen!")
-	elif spd * 3.6 > 20.0:
-		_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
-	elif spd < 2.0:
-		_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
+	var all: Array = balls.duplicate()
+	if ball != null:
+		all.append(ball)
+	for b in all:
+		if not is_instance_valid(b) or not b.is_rolling() or not b.on_road():
+			continue
+		var bp := Vector2(b.global_position.x, b.global_position.z)
+		var d := p2.distance_to(bp)
+		if d > 22.0:
+			continue
+		if d < 1.6 and spd > 1.0:
+			_warn("Den Ball überfahren — ein Kind könnte folgen, immer abbremsen!")
+		elif spd * 3.6 > 20.0:
+			_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
+		elif spd < 2.0:
+			_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
 
 
 ## Zwischenbilanz (Taste Z): Fahrlehrer zieht ein Zwischenfazit —

@@ -153,6 +153,15 @@ func _ready() -> void:
 	ball._road = sb["road"]
 	add_child(ball)
 
+	# Zweiter Ball in der verkehrsberuhigten Zone: hier ist er kein
+	# Aussenseiter, sondern Alltag — Kinder spielen auf der Strasse.
+	var ball2 := StreetBall.new()
+	ball2.name = "StreetBallSpiel"
+	ball2.from = Vector2(-206.0, -176.5)
+	ball2.to = Vector2(-206.0, -183.5)
+	ball2._road = Vector2(-206.0, -180.0)
+	add_child(ball2)
+
 	# Dooring-Gefahr: parkendes Auto an der Weststrasse, dessen
 	# Fahrertuer sich gelegentlich zur Fahrbahn oeffnet.
 	var door_car := DoorCar.new()
@@ -176,6 +185,7 @@ func _ready() -> void:
 	instructor.deer = deer
 	instructor.rail = rail
 	instructor.ball = ball
+	instructor.balls = [ball2]
 	instructor.rescue = rescue
 	instructor.door_car = door_car
 	instructor.cams = built.get("cams", [])
