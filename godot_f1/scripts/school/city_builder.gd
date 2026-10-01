@@ -68,6 +68,8 @@ func build(world: Node3D) -> Dictionary:
 	world.add_child(bus)
 	bus.setup(CityLayout.school_bus())
 	out["school_bus"] = bus
+	# Gemeinsames Gras-Material — der Wintermodus faerbt es weiss.
+	out["ground_mat"] = _mat(GRASS_C, 1.0)
 	return out
 
 

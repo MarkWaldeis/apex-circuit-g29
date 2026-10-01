@@ -324,7 +324,7 @@ func _build() -> void:
 		+ "1–6 Gänge · 0/N Leerlauf · V Rückwärts\n"
 		+ "Q / E – Blinker links / rechts\n"
 		+ "H – Warnblinker · B – Hupe · Leertaste – Handbremse\n"
-		+ "L – Abblendlicht · U – Nacht · I – Nebel · M – Nässe\n"
+		+ "L – Abblendlicht · U – Nacht · I – Nebel · M – Nässe · O – Glatteis\n"
 		+ "Z – Zwischenbilanz · F – Schild erklären · G – mehr Verkehr\n"
 		+ "T – zur nächsten Übung springen\n"
 		+ "P – Prüfungsfahrt starten / beenden\n"

@@ -20,10 +20,15 @@ var _island := {}
 var _junction_centers: Array = []
 var _last_limit := -1         ## letztes Strassenlimit (Kreuzungsbereich)
 var wet := false               ## Nässe: Grip lässt überall nach
+var icy := false               ## Glätte: Grip bricht stark ein
 
 
 func set_wet(on: bool) -> void:
 	wet = on
+
+
+func set_icy(on: bool) -> void:
+	icy = on
 
 
 func setup() -> void:
@@ -74,8 +79,13 @@ func sample(pos: Vector3, _line_hint: int = -1) -> Dictionary:
 
 
 ## Bei Nässe: Grip ~35 % weniger, etwas mehr Wasserwiderstand.
+## Glätte geht vor: ~60 % Grip-Verlust — Bremswege explodieren.
 func _wet_out(out: Dictionary) -> Dictionary:
-	if wet:
+	if icy:
+		out["grip"] = float(out["grip"]) * 0.38
+		out["drag"] = float(out["drag"]) + 0.006
+		out["name"] = String(out["name"]) + " vereist"
+	elif wet:
 		out["grip"] = float(out["grip"]) * 0.62
 		out["drag"] = float(out["drag"]) + 0.004
 		out["name"] = String(out["name"]) + " nass"

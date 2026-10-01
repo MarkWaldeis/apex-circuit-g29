@@ -40,6 +40,8 @@ var _spawn := Transform3D.IDENTITY
 var _night := false
 var _fog := false
 var _wet := false
+var _icy := false
+var _ground_mat: StandardMaterial3D
 var _extra_traffic: Array = []   ## zusaetzliche KI-Autos (Taste G)
 var _rain: GPUParticles3D        ## Regenpartikel ueber dem Auto
 
@@ -149,6 +151,7 @@ func _ready() -> void:
 	instructor = SchoolInstructor.new()
 	# Der Schulbus geht an den Fahrlehrer: §20-Schritttempo-Check.
 	instructor.school_bus = built.get("school_bus")
+	_ground_mat = built.get("ground_mat")
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrians = peds
 	instructor.rail = rail
@@ -321,6 +324,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				instructor._say("Regen — Grip lässt nach und die Scheibe beschlägt: früher bremsen, sanfter lenken, mehr Abstand.", 0)
 			else:
 				instructor._say("Wieder trocken — normale Fahrbahnhaftung.", 0)
+	# Glätte/Winter: Grip bricht stark ein, die Landschaft faerbt sich
+	# weiss — ideale Uebungswelt fuer Bremsweg und ruhige Fahrweise.
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_O:
+		_icy = not _icy
+		if surfaces:
+			surfaces.set_icy(_icy)
+		if _ground_mat:
+			_ground_mat.albedo_color = Color(0.82, 0.85, 0.9) if _icy \
+				else Color(0.20, 0.36, 0.17)
+		if instructor:
+			if _icy:
+				instructor._say("Glatteis! Sehr sanft lenken und bremsen — der Bremsweg vervielfacht sich.", 0)
+			else:
+				instructor._say("Wieder normale Haftung — der Winter ist vorbei.", 0)
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_P:
 		if instructor:
