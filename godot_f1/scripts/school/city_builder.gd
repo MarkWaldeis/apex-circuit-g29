@@ -466,6 +466,16 @@ func _lot(world: Node3D, out: Dictionary) -> void:
 	# Slalom-Pylone.
 	for p in lot["slalom"]:
 		out["cones"].append(_cone(world, Vector3(p.x, 0.0, p.y)))
+	# Rueckwaerts-Korridor: zwei Pylonen-Reihen als Gasse.
+	var rl: Dictionary = lot["rev_lane"]
+	var ra: Vector2 = rl["from"]
+	var rb: Vector2 = rl["to"]
+	var rl_dir := (rb - ra).normalized()
+	var rl_side := Vector2(-rl_dir.y, rl_dir.x) * float(rl["w"]) * 0.5
+	for i in range(5):
+		var mid := ra + rl_dir * (float(i) / 4.0) * (rb - ra).length()
+		out["cones"].append(_cone(world, Vector3(mid.x - rl_side.x, 0.0, mid.y - rl_side.y)))
+		out["cones"].append(_cone(world, Vector3(mid.x + rl_side.x, 0.0, mid.y + rl_side.y)))
 	# Bremsbahn-Marker (Abstandsschilder am Rand).
 	var bl: Dictionary = lot["brake_lane"]
 	var bla: Vector2 = bl["from"]

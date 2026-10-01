@@ -46,6 +46,7 @@ const TASKS := [
 	{"id": "vorf_knick", "name": "Abknickende Vorfahrtstraße gefolgt (VZ 306/215)"},
 	{"id": "warndreieck", "name": "Warndreieck abgesichert (Taste D)"},
 	{"id": "auspark", "name": "Rückwärts aus der Parkbucht ausgefahren"},
+	{"id": "rueck", "name": "Rückwärts im Pylonen-Korridor"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -111,6 +112,7 @@ var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
 var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
 var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
 var _wt_hinted := false       ## Warndreieck-Hinweis schon gegeben
+var _rev_d := 0.0             ## rueckwaerts gefahrene Meter im Korridor
 var night := false            ## wird von school_world gesetzt (Taste U)
 var fog := false              ## wird von school_world gesetzt (Taste I)
 var _night_dist := 0.0        ## gefahrene Meter bei Nacht mit Licht
@@ -1342,6 +1344,32 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				_hill_armed = false
 	else:
 		_hill_armed = false
+
+	# Rueckwaerts-Korridor: ~16 m rueckwaerts durch die Pylonen-Gasse,
+	# ohne seitlich auszubrechen — Pruefungsmanoever auf dem Platz.
+	var rl: Dictionary = lot["rev_lane"]
+	var ra: Vector2 = rl["from"]
+	var rb: Vector2 = rl["to"]
+	var rd := (rb - ra).normalized()
+	var rside := Vector2(-rd.y, rd.x)
+	var rel := p2 - ra
+	var ralong := rel.dot(rd)
+	var rlat := absf(rel.dot(rside))
+	var rinside: bool = ralong > -1.5 \
+			and ralong < ra.distance_to(rb) + 1.5 \
+			and rlat < float(rl["w"]) * 0.5 + 0.5
+	var rfwd := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	var rv2 := Vector2(car.linear_velocity.x, car.linear_velocity.z)
+	var back_spd: float = -rv2.dot(rfwd)
+	if rinside and back_spd > 0.4:
+		_rev_d += back_spd * delta
+		if _rev_d > 12.0:
+			_done("rueck", "Rückwärts durch die Pylonen-Gasse — Spur gehalten, sauber gesteuert!")
+	elif not rinside:
+		if _rev_d > 2.0 and _rev_d < 12.0:
+			_warn("Aus der Gasse ausgebrochen — rückwärts braucht kleine, ruhige Lenkkorrekturen.")
+		_rev_d = 0.0
 
 	# Zebrastreifen: langsam genug drüber.
 	for z in CityLayout.zebras():

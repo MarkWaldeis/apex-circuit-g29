@@ -409,6 +409,9 @@ static func lot() -> Dictionary:
 		],
 		# Bremsbahn: Anfahrt aus dem Westen, Marker alle 10 m.
 		"brake_lane": {"from": Vector2(-45, 46), "to": Vector2(60, 46), "marks": [30, 40, 50]},
+		# Rueckwaerts-Korridor: 16 m lange Pylonen-Gasse — Prüfungsmanoever
+		# "rueckwaerts einfahren". Fahrtrichtung: rueckwaerts nach Westen.
+		"rev_lane": {"from": Vector2(-50, 84), "to": Vector2(-34, 84), "w": 3.0},
 		# Hügel für Berganfahren: Rampe steigt im Westen nach Süden.
 		"hill": {"pos": Vector2(-66, 66), "rot": 90.0, "run": 14.0, "rise": 2.2, "w": 7.0, "down": 8.0},
 		# Kreis zum Üben von Wendefahrten (markierter Kreis).
@@ -521,6 +524,7 @@ static func exercise_spots() -> Array:
 		{"name": "Bremsbahn", "pos": Vector2(-62, 46), "dir": Vector2(1, 0)},
 		{"name": "Berganfahren", "pos": Vector2(-66, 52), "dir": Vector2(0, 1)},
 		{"name": "Wendekreis", "pos": Vector2(30, 104), "dir": Vector2(0, -1)},
+		{"name": "Rückwärtsfahren", "pos": Vector2(-24, 84), "dir": Vector2(1, 0)},
 		{"name": "Ampelkreuzung", "pos": Vector2(-78, -60), "dir": Vector2(-1, 0)},
 		{"name": "Stopp-Kreuzung", "pos": Vector2(78, -60), "dir": Vector2(1, 0)},
 		{"name": "Kreisverkehr", "pos": Vector2(172, -60), "dir": Vector2(1, 0)},
