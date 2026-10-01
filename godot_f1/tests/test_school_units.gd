@@ -154,6 +154,41 @@ func _test_layout() -> void:
 		var node := TrafficSigns.make_sign(String(sg["kind"]), sg.get("arg", ""))
 		_check(node != null, "sign_builds", String(sg["kind"]))
 		node.free()
+	# Kreuzungsarme sind axial (keine Diagonalen — sonst feuern die
+	# Haltelinien-Checks versetzt oder nie).
+	for jkey in Layout.junctions().keys():
+		var j: Dictionary = Layout.junctions()[jkey]
+		for arm in j["arms"]:
+			var e: Vector2 = arm["enter"]
+			var axial := (absf(e.x) > 0.9 and absf(e.y) < 0.1) \
+				or (absf(e.y) > 0.9 and absf(e.x) < 0.1)
+			_check(axial, "arm_axial", "junction=%s enter=%s" % [jkey, e])
+	# Regelnde Kreuzungsschilder zeigen dem ankommenden Verkehr die
+	# Sichtseite: Gesichtsnormale (sin rot, 0, cos rot) muss entgegen der
+	# Fahrtrichtung des nächsten Arms zeigen. (Tempo-/Vorfahrtstraßen-
+	# schilder bedienen Durchgangsverkehr und fallen hier nicht rein.)
+	var arms: Array = []
+	for jkey in Layout.junctions().keys():
+		for arm in Layout.junctions()[jkey]["arms"]:
+			arms.append(arm)
+	for sg in Layout.signs():
+		if not String(sg["kind"]) in ["stop", "yield", "rbl", "roundabout"]:
+			continue
+		var sp: Vector3 = sg["pos"]
+		var best: Dictionary = {}
+		var bd := 13.0
+		for arm in arms:
+			var d := sp.distance_to(Vector3(arm["pos"].x, 0.0, arm["pos"].y))
+			if d < bd:
+				bd = d
+				best = arm
+		if best.is_empty():
+			continue
+		var face := Vector3(sin(deg_to_rad(float(sg["rot_y"]))), 0.0,
+			cos(deg_to_rad(float(sg["rot_y"]))))
+		var travel := Vector3(best["enter"].x, 0.0, best["enter"].y)
+		_check(face.dot(-travel) > 0.5, "sign_faces_traffic",
+			"kind=%s pos=%s rot=%s" % [sg["kind"], sp, sg["rot_y"]])
 
 
 func _test_traffic() -> void:

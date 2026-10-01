@@ -120,9 +120,13 @@ static func signs() -> Array:
 		# Stopschild-Kreuzung Oststraße × Hauptstraße (StoVo: Schild vor der Linie).
 		{"kind": "stop", "pos": Vector3(93.0, 0, -56.6), "rot_y": 270.0},
 		{"kind": "stop", "pos": Vector3(107.0, 0, -63.4), "rot_y": 90.0},
-		# Rechts vor links: Schild 102 am Knoten Schulstraße/Weststraße.
-		{"kind": "rbl", "pos": Vector3(-96.5, 0, -172.0), "rot_y": 0.0},
+		# Rechts vor links: Schild 102 an allen vier Zufahrten des Knotens
+		# Schulstraße/Weststraße (jeweils rechter Fahrbahnrand, Sichtseite
+		# zum ankommenden Verkehr).
+		{"kind": "rbl", "pos": Vector3(-96.5, 0, -183.8), "rot_y": 0.0},
+		{"kind": "rbl", "pos": Vector3(-103.5, 0, -171.5), "rot_y": 180.0},
 		{"kind": "rbl", "pos": Vector3(-94.0, 0, -183.8), "rot_y": 90.0},
+		{"kind": "rbl", "pos": Vector3(-108.0, 0, -176.2), "rot_y": 270.0},
 		# Vorfahrt gewähren Schulstraße/Oststraße.
 		{"kind": "yield", "pos": Vector3(94.0, 0, -176.2), "rot_y": 270.0},
 		{"kind": "yield", "pos": Vector3(106.0, 0, -183.8), "rot_y": 90.0},
