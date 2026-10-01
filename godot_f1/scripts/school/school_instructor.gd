@@ -235,6 +235,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
+	_check_alaram_exercise(p2, spd, delta)
 	# Warnblinker im fliessenden Verkehr ist kein zulaessiges Blinken.
 	if bool(car.get("hazard")) and spd > 6.0:
 		_haz_t += delta
@@ -252,6 +253,68 @@ func linear_speed() -> float:
 	if car == null:
 		return 0.0
 	return car.linear_velocity.length()
+
+
+## Gefahrenbremsung: auf dem Uebungsplatz ruft der Fahrlehrer
+## unvermutet "VOLLBREMSE!" — gemessen wird die Reaktionszeit bis zum
+## ersten kraeftigen Pedaltritt plus Anhalteweg. Laueft nur, wenn der
+## Schueler schon eine Weile zuegig auf dem Platz faehrt.
+var _alarm_state: int = 0        ## 0 bereit, 1 angekuendigt, 2 misst
+var _alarm_wait: float = 0.0   ## Zufalls-Verzoegerung bis zum Ruf
+var _alarm_t0: float = 0.0     ## Zeitpunkt des Rufs
+var _alarm_p0 := Vector2.ZERO  ## Ort beim Ruf (Anhalteweg)
+var _alarm_v0: float = 0.0     ## Tempo beim Ruf
+var _alarm_react: float = -1.0 ## Reaktionszeit bis Pedal > 0.6
+var _alarm_cool: float = 25.0  ## Sperrzeit bis zur naechsten Uebung
+
+
+func _check_alaram_exercise(p2: Vector2, spd: float, delta: float) -> void:
+	_alarm_cool = maxf(_alarm_cool - delta, 0.0)
+	var l: Dictionary = CityLayout.lot()["rect"]
+	var on_lot: bool = p2.x > float(l["x0"]) and p2.x < float(l["x1"]) \
+		and p2.y > float(l["z0"]) and p2.y < float(l["z1"])
+	if exam.active or not on_lot:
+		# Unterbrochen (Pruefung oder verlassener Platz) — zurueck auf Start.
+		if _alarm_state > 0:
+			_say("Uebung abgebrochen — wir wiederholen die Gefahrenbremsung spaeter.", 0)
+		_alarm_state = 0
+		return
+	match _alarm_state:
+		0:
+			# Voraussetzung: ~30 km/h auf dem Platz, seltener Zufallsstart.
+			if _alarm_cool <= 0.0 and spd > 8.5 and spd < 15.0 \
+					and randf() < delta * 0.15:
+				_alarm_state = 1
+				_alarm_wait = randf_range(3.0, 7.0)
+				_say("Gefahrenbremsung ueben: fahr weiter geradeaus — wenn ich rufe, VOLLBREMSUNG!", 0)
+		1:
+			if spd < 6.0:
+				# Schueler ist schon von selbst langsam geworden.
+				_alarm_state = 0
+				_say("Zu langsam fuer die Uebung — wir versuchen es gleich nochmal.", 0)
+				return
+			_alarm_wait -= delta
+			if _alarm_wait <= 0.0:
+				_alarm_state = 2
+				_alarm_t0 = Time.get_ticks_msec() / 1000.0
+				_alarm_p0 = p2
+				_alarm_v0 = spd
+				_alarm_react = -1.0
+				_say("VOLLBREMSE!", 2)
+		2:
+			if _alarm_react < 0.0 and float(car.get("brake_strength")) > 0.6:
+				_alarm_react = maxf(
+					Time.get_ticks_msec() / 1000.0 - _alarm_t0, 0.0)
+			if spd < 0.25:
+				_alarm_state = 0
+				_alarm_cool = 90.0
+				var weg := _alarm_p0.distance_to(p2)
+				if _alarm_react < 0.0:
+					_say("Zu spaet gebremst — auf die Bremse geht es sofort und mit Kraft.", 2)
+				elif _alarm_react > 1.2:
+					_say("Gefahrenbremsung: Reaktion %.1f s — zu langsam, Ziel < 1 s. Anhalteweg %.1f m aus %.0f km/h." % [_alarm_react, weg, _alarm_v0 * 3.6], 1)
+				else:
+					_say("Gefahrenbremsung: Reaktion %.1f s, Anhalteweg %.1f m aus %.0f km/h — gut!" % [_alarm_react, weg, _alarm_v0 * 3.6], 0)
 
 
 # ---------------------------------------------------------------- Verstöße
