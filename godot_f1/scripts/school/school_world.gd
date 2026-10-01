@@ -389,6 +389,12 @@ func _onc_trainer_tick(delta: float) -> void:
 			o_arm = arm
 	if o_arm.is_empty() or o_arm == s_arm or od > 0.4:
 		return
+	# Verkehrte Lektion vermeiden: steht der Schueler auf einem
+	# Biegungsarm der Vorfahrtstrasse oder muesste der Trainer an
+	# einem Vorfahrt-gewaehren-Arm selbst warten, haette der Trainer
+	# gar keine Vorfahrt — also lieber gar nicht spawnen.
+	if s_arm.get("bend_yaw") != null or o_arm.get("yield", false):
+		return
 	_onc_t = 60.0
 	var enter: Vector2 = o_arm["enter"]
 	# Rechte Spur des Gegenarms; der Kurs fuehrt mittig durch die Kreuzung
@@ -407,6 +413,7 @@ func _onc_trainer_tick(delta: float) -> void:
 	tc.set_meta("oncoming_j", best_j["center"])
 	add_child(tc)
 	tc.setup(lights, player, 1, -1, [start, goal])
+	tc.ttl = 30.0                 # blockiert der Schueler den Kurs, despawnt er
 	tc.pedestrians = _peds
 	tc.night = _night
 	instructor.traffic.append(tc)

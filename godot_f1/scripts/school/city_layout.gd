@@ -93,7 +93,7 @@ static func junctions() -> Dictionary:
 			"kind": "yield",
 			"center": Vector2(100, -180),
 			# Abknickende Vorfahrtstraße: die Vorfahrtstraße biegt von der
-			# Oststraße (Nordarm) in die Schulstraße nach Westen ab
+			# Oststraße (Südarm) in die Schulstraße nach Westen ab
 			# (VZ 306 auf den Biegungsarmen, VZ 215 an den Nebenarmen).
 			# "bend_yaw" markiert die Gier-Richtung des Kurvenverlaufs —
 			# wer ihr folgt, faehrt der Vorfahrtstrasse nach und blinkt

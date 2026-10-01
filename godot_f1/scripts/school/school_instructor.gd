@@ -191,7 +191,7 @@ func _done(id: String, praise: String) -> void:
 var _exam_errs := 0          ## Warnungen waehrend einer Pruefungsfahrt
 var _exam_log: Array = []    ## Beanstandungen mit Ort (Abschlussprotokoll)
 var _gyaw0 := -999.0         ## generelle Blinkerpflicht: Gier-Referenz
-var _gyaw_ok := false        ## Blinker war waehrend der Drehung an
+var _gyaw_acc := 0.0         ## akkumulierte Gierdrehung seit letztem Blinker
 var cam                    ## chase_camera.gd — fuer Schulterblick-Ersatz
 var _rear_ok_at: float = -99.0  ## letzte Rückblick-Kamera > 0,5 s
 var _rear_acc: float = 0.0
@@ -828,7 +828,17 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			elif dyaw < -0.45 and not bool(tr.get("r", false)) and bend > -0.5:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
 			elif bend != 0.0 and signf(dyaw) == signf(bend) and absf(dyaw) > 0.45:
-				_done("vorf_knick", "Der abknickenden Vorfahrtstraße gefolgt — ohne Blinken, genau richtig.")
+				if bool(tr.get("l", false)) or bool(tr.get("r", false)):
+					_say("Der Biegung der Vorfahrtstraße gefolgt — Blinker war hier nicht nötig.", 1)
+				else:
+					_done("vorf_knick", "Der abknickenden Vorfahrtstraße gefolgt — ohne Blinken, genau richtig.")
+			elif bend != 0.0 and absf(dyaw) < 0.45:
+				# Geradeaus durch die Biegung = die abknickende Vorfahrt-
+				# strasse VERLASSEN: §9 will den Blinker IN die Biegungs-
+				# richtung (bend>0 = links, bend<0 = rechts).
+				var need := "l" if bend > 0.0 else "r"
+				if not bool(tr.get(need, false)):
+					_warn("Geradeaus aus der abknickenden Vorfahrtstraße — Blinker in die Biegungsrichtung setzen!")
 			if dyaw < -0.45:
 				_check_shoulder(p2)
 			if dyaw > 0.45:
@@ -838,24 +848,25 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 	# Einmuendung): deutliche Gierdrehung im fliessenden Verkehr ohne
 	# Blinker -> Hinweis. Langsame Platzrunden (Wenden, Parken) bleiben frei.
 	var yaw_now: float = car.global_transform.basis.get_euler().y
-	if bool(car.get("indicator_left")) or bool(car.get("indicator_right")) \
-			or bool(car.get("hazard")):
-		_gyaw_ok = true
 	if _gyaw0 < -900.0:
 		_gyaw0 = yaw_now
-	var dgy := wrapf(yaw_now - _gyaw0, -PI, PI)
-	if absf(dgy) < 0.05:
-		_gyaw0 = yaw_now
-		_gyaw_ok = false
-	elif absf(dgy) > 0.45:
+	var inc := wrapf(yaw_now - _gyaw0, -PI, PI)
+	_gyaw0 = yaw_now
+	if bool(car.get("indicator_left")) or bool(car.get("indicator_right")) \
+			or bool(car.get("hazard")):
+		_gyaw_acc = 0.0
+	elif absf(inc) < 0.004:
+		_gyaw_acc *= 0.98       # Geradeausfahrt beruhigt den Akkumulator
+	else:
+		_gyaw_acc += inc
+	if absf(_gyaw_acc) > 0.45:
 		# Im Kreisverkehr dreht sich die Karosserie staendig — das
 		# ist kein Abbiegevorgang im Sinne der Blinkerpflicht.
 		var on_ring := p2.distance_to(Vector2(200.0, -60.0)) < 17.0
-		if spd > 4.0 and not _gyaw_ok and not on_ring \
+		if spd > 4.0 and not on_ring \
 				and String(surfaces.sample(car.global_position).get("surface", "asphalt")) != "grass":
 			_warn("Abbiegen ohne Blinker — rechtzeitig blinken.")
-		_gyaw0 = yaw_now
-		_gyaw_ok = false
+		_gyaw_acc = 0.0
 
 	# Kreisverkehr: beim Ausfahren wird rechts geblinkt — Einfahren ohne
 	# Blinker ist sogar Pflicht. Wechsel Insel -> Ausfahrtsarm ohne
@@ -878,23 +889,27 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 ## Linksabbieger muessen Gegenverkehr durchlassen: faehrt beim Abbiegen
 ## noch ein KI-Auto auf der Gegenspur zur Kreuzung hin, wird gewarnt.
 func _check_left_turn_oncoming(j: Dictionary, arm: Dictionary) -> void:
-	# Gegenverkehr kommt dem Linksabbieger auf der ZIELGERADE
-	# entgegen: er faehrt in Richtung des Links-Knickes weiter —
-	# so greift die Regel auch an T-Kreuzungen (Zufahrt, yield_ost).
-	var fwd3: Vector3 = car.global_transform.basis.z.normalized()
-	var opp := Vector2(-fwd3.z, fwd3.x)      ## Linksabbieger-Zielachse
-	var opp3 := Vector3(opp.x, 0.0, opp.y)
+	# Gegenverkehr beim Linksabbiegen kommt aus der Gegenrichtung
+	# der eigenen Einfahrt: der Schueler fuhr mit `enter` (e) in den
+	# Knoten ein, der Gegenverkehr faehrt mit -e auf dem Gegenarm
+	# heran — plus Fahrzeuge auf der Zielstrasse, die ihm entgegen
+	# die Ausfahrt entgegenkommen.
+	var e: Vector2 = Vector2(arm["enter"]).normalized()
+	var left_e := Vector2(e.y, -e.x)         ## Ausfahrtsrichtung
 	var center: Vector2 = j["center"]
 	for t in traffic:
 		if not is_instance_valid(t):
 			continue
-		var t_dir := Vector3(t.global_transform.basis.z.x, 0.0,
+		var td2 := Vector2(t.global_transform.basis.z.x,
 			t.global_transform.basis.z.z).normalized()
-		if t_dir.dot(opp3) < 0.7:
-			continue   # faehrt nicht auf der Gegenspur
 		var tp := Vector2(t.global_position.x, t.global_position.z)
-		if tp.distance_to(center) > 45.0 or (center - tp).dot(opp) <= 0.0:
-			continue   # zu weit weg oder schon an der Kreuzung vorbei
+		if tp.distance_to(center) > 45.0:
+			continue
+		var rel := tp - center
+		var gegen := td2.dot(-e) > 0.7 and rel.dot(e) > 0.0
+		var ziel := td2.dot(-left_e) > 0.7 and rel.dot(left_e) > 0.0
+		if not gegen and not ziel:
+			continue
 		_warn("Linksabbiegen: Gegenverkehr kommt — durchlassen!")
 		return
 

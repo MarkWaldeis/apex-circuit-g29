@@ -22,6 +22,9 @@ const ROUTE_A := [
 	Vector2(101.8, -174.0),   # 7 Oststraße, Richtung Nord -> Kurve zu 0
 ]
 const CORNERS_A := [2, 4, 6, 0]   ## Ziel-Indizes, vor denen abgebremst wird
+## Blinken nicht an Index 0: dort biegt die Vorfahrtstrasse ab (Ost-
+## Sued -> Schul-West, VZ 306) — dem Knick folgt man OHNE Blinker.
+const BLINK_A := [2, 4, 6]
 
 ## Route B: Kreisverkehr-Schleife — Südarm rein, Ostarm raus, ueber die
 ## Ring-Ost-Diagonale zurueck in die Suedstrasse. Lerneffekt: wer in den
@@ -124,8 +127,9 @@ var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
 var truck := false           ## Lkw-Mesh + langsames Reisetempo
 var cruise := CRUISE
-var _blink: Array = CORNERS_A
+var _blink: Array = BLINK_A
 var _oneshot := false         ## freier Kurs: am Ende verschwindet das Auto
+var ttl := -1.0               ## Sekunden bis zum Despawn (<0 = unbegrenzt)
 var night := false            ## Welt setzt es — Scheinwerfer gluehen
 var _head_mat: StandardMaterial3D
 var _horn_player: AudioStreamPlayer3D
@@ -272,6 +276,13 @@ func _basis_to(dir: Vector2) -> Basis:
 
 func _physics_process(delta: float) -> void:
 	_stop_left = maxf(_stop_left - delta, 0.0)
+	if ttl > 0.0:
+		ttl -= delta
+		if ttl <= 0.0:
+			# Timeout-Despawn: ein Trainer, der nicht durchkommt,
+			# duerfte den Verkehr nicht ewig blockieren.
+			queue_free()
+			return
 	var pos := Vector2(global_position.x, global_position.z)
 	var target: Vector2 = _path[_i]
 	var to := target - pos
