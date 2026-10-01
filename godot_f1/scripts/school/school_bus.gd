@@ -8,6 +8,7 @@ var hazards_on := false
 var _t := 8.0                ## Restsekunden bis zum nächsten Halt
 var _phase := 0.0            ## Blinkphase
 var _lamps: Array = []       ## gelbe Warnlampen (MeshInstance3D)
+var _peds: Array = []        ## ein-/aussteigende Fahrgaeste {node, a, b, t}
 
 
 func setup(spec: Dictionary) -> void:
@@ -83,8 +84,56 @@ func _physics_process(delta: float) -> void:
 	if _t <= 0.0:
 		hazards_on = not hazards_on
 		_t = 22.0 if hazards_on else 18.0
+		if hazards_on:
+			_board_passengers()
 	_phase += delta
 	var glow := hazards_on and fmod(_phase, 0.7) < 0.35
 	for lamp in _lamps:
 		var m: StandardMaterial3D = lamp.material_override
 		m.emission_energy_multiplier = 4.0 if glow else 0.0
+	# Fahrgaeste laufen zwischen Bordstein und Bustuer hin und her.
+	var gone: Array = []
+	for p in _peds:
+		var nd: Node3D = p["node"]
+		if not is_instance_valid(nd):
+			gone.append(p)
+			continue
+		p["t"] = float(p["t"]) + delta / 4.5
+		nd.global_position = p["a"].lerp(p["b"], minf(float(p["t"]), 1.0))
+		if float(p["t"]) >= 1.25:
+			nd.queue_free()
+			gone.append(p)
+	for p in gone:
+		_peds.erase(p)
+
+
+## Bei jedem Halt: zwei Schueler steigen aus (Bus -> Bordstein) und
+## einer steigt ein (Bordstein -> Bustuer). Die Tuer zeigt zum
+## suedlichen Gehweg der Schulstrasse.
+func _board_passengers() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var base := global_position
+	for i in 2:
+		var a := base + Vector3(rng.randf_range(-2.5, 2.5), 0.0, 1.9)
+		var b := Vector3(a.x + rng.randf_range(-4.0, 4.0), 0.0, -172.8)
+		_add_figure(a, b)
+	var a_in := base + Vector3(rng.randf_range(-5.0, 5.0), 0.0, 4.8)
+	_add_figure(Vector3(a_in.x, 0.0, -172.8),
+		base + Vector3(0.0, 0.0, 1.9))
+
+
+func _add_figure(a: Vector3, b: Vector3) -> void:
+	var f := Node3D.new()
+	var body := MeshInstance3D.new()
+	var c := CapsuleMesh.new()
+	c.radius = 0.16
+	c.height = 0.75
+	body.mesh = c
+	body.position.y = 0.55
+	body.material_override = _mat(Color(randf_range(0.25, 0.85),
+		randf_range(0.2, 0.6), randf_range(0.5, 0.9)))
+	f.add_child(body)
+	add_child(f)
+	f.global_position = a
+	_peds.append({"node": f, "a": a, "b": b, "t": 0.0})
