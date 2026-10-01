@@ -46,6 +46,7 @@ var _icy := false
 var _ground_mat: StandardMaterial3D
 var _extra_traffic: Array = []   ## zusaetzliche KI-Autos (Taste G)
 var _rain: GPUParticles3D        ## Regenpartikel ueber dem Auto
+var _warndreieck: Node3D         ## aufgestelltes Warndreieck (Taste D)
 
 
 func _ready() -> void:
@@ -523,6 +524,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				instructor._say("Wieder normale Haftung — der Winter ist vorbei.", 0)
 	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_D:
+		_place_warndreieck()
+	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_P:
 		if instructor:
 			instructor.toggle_exam()
@@ -530,6 +534,70 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.physical_keycode == KEY_F1:
 		if hud and hud.has_method("toggle_help"):
 			hud.toggle_help()
+
+
+## Warndreieck (Taste D): gehoert zur Pannen-Absicherung — nur sinnvoll,
+## wenn das Auto in der Pannenzone steht und der Warnblinker laeuft.
+## Es wird ~50 m hinter dem Auto auf die Fahrbahnkante gestellt
+## (StVO: innerorts ca. 50 m Sicherungsabstand).
+func _place_warndreieck() -> void:
+	if instructor == null or player == null:
+		return
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	var zone := CityLayout.pannen_zone()
+	if not zone.has_point(p2) or player.linear_velocity.length() > 0.5:
+		instructor._say("Das Warndreieck gehört zur Panne — erst in der Pannenzone am Rand anhalten.", 0)
+		return
+	if not bool(player.get("hazard")):
+		instructor._say("Erst den Warnblinker einschalten (Taste H), dann das Warndreieck.", 0)
+		return
+	if _warndreieck != null:
+		instructor._say("Das Warndreieck steht schon.", 0)
+		return
+	var fwd := Vector2(player.global_transform.basis.z.x,
+		player.global_transform.basis.z.z).normalized()
+	var spot := p2 - fwd * 50.0
+	# Auf der Fahrbahnkante der Schulstrasse bleiben, nicht daneben.
+	spot.x = clampf(spot.x, zone.position.x + 1.5, zone.end.x - 1.5)
+	spot.y = clampf(spot.y, -183.5, -180.5)
+	var tri := _build_warndreieck()
+	tri.position = Vector3(spot.x, 0.0, spot.y)
+	# Die reflektierende Seite zeigt zum nachfolgenden Verkehr —
+	# d.h. entgegen der Fahrtrichtung des stehenden Autos.
+	tri.rotation.y = atan2(-fwd.x, -fwd.y)
+	add_child(tri)
+	_warndreieck = tri
+	instructor._done("warndreieck", "Warndreieck rund 50 m dahinter aufgestellt — Pannenstelle vorbildlich abgesichert.")
+
+
+func _build_warndreieck() -> Node3D:
+	var w := Node3D.new()
+	var red := StandardMaterial3D.new()
+	red.albedo_color = Color(0.85, 0.10, 0.08)
+	red.emission_enabled = true
+	red.emission = Color(0.9, 0.15, 0.1)
+	red.emission_energy_multiplier = 1.2
+	var orange := StandardMaterial3D.new()
+	orange.albedo_color = Color(0.95, 0.45, 0.05)
+	var grey := StandardMaterial3D.new()
+	grey.albedo_color = Color(0.3, 0.3, 0.32)
+	# Dreiecksrahmen: zwei schraege Schenkel + Grundbalken.
+	for spec in [
+		[Vector3(0.07, 0.55, 0.03), Vector3(-0.20, 0.28, 0.0), -30.0, red],
+		[Vector3(0.07, 0.55, 0.03), Vector3(0.20, 0.28, 0.0), 30.0, red],
+		[Vector3(0.55, 0.07, 0.03), Vector3(0.0, 0.06, 0.0), 0.0, red],
+		[Vector3(0.30, 0.40, 0.012), Vector3(0.0, 0.30, -0.005), 0.0, orange],
+		[Vector3(0.30, 0.02, 0.25), Vector3(0.0, 0.012, 0.10), 0.0, grey],
+	]:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = spec[0]
+		mi.mesh = bm
+		mi.material_override = spec[3]
+		mi.position = spec[1]
+		mi.rotation_degrees.z = spec[2]
+		w.add_child(mi)
+	return w
 
 
 func _update_exam_beam() -> void:

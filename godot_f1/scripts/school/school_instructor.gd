@@ -44,6 +44,7 @@ const TASKS := [
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "gegen", "name": "Gegenverkehr beim Linksabbiegen durchgelassen"},
 	{"id": "vorf_knick", "name": "Abknickende Vorfahrtstraße gefolgt (VZ 306/215)"},
+	{"id": "warndreieck", "name": "Warndreieck abgesichert (Taste D)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -108,6 +109,7 @@ var _in_circle := false       ## Schueler aktuell auf der Kreisverkehr-Insel
 var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
 var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
 var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
+var _wt_hinted := false       ## Warndreieck-Hinweis schon gegeben
 var night := false            ## wird von school_world gesetzt (Taste U)
 var fog := false              ## wird von school_world gesetzt (Taste I)
 var _night_dist := 0.0        ## gefahrene Meter bei Nacht mit Licht
@@ -1696,6 +1698,10 @@ func _check_panne(p2: Vector2, spd: float, delta: float) -> void:
 		if bool(car.get("hazard")):
 			if _panne_t > 4.0:
 				_done("panne", "Pannenstellung — Warnblinker an, sicher am Rand. Gut!")
+				if _panne_t > 5.5 and not _tasks_done.get("warndreieck", false) \
+						and not _wt_hinted:
+					_wt_hinted = true
+					_say("Jetzt die Pannenstelle absichern: Warndreieck aufstellen — Taste D.", 0)
 		elif _panne_t > 2.5:
 			_warn("Bei einer Panne den Warnblinker einschalten!")
 	else:
