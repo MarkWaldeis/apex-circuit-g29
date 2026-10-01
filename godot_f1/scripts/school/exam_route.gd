@@ -87,6 +87,49 @@ static func route_d() -> Array:
 	]
 
 
+## Route E: grosse Runde gegen den Uhrzeigersinn — Ring West mit
+## Wildwechsel, Ring Sued mit Lkw, dann ueber die Kreis-Suedstrasse in
+## den Kreisverkehr und nach Hause.
+static func route_e() -> Array:
+	return [
+		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
+		{"pos": Vector2(-90, -61.8), "text": "Geradeaus über die Ampelkreuzung."},
+		{"pos": Vector2(-200, -61.8), "text": "Weiter Richtung Westen — gleich Ringstraße."},
+		{"pos": Vector2(-241.5, -56.0), "text": "Links auf die Ringstraße — Vorfahrt gewähren."},
+		{"pos": Vector2(-241.5, -45.0), "text": "Achtung Wildwechsel — vom Gas, bremsbereit."},
+		{"pos": Vector2(-241.5, 80.0), "text": "Der Ringstraße folgen — Tempo 100."},
+		{"pos": Vector2(-190.0, 141.5), "text": "Links auf die Ringstraße Süd."},
+		{"pos": Vector2(150.0, 141.5), "text": "Der Ringstraße folgen — gern den Lkw überholen."},
+		{"pos": Vector2(241.5, 90.0), "text": "Links auf die Ringstraße Ost."},
+		{"pos": Vector2(241.5, -40.0), "text": "Der Ringstraße nach Norden — gleich zum Kreisverkehr."},
+		{"pos": Vector2(230.0, -44.0), "text": "Dem Abzweig zur Kreisverkehr-Südstraße folgen."},
+		{"pos": Vector2(208.0, -30.0), "text": "Kreisverkehr — Vorfahrt dem Kreis, erste Ausfahrt."},
+		{"pos": Vector2(178.0, -61.8), "text": "Erste Ausfahrt nach Westen — beim Rausfahren blinken."},
+		{"pos": Vector2(80.0, -61.8), "text": "Der Hauptstraße zurück Richtung Zentrum."},
+		{"pos": Vector2(6.0, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
+	]
+
+
+## Route F: Ampel, Weststraße, rechts-vor-links in die Schulstraße,
+## verkehrsberuhigter Bereich (Schritttempo), Biegung der Vorfahrtstraße
+## ohne Blinker in die Oststraße und Stoppschild am Heimweg.
+static func route_f() -> Array:
+	return [
+		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
+		{"pos": Vector2(-90, -61.8), "text": "Geradeaus über die Ampelkreuzung."},
+		{"pos": Vector2(-98.2, -110.0), "text": "Rechts in die Weststraße abbiegen."},
+		{"pos": Vector2(-98.2, -172.0), "text": "Rechts in die Schulstraße — rechts vor links."},
+		{"pos": Vector2(-60, -178.2), "text": "Verkehrsberuhigter Bereich — Schritttempo!"},
+		{"pos": Vector2(60, -178.2), "text": "Der Biegung der Vorfahrtstraße folgen — rechts in die Oststraße, ohne zu blinken."},
+		{"pos": Vector2(98.2, -160.0), "text": "Der Oststraße nach Süden folgen."},
+		{"pos": Vector2(98.2, -70.0), "text": "Stoppschild an der Hauptstraße — Stillstand, dann rechts abbiegen."},
+		{"pos": Vector2(40.0, -61.8), "text": "Der Hauptstraße Richtung Zentrum."},
+		{"pos": Vector2(-10.0, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
+	]
+
+
 static func default_route() -> Array:
 	return [
 		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
@@ -101,20 +144,12 @@ static func default_route() -> Array:
 	]
 
 
-var _route_i := -1   ## Routen A/B wechseln sich bei jedem Start ab
-
-
 func begin() -> void:
-	_route_i = (_route_i + 1) % 4
-	match _route_i:
-		0:
-			wps = default_route()
-		1:
-			wps = route_b()
-		2:
-			wps = route_c()
-		_:
-			wps = route_d()
+	## Zufalls-Prüfer: Route wird pro Fahrt gewürfelt — der Prüfling weiss
+	## nicht vorher, welche Strecke drankommt (wie in der echten Prüfung).
+	var routes := [default_route(), route_b(), route_c(), route_d(),
+		route_e(), route_f()]
+	wps = routes[randi() % routes.size()]
 	idx = 0
 	active = true
 	_said = true   ## erste Anweisung wird beim Start gesprochen
