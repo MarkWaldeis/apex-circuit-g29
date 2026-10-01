@@ -66,6 +66,7 @@ var _signs_seen := {}
 var _door_cd: float = 0.0
 var _idle_t: float = 0.0
 var _cyc_cd: float = 0.0
+var _was_still: bool = true
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -229,6 +230,14 @@ func _check_offroad(pos: Vector3, delta: float) -> void:
 func _check_habits(spd: float, delta: float) -> void:
 	var gear: int = int(car.gear)
 	var rpm: float = float(car.rpm)
+	# Anfahren: geht das Auto aus dem Stand los, gehört der 1. Gang dran
+	# (der 2. geht mit Gefühl noch — ab dem 3. wird es gequält).
+	if spd < 0.3:
+		_was_still = true
+	elif _was_still and spd > 0.8:
+		_was_still = false
+		if gear >= 3 and bool(car.get("motor_on")):
+			_warn("Anfahren im %d. Gang quält Motor und Kupplung — nimm den ersten." % gear)
 	# Handbremse vergessen: Auto rollt trotz angezogener Bremse.
 	if bool(car.get("handbrake_on")) and spd > 1.5:
 		_hb_t += delta
