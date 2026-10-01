@@ -64,6 +64,8 @@ var _stall_note_t: float = 0.0
 var _blink_t: float = 0.0
 var _lamps: Dictionary = {}
 var _last_impact_v: float = 0.0
+var _prev_yaw: float = 0.0
+var _ind_yaw: float = 0.0            ## seit Blinker-An akkumulierte Drehung
 
 
 func setup(wheel_input, surface_model, start: Transform3D) -> void:
@@ -208,6 +210,7 @@ func _toggle_indicator(side: String) -> void:
 		indicator_right = not indicator_right
 		indicator_left = false
 	hazard = false
+	_ind_yaw = 0.0
 
 
 func _wheel_steer() -> float:
@@ -275,6 +278,23 @@ func _physics_process(delta: float) -> void:
 	steering = lerpf(steering, -steer_cmd * steer_limit, clampf(delta * 9.0, 0.0, 1.0))
 	last_steer = steer_cmd
 	_animate_wheels(delta, forward_vel)
+
+	# Blinker-Selbstausloesung: linke Kurve dreht den Kurs um +Y.
+	# Ausloesen, sobald rund 45 Grad abgebogen wurde und das Lenkrad
+	# wieder fast gerade steht - wie die Rueckstellnocke im echten Auto.
+	var yaw: float = global_transform.basis.get_euler().y
+	if indicator_left or indicator_right:
+		_ind_yaw += wrapf(yaw - _prev_yaw, -PI, PI)
+		var turned: float = _ind_yaw if indicator_left else -_ind_yaw
+		if turned > 0.8 and absf(steer_in) < 0.12:
+			indicator_left = false
+			indicator_right = false
+			_ind_yaw = 0.0
+		elif turned < -0.5:
+			_ind_yaw = 0.0
+	else:
+		_ind_yaw = 0.0
+	_prev_yaw = yaw
 
 	# Beschleunigungen fürs Feedback.
 	var accel_vec: Vector3 = (linear_velocity - _prev_vel) / maxf(delta, 0.0001)
