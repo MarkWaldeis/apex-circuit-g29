@@ -79,6 +79,9 @@ var _last_impact_v: float = 0.0
 var _last_impact_name: String = ""
 var _prev_yaw: float = 0.0
 var _ind_yaw: float = 0.0            ## seit Blinker-An akkumulierte Drehung
+var _engine_player: AudioStreamPlayer3D
+var _engine_gen: AudioStreamGeneratorPlayback
+var _engine_phase: float = 0.0
 
 
 func setup(wheel_input, surface_model, start: Transform3D) -> void:
@@ -111,6 +114,19 @@ func setup(wheel_input, surface_model, start: Transform3D) -> void:
 		add_child(spot)
 		_headlights.append(spot)
 	_build_wheels(mesh["wheels"])
+	# Motorsound: synthetisiert aus Drehzahl — 2-Takt-Grundton plus
+	# Oberton, Lautstaerke folgt Gasstellung. Schueler lernen das
+	# Schalten zum grossen Teil ubers Gehoer.
+	var stream := AudioStreamGenerator.new()
+	stream.mix_rate = 22050.0
+	stream.buffer_length = 0.25
+	_engine_player = AudioStreamPlayer3D.new()
+	_engine_player.stream = stream
+	_engine_player.unit_size = 6.0
+	_engine_player.max_distance = 60.0
+	add_child(_engine_player)
+	_engine_player.play()
+	_engine_gen = _engine_player.get_stream_playback()
 	gearbox.setup()
 	ffb = FfbLink.new()
 	ffb.setup(ffb_settings, wheel_input)
@@ -510,9 +526,36 @@ func _physics_process(delta: float) -> void:
 		feedback.update(delta, feel)
 	if ffb:
 		ffb.update(delta, feel)
+	_engine_sound(throttle_in)
 
 	if global_position.y < VOID_Y:
 		_reset()
+
+
+## Synthetischer Motorsound: Grundton ~ Halbe Kurbelwellenfrequenz
+## (rpm/60*2 ≈ 2-Zylinder-Ton) plus Oberton — Drehzahl und Gas hoert
+## man wie an einem echten Motor. Faellt der Motor ab, wirds still.
+func _engine_sound(throttle_in: float) -> void:
+	if _engine_gen == null:
+		return
+	var frames: int = _engine_gen.get_frames_available()
+	if frames <= 0:
+		return
+	var mix := 22050.0
+	var freq: float = (rpm * 0.033) if motor_on else 0.0
+	var vol: float = (0.10 + throttle_in * 0.16) if motor_on else 0.0
+	# Abgewuergt: kurzes Abrasseln statt sofortiger Stille.
+	if stalled and _engine_phase > 0.0:
+		vol = 0.05
+	for i in frames:
+		_engine_phase += freq / mix
+		if _engine_phase >= 1.0:
+			_engine_phase -= 1.0
+		var s: float = sin(TAU * _engine_phase) * 0.55 \
+			+ sin(TAU * _engine_phase * 2.0) * 0.28 \
+			+ sin(TAU * _engine_phase * 3.0) * 0.12
+		s = tanh(s * 1.6) * vol
+		_engine_gen.push_frame(Vector2(s, s))
 
 
 func _update_lamps(delta: float, brake_in: float) -> void:
