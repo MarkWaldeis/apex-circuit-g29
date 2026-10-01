@@ -243,6 +243,10 @@ static func signs() -> Array:
 		{"kind": "limit", "arg": "50", "pos": Vector3(96.5, 0, -50.0), "rot_y": 180.0},
 		{"kind": "limit", "arg": "100", "pos": Vector3(-96.0, 0, -233.0), "rot_y": 0.0},
 		{"kind": "limit", "arg": "100", "pos": Vector3(-104.5, 0, 132.0), "rot_y": 180.0},
+		# Wildwechsel (VZ 142) am West-Ring: Reh-Querung bei z=-40,
+		# Schilder ~25 m vorher in beide Richtungen.
+		{"kind": "wild", "pos": Vector3(-236.5, 0, -15.0), "rot_y": 0.0},
+		{"kind": "wild", "pos": Vector3(-243.5, 0, -65.0), "rot_y": 180.0},
 		{"kind": "limit_end", "pos": Vector3(-226.0, 0, -56.0), "rot_y": 270.0},
 		# Vorfahrt gewähren an den vier neuen Ring-Einfahrten.
 		{"kind": "yield", "pos": Vector3(-230.0, 0, -64.0), "rot_y": 90.0},

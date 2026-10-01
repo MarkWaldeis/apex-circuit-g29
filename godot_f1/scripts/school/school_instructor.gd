@@ -345,6 +345,7 @@ const SIGN_LESSON := {
 	"roundabout": "Kreisverkehr — wer im Kreis fährt, hat Vorfahrt. Beim Rausfahren blinken.",
 	"priority": "Vorfahrtstraße — auf dieser Straße hat man Vorfahrt, Querstraßen müssen warten.",
 	"zebra": "Zebrastreifen — Fußgänger haben Vorrang, rechtzeitig abbremsen.",
+	"wild": "Wildwechsel — Tiere springen hier unvermittelt auf die Straße; vom Gas, bremsbereit, nicht ausweichen.",
 	"parking": "Parkplatz — hier werden die Einpark-Übungen gemacht.",
 }
 
@@ -1242,6 +1243,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			if not ped_near:
 				_warn("Nicht auf dem Zebrastreifen halten — 5 m Abstand einhalten.")
 	_check_pedestrian(p2, spd)
+	_check_deer(p2, spd)
 	_check_rail(p2, spd)
 	_check_ball(p2, spd)
 	_check_engstelle(p2, spd)
@@ -1338,6 +1340,37 @@ func _check_pedestrian(p2: Vector2, spd: float) -> void:
 			if bool(_ped_waiting.get(pid, false)) and d < 16.0:
 				_ped_waiting[pid] = false
 				_done("ped", "Fussgaenger passieren lassen — vorbildlich.")
+
+
+## Wildwechsel am West-Ring: das Reh ist keine verkehrserzogene
+## Figur — es springt unvermittelt. Warnung beim Annähern an die
+## Querung, Treffer wird als schwerer Fehler gezählt.
+var deer: Node3D = null
+var _deer_warned := false
+var _deer_hit := false
+
+
+func _check_deer(p2: Vector2, spd: float) -> void:
+	if deer == null or not is_instance_valid(deer):
+		return
+	var dp := Vector2(deer.global_position.x, deer.global_position.z)
+	var d := p2.distance_to(dp)
+	if bool(deer.on_road()):
+		# Einmal pro Sprung warnen, wenn der Schueler nahe herankommt.
+		if not _deer_warned and d < 55.0 and spd * 3.6 > 20.0:
+			_deer_warned = true
+			_say("Wildwechsel! Vom Gas — das Tier springt quer, bremsbereit bleiben.", 1)
+		if d < 3.0 and spd > 1.0 and not _deer_hit:
+			_deer_hit = true
+			_say("Wildunfall! Bei Wildwechsel nie ausweichen — stark bremsen und spur halten.", 2)
+	elif _deer_warned and d < 45.0 and spd * 3.6 < 25.0:
+		# Schueler ist rechtzeitig langsam geworden — Lektion gegessen.
+		_deer_warned = false
+		_say("Wildwechsel passiert — vorsichtig, das klappt.", 0)
+	elif d > 60.0:
+		_deer_warned = false
+	if _deer_hit and d > 30.0:
+		_deer_hit = false   ## erst zuruecksetzen, wenn die Stelle weit weg ist
 
 
 func _check_rail(p2: Vector2, spd: float) -> void:

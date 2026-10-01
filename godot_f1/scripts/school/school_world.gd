@@ -15,6 +15,7 @@ const SchoolSurfaces = preload("res://scripts/school/school_surfaces.gd")
 const SchoolInstructor = preload("res://scripts/school/school_instructor.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
+const Deer = preload("res://scripts/school/deer.gd")
 const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 const StreetBall = preload("res://scripts/school/street_ball.gd")
 const RescueVehicle = preload("res://scripts/school/rescue_vehicle.gd")
@@ -126,6 +127,14 @@ func _ready() -> void:
 	var peds := [ped, ped2]
 	for p in peds:
 		p.watchers = [player] + traffic_cars
+
+	# Reh am Wildwechsel am West-Ring: sprintet unvermittelt quer,
+	# die KI bremst davor ueber dieselbe Schnittstelle wie Fussgaenger.
+	var deer := Deer.new()
+	deer.name = "DeerWest"
+	add_child(deer)
+	deer.player = player
+	peds.append(deer)
 	for tc in traffic_cars:
 		tc.pedestrians = peds
 
@@ -163,7 +172,8 @@ func _ready() -> void:
 	instructor.school_bus = built.get("school_bus")
 	_ground_mat = built.get("ground_mat")
 	instructor.setup(player, surfaces, lights)
-	instructor.pedestrians = peds
+	instructor.pedestrians = [ped, ped2]
+	instructor.deer = deer
 	instructor.rail = rail
 	instructor.ball = ball
 	instructor.rescue = rescue

@@ -213,6 +213,23 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var bar := _bar(Vector3(0.52, 0.10, 0.02), white)
 			bar.position.z = 0.02
 			face.add_child(bar)
+		"wild":
+			## Zeichen 142: Wildwechsel — Warndreieck mit Reh.
+			var back := _tri(0.48, red, false)
+			face.add_child(back)
+			var inner := _tri(0.38, white, false)
+			inner.position.z = 0.004
+			face.add_child(inner)
+			var rumpf := _bar(Vector3(0.22, 0.12, 0.02), black)
+			rumpf.position = Vector3(0.0, -0.02, 0.02)
+			face.add_child(rumpf)
+			var kopf := _bar(Vector3(0.07, 0.09, 0.02), black)
+			kopf.position = Vector3(0.13, 0.03, 0.02)
+			face.add_child(kopf)
+			for lx in [-0.08, -0.03, 0.05, 0.10]:
+				var bein := _bar(Vector3(0.025, 0.11, 0.02), black)
+				bein.position = Vector3(lx, -0.115, 0.02)
+				face.add_child(bein)
 		"zebra":
 			var back := _bar(Vector3(0.62, 0.62, 0.03), blue)
 			face.add_child(back)
