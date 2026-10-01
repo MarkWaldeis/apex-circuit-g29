@@ -30,6 +30,7 @@ const TASKS := [
 	{"id": "zebra", "name": "Zebrastreifen langsam"},
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
 	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
+	{"id": "rad", "name": "Radfahrer sicher überholt"},
 	{"id": "vorfahrt", "name": "Vorfahrt gewährt"},
 	{"id": "rvl", "name": "Rechts vor links beachtet"},
 	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
@@ -81,6 +82,8 @@ var _signs_seen := {}
 var _door_cd: float = 0.0
 var _idle_t: float = 0.0
 var _cyc_cd: float = 0.0
+var _cyc_armed := false      ## Ueberholvorgang laeuft
+var _cyc_min := 999.0        ## kleinster Abstand waehrend des Ueberholens
 var _was_still: bool = true
 var _prio_cd: float = 0.0
 var _weave_side: int = 0
@@ -462,15 +465,30 @@ func _check_weave(pos: Vector3, spd: float, delta: float) -> void:
 
 func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:
 	_cyc_cd = maxf(_cyc_cd - delta, 0.0)
-	if cyclist == null or not is_instance_valid(cyclist) or _cyc_cd > 0.0:
+	if cyclist == null or not is_instance_valid(cyclist):
 		return
 	var d := p2.distance_to(cyclist.pos2())
-	if d < 1.7:
-		_say("Viel zu dicht am Radfahrer — das ist gefährlich.", 2)
-		_cyc_cd = 8.0
-	elif d < 2.6 and spd > 3.0:
-		_say("Seitenabstand zum Radfahrer — mindestens 1,5 m, sonst warten.", 1)
-		_cyc_cd = 8.0
+	if _cyc_cd <= 0.0:
+		if d < 1.7:
+			_say("Viel zu dicht am Radfahrer — das ist gefährlich.", 2)
+			_cyc_cd = 8.0
+		elif d < 2.6 and spd > 3.0:
+			_say("Seitenabstand zum Radfahrer — mindestens 1,5 m, sonst warten.", 1)
+			_cyc_cd = 8.0
+	# Ueberhol-Aufgabe: Radfahrer mit >= 1,8 m Abstand passieren.
+	var fwd := -car.global_transform.basis.z
+	var rel := cyclist.global_position - car.global_position
+	var ahead := fwd.dot(rel) > 0.0
+	if not _cyc_armed and ahead and d < 25.0 and spd > 3.0:
+		_cyc_armed = true
+		_cyc_min = d
+	elif _cyc_armed:
+		_cyc_min = minf(_cyc_min, d)
+		if not ahead and rel.length() > 6.0:
+			_cyc_armed = false
+			if _cyc_min >= 1.8:
+				_done("rad", "Radfahrer sicher überholt — schöner Abstand!")
+			# zu dicht kam oben schon die Ermahnung
 
 
 func _check_stalls_and_shifts() -> void:
