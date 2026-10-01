@@ -18,6 +18,27 @@ const SAY_DIST := 55.0
 const OFFTRACK_DIST := 75.0
 
 
+## Route B: Stopp-Kreuzung, Kreisverkehr (2. Ausfahrt), Ringstraße mit
+## Tempo 100, dann zurueck ueber die Weststrasse. Wegpunkte liegen wieder
+## auf der rechten Fahrspur.
+static func route_b() -> Array:
+	return [
+		{"pos": Vector2(0, -55.0), "text": "Biegen Sie rechts in die Hauptstraße ab."},
+		{"pos": Vector2(60, -58.2), "text": "Gleich Stoppschild — zum Stillstand kommen, dann vorsichtig weiter."},
+		{"pos": Vector2(150, -58.2), "text": "Weiter zum Kreisverkehr — Vorfahrt dem Kreis."},
+		{"pos": Vector2(216, -58.2), "text": "Zweite Ausfahrt nehmen — beim Rausfahren blinken."},
+		{"pos": Vector2(236, -58.2), "text": "Links auf den Ring Ost — Tempo 100."},
+		{"pos": Vector2(241.8, -140.0), "text": "Der Ringstraße folgen."},
+		{"pos": Vector2(180, -241.8), "text": "Links auf die Ringstraße Nord."},
+		{"pos": Vector2(-60, -241.8), "text": "Geradeaus — freie Fahrt."},
+		{"pos": Vector2(-101.8, -150.0), "text": "Links in die Weststraße abbiegen."},
+		{"pos": Vector2(-101.8, -70.0), "text": "Links zurück in die Hauptstraße."},
+		{"pos": Vector2(-40, -58.2), "text": "Zurück in Richtung Zentrum — Achtung Zebrastreifen."},
+		{"pos": Vector2(14, -58.2), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
+	]
+
+
 static func default_route() -> Array:
 	return [
 		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
@@ -32,8 +53,12 @@ static func default_route() -> Array:
 	]
 
 
+var _route_i := -1   ## Routen A/B wechseln sich bei jedem Start ab
+
+
 func begin() -> void:
-	wps = default_route()
+	_route_i = (_route_i + 1) % 2
+	wps = default_route() if _route_i == 0 else route_b()
 	idx = 0
 	active = true
 	_said = true   ## erste Anweisung wird beim Start gesprochen
