@@ -117,6 +117,8 @@ var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
 var _einbahn_on := false      ## auf der Einbahnstrasse westwaerts unterwegs
 var _ov_armed := false        ## Ueberholvorgang beobachtet
 var _ov_tc = null             ## gerade ueberholtes KI-Fahrzeug
+var _pullout_armed := false   ## stand still -> koennte anfahren
+var _still_t: float = 0.0     ## Standzeit vor dem Anfahren
 var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
 var _rescue_ann := false      ## Alarmfahrt schon angesagt
 var _rescue_near := false     ## Schueler war waehrend der Fahrt in Reichweite
@@ -205,6 +207,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_schulbus(p2, spd)
 	_check_einbahn(pos, p2)
 	_check_ueberhol(p2, spd)
+	_check_pullout(p2, spd)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -726,6 +729,44 @@ func _check_ueberhol(p2: Vector2, spd: float) -> void:
 			_done("ueberhol", "Überholvorgang sauber beendet — gute Arbeit.")
 	elif absf(along2) > 75.0 or side2 > 25.0:
 		_ov_armed = false    ## aus der Situation rausgefahren
+
+
+## Anfahren nach dem Halt: kommt ein KI-Fahrzeug von hinten
+## derselben Richtung, darf man nicht einfach auf die Fahrbahn
+## — Schulterblick und Blinker sind Pflicht, sonst wird gemahnt.
+func _check_pullout(p2: Vector2, spd: float) -> void:
+	if spd < 0.5:
+		_still_t += 0.016
+		if _still_t > 2.5:
+			_pullout_armed = true
+		return
+	if not _pullout_armed or spd < 3.0:
+		if spd > 1.5:
+			_still_t = 0.0
+		return
+	_pullout_armed = false
+	_still_t = 0.0
+	var s_dir := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	if s_dir == Vector2.ZERO:
+		return
+	var side_dir := Vector2(-s_dir.y, s_dir.x)
+	var near := false
+	for tc in traffic:
+		if not is_instance_valid(tc):
+			continue
+		var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
+		var along := rel.dot(s_dir)
+		var side := absf(rel.dot(side_dir))
+		if along > -22.0 and along < -1.0 and side < 3.5:
+			near = true
+			break
+	if near:
+		var blinked := bool(car.get("indicator_left"))
+		if blinked:
+			_say("Verkehr von hinten — mit Blinker gesehen, Schulterblick zählt trotzdem!", 0)
+		else:
+			_say("Anfahren bei Verkehr von hinten: erst Blinker, dann Schulterblick!", 1)
 
 
 func _check_einbahn(pos: Vector3, p2: Vector2) -> void:
