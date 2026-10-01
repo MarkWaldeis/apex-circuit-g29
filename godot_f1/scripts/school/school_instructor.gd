@@ -106,6 +106,7 @@ var _warn_cnt := 0            ## abgegebene Hinweise/Verwarnungen
 var _ba_in := false           ## Schueler aktuell in der Baustellenzone
 var _ba_clean := true         ## Durchfahrt ohne Tempoverstoss
 var _slip_t := 0.0            ## Zeit am Schleifpunkt in Kriechfahrt
+var _clutch_ride := 0.0       ## getretene Kupplung bei Fahrt (Sekunden)
 var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
 var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
 var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
@@ -1051,12 +1052,24 @@ func _check_rescue(spd: float) -> void:
 
 
 func _check_schleif(spd: float, delta: float) -> void:
-	# Kriechfahrt: Kupplung im Schleifpunkt halten und das Auto langsam
-	# rollen lassen — drei Sekunden Kriechen ohne Abwuergen zaehlen.
-	if _tasks_done.get("schleif", false) or bool(car.get("stalled")) \
-			or not car.has_method("_clutch_pedal"):
+	if not car.has_method("_clutch_pedal"):
 		return
 	var pedal: float = car._clutch_pedal()
+	# Getretene Kupplung bei Fahrt: der linke Fuß gehoert nach dem
+	# Schalten weg vom Pedal — sonst verschliesst die Kupplung.
+	if pedal > 0.6 and spd > 4.0:
+		_clutch_ride += delta
+		if _clutch_ride > 3.0:
+			_clutch_ride = -8.0
+			_warn("Kupplungspedal loslassen beim Fahren — der Fuß kommt weg, sonst schleift die Kupplung.")
+	elif _clutch_ride > 0.0:
+		_clutch_ride = 0.0
+	else:
+		_clutch_ride = minf(_clutch_ride + delta, 0.0)
+	# Kriechfahrt: Kupplung im Schleifpunkt halten und das Auto langsam
+	# rollen lassen — drei Sekunden Kriechen ohne Abwuergen zaehlen.
+	if _tasks_done.get("schleif", false) or bool(car.get("stalled")):
+		return
 	var kriechend: bool = pedal > 0.25 and pedal < 0.85 \
 		and spd > 0.3 and spd < 2.2 and int(car.gear) == 1
 	if kriechend:
