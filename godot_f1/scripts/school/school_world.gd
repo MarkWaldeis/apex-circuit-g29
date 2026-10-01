@@ -183,6 +183,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("quit_game"):
 		get_tree().quit()
 	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_B:
+		if player and player.has_method("honk"):
+			player.honk()
+		if instructor:
+			instructor._warn("Hupe ist das Warnsignal — in der Stadt nur bei Gefahr erlaubt.")
+	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_Z:
 		if instructor:
 			instructor.report()

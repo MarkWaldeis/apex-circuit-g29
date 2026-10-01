@@ -84,6 +84,8 @@ var _engine_gen: AudioStreamGeneratorPlayback
 var _engine_phase: float = 0.0
 var _click_gap: float = 0.0    ## Samples bis zum naechsten Blinker-Klack
 var _click_left: float = 0.0   ## Samples im aktuellen Klack-Burst
+var _horn_left: float = 0.0    ## verbleibende Horn-Samples (Taste B)
+var _horn_phase: float = 0.0
 
 
 func setup(wheel_input, surface_model, start: Transform3D) -> void:
@@ -550,6 +552,8 @@ func _engine_sound(throttle_in: float) -> void:
 	if stalled and _engine_phase > 0.0:
 		vol = 0.05
 	var blinker_an: bool = indicator_left or indicator_right or hazard
+	var horn_f1 := 420.0 / mix
+	var horn_f2 := 530.0 / mix
 	for i in frames:
 		_engine_phase += freq / mix
 		if _engine_phase >= 1.0:
@@ -567,7 +571,20 @@ func _engine_sound(throttle_in: float) -> void:
 			elif _click_gap <= 0.0:
 				_click_left = 60.0      ## ~3 ms Klack bei 22050 Hz
 				_click_gap = 9920.0     ## ~0.45 s wie ein echtes Relais
+		# Hupe: zwei schrille Toene uebereinander, mit Ein-/Ausklingen.
+		if _horn_left > 0.0:
+			_horn_left -= 1.0
+			_horn_phase += 1.0
+			var h: float = sin(TAU * _horn_phase * horn_f1) \
+				+ sin(TAU * _horn_phase * horn_f2)
+			s += tanh(h) * 0.30 * clampf(_horn_left / 3000.0, 0.0, 1.0)
 		_engine_gen.push_frame(Vector2(s, s))
+
+
+## Hupe: kurzes Zweiklang-Horn (~0.4 s), wie in der Stadt ueblich.
+func honk() -> void:
+	if _horn_left <= 0.0:
+		_horn_left = 8800.0        ## ~0.4 s bei 22050 Hz
 
 
 func _update_lamps(delta: float, brake_in: float) -> void:

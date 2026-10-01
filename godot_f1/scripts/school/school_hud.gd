@@ -275,7 +275,7 @@ func _build() -> void:
 		"WASD / Pfeile – Fahren\n"
 		+ "1–6 Gänge · 0/N Leerlauf · V Rückwärts\n"
 		+ "Q / E – Blinker links / rechts\n"
-		+ "H – Warnblinker · Leertaste – Handbremse\n"
+		+ "H – Warnblinker · B – Hupe · Leertaste – Handbremse\n"
 		+ "L – Abblendlicht · U – Nacht · I – Nebel · M – Nässe\n"
 		+ "Z – Zwischenbilanz des Fahrlehrers\n"
 		+ "T – zur nächsten Übung springen\n"
