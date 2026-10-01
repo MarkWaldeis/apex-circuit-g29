@@ -318,7 +318,7 @@ func _test_pedestrian() -> void:
 
 func _test_exam_route() -> void:
 	var ex := ExamRoute.new()
-	ex.begin()
+	ex.begin(0)   # Route A fest waehlen — der Test prueft Route-A-Positionen
 	_check(ex.active, "exam_active_after_begin")
 	_check(ex.wps.size() >= 8, "exam_route_has_waypoints", "n=%d" % ex.wps.size())
 	# Erste Anweisung gilt beim Start als gesprochen -> fernab keine Events.

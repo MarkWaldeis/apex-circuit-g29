@@ -52,6 +52,7 @@ const TASKS := [
 	{"id": "fussg_ab", "name": "Fußgänger beim Abbiegen durchgelassen (§9)"},
 	{"id": "radler_ab", "name": "Radfahrer beim Rechtsabbiegen durchgelassen (§9)"},
 	{"id": "abstand", "name": "Sicherheitsabstand gehalten (halber Tacho)"},
+	{"id": "witterung", "name": "Geschwindigkeit an Nässe/Glätte angepasst"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -1430,6 +1431,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_schleif(spd, delta)
 	_check_einfadeln(p2, spd)
 	_check_distance(p2, spd, delta)
+	_check_weather_speed(spd, delta)
 	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -1847,6 +1849,36 @@ func _check_distance(p2: Vector2, spd: float, delta: float) -> void:
 			_dist_ok = -9999.0   # einmal belohnen
 			_done("abstand",
 				"Sicherheitsabstand gehalten — halber Tacho passt.")
+
+
+## Angepasste Geschwindigkeit (§3): bei Naesse (M) und Glaette (O) muss
+## langsamer gefahren werden — wer das ueber laengere Strecke macht,
+## erledigt die Aufgabe; zu schnell wird verwarnt.
+var _wx_cd := 0.0
+var _wx_over := 0.0
+var _wx_m := 0.0
+func _check_weather_speed(spd: float, delta: float) -> void:
+	_wx_cd = maxf(_wx_cd - delta, 0.0)
+	var icy: bool = surfaces != null and bool(surfaces.get("icy"))
+	var wet: bool = surfaces != null and bool(surfaces.get("wet"))
+	if not icy and not wet:
+		return
+	var cap_kmh := 30.0 if icy else 45.0
+	var kmh := spd * 3.6
+	if kmh > cap_kmh:
+		_wx_over += delta
+		if _wx_over > 4.0 and _wx_cd <= 0.0:
+			_warn("Zu schnell bei %s — Geschwindigkeit der Witterung anpassen!"
+				% ["Glatteis" if icy else "Nässe"])
+			_wx_cd = 12.0
+			_wx_over = 0.0
+	else:
+		_wx_over = 0.0
+		_wx_m += spd * delta
+		if _wx_m > 200.0:
+			_wx_m = -99999.0   # einmal belohnen
+			_done("witterung",
+				"Tempo der Witterung angepasst — §3 sitzt.")
 
 
 func _check_rescue(spd: float) -> void:

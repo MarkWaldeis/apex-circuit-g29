@@ -144,12 +144,15 @@ static func default_route() -> Array:
 	]
 
 
-func begin() -> void:
+func begin(force_route: int = -1) -> void:
 	## Zufalls-Prüfer: Route wird pro Fahrt gewürfelt — der Prüfling weiss
 	## nicht vorher, welche Strecke drankommt (wie in der echten Prüfung).
+	## force_route >= 0 waehlt eine bestimmte Route (Tests).
 	var routes := [default_route(), route_b(), route_c(), route_d(),
 		route_e(), route_f()]
-	wps = routes[randi() % routes.size()]
+	var i := randi() % routes.size() if force_route < 0 \
+		else force_route % routes.size()
+	wps = routes[i]
 	idx = 0
 	active = true
 	_said = true   ## erste Anweisung wird beim Start gesprochen
