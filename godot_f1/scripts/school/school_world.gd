@@ -40,6 +40,7 @@ var _night := false
 var _fog := false
 var _wet := false
 var _extra_traffic: Array = []   ## zusaetzliche KI-Autos (Taste G)
+var _rain: GPUParticles3D        ## Regenpartikel ueber dem Auto
 
 
 func _ready() -> void:
@@ -108,6 +109,7 @@ func _ready() -> void:
 	var rail := RailCrossing.new()
 	rail.center = CityLayout.rail_crossing()["center"]
 	add_child(rail)
+	_make_rain()
 
 	# Ball zwischen parkenden Autos auf der Kreisverkehr-Nordstrasse.
 	var ball := StreetBall.new()
@@ -169,6 +171,8 @@ func _physics_process(delta: float) -> void:
 		var light = item["light"]
 		if is_instance_valid(light):
 			light.set_phase(lights.phase_of(String(item["arm"])))
+	if _rain and player:
+		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
 		instructor.night = _night
 		instructor.update(delta)
@@ -183,6 +187,33 @@ func _physics_process(delta: float) -> void:
 ## Verkehrsdichte umschalten: zwei zusaetzliche KI-Autos spawnen oder
 ## entfernen — so laesst sich die Stadt zwischen "ruhig zum Ueben" und
 ## "voll wie Berufsverkehr" umstellen (Taste G).
+## Regen-Partikelstrahl ueber dem Spieler (Naesse-Taste M).
+func _make_rain() -> void:
+	_rain = GPUParticles3D.new()
+	_rain.amount = 900
+	_rain.lifetime = 0.9
+	_rain.emitting = false
+	_rain.visibility_aabb = AABB(Vector3(-40, -15, -40), Vector3(80, 30, 80))
+	var mat := ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	mat.emission_box_extents = Vector3(30.0, 1.0, 30.0)
+	mat.direction = Vector3(0.0, -1.0, 0.15)
+	mat.spread = 4.0
+	mat.initial_velocity_min = 26.0
+	mat.initial_velocity_max = 34.0
+	mat.gravity = Vector3(0.0, -2.0, 0.0)
+	_rain.process_material = mat
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.015, 0.5)
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.65, 0.75, 0.9, 0.45)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	quad.material = m
+	_rain.draw_pass_1 = quad
+	add_child(_rain)
+
+
 func _toggle_traffic() -> void:
 	if _extra_traffic.is_empty():
 		for cfg in [{"route": 0, "start": 3}, {"route": 1, "start": 7}]:
@@ -249,9 +280,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_wet = not _wet
 		if surfaces:
 			surfaces.set_wet(_wet)
+		if _rain:
+			_rain.emitting = _wet
 		if instructor:
 			if _wet:
-				instructor._say("Nasse Fahrbahn — Grip lässt nach: früher bremsen, sanfter lenken, mehr Abstand.", 0)
+				instructor._say("Regen — Grip lässt nach und die Scheibe beschlägt: früher bremsen, sanfter lenken, mehr Abstand.", 0)
 			else:
 				instructor._say("Wieder trocken — normale Fahrbahnhaftung.", 0)
 	if event is InputEventKey and event.pressed and not event.echo \
