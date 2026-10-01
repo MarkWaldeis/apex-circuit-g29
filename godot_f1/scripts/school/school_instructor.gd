@@ -1435,6 +1435,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_distance(p2, spd, delta)
 	_check_weather_speed(spd, delta)
 	_check_fuel()
+	_check_right_lane(p2, spd, delta)
 	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -1899,6 +1900,61 @@ func _check_fuel() -> void:
 	elif _fuel_lvl < 1:
 		_fuel_lvl = 1
 		_say("Der Tank wird knapp — die Tankstelle liegt an der Oststraße, südlich der Hauptstraße.", 0)
+
+
+## Rechtsfahrgebot (§2 Abs. 2): auf den breiten Stadtstraessen gehoert
+## das Fahrzeug auf die rechte Fahrbahnhaelfte — wer laenger links
+## faehrt, wird erinnert. Gilt nicht im Kreuzungsbereich, in
+## Baustelle/Spielstrasse und an der Dooring-Stelle (parkende Autos).
+var _rl_t := 0.0
+var _rl_cd := 0.0
+const RL_ROADS := ["Hauptstraße", "Weststraße", "Oststraße", "Schulstraße"]
+func _check_right_lane(p2: Vector2, spd: float, delta: float) -> void:
+	_rl_cd = maxf(_rl_cd - delta, 0.0)
+	if spd < 6.0:
+		_rl_t = 0.0
+		return
+	# Kreuzungsbereich frei: dort ist Spurwahl = Abbiegevorbereitung.
+	for j in CityLayout.junctions().values():
+		if p2.distance_to(Vector2(j["center"])) < 15.0:
+			_rl_t = 0.0
+			return
+	if Rect2(CityLayout.baustelle()["zone"]).has_point(p2) \
+			or Rect2(CityLayout.spiel()["rect"]).has_point(p2) \
+			or p2.distance_to(Vector2(-102.4, -90.0)) < 10.0:
+		_rl_t = 0.0
+		return
+	var fwd := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	if fwd == Vector2.ZERO:
+		return
+	# Naechste Stadtstraße finden und Seitenlage bestimmen.
+	var found := false
+	var side := 0.0
+	for road in CityLayout.roads():
+		if int(road["oneway"]) != 0 or not RL_ROADS.has(String(road["name"])):
+			continue
+		var a: Vector2 = road["from"]
+		var b: Vector2 = road["to"]
+		var ab := b - a
+		var tt := clampf((p2 - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		var c := a + ab * tt
+		var rel := p2 - c
+		if rel.length() <= float(road["width"]) * 0.5 + 1.0:
+			found = true
+			side = rel.dot(Vector2(-fwd.y, fwd.x))   # >0 = rechte Hälfte
+			break
+	if not found:
+		_rl_t = 0.0
+		return
+	if side < -1.3:
+		_rl_t += delta
+		if _rl_t > 4.0 and _rl_cd <= 0.0:
+			_say("Rechts fahren! Die linke Fahrbahnhälfte ist für den Gegenverkehr.", 1)
+			_rl_cd = 30.0
+			_rl_t = 0.0
+	else:
+		_rl_t = 0.0
 
 
 func _check_rescue(spd: float) -> void:
