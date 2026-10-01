@@ -15,6 +15,7 @@ const SchoolSurfaces = preload("res://scripts/school/school_surfaces.gd")
 const SchoolInstructor = preload("res://scripts/school/school_instructor.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
+const PedCrossing = preload("res://scripts/school/ped_crossing.gd")
 const Deer = preload("res://scripts/school/deer.gd")
 const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 const StreetBall = preload("res://scripts/school/street_ball.gd")
@@ -126,6 +127,12 @@ func _ready() -> void:
 		Vector2(-100.0, -150.0), 3.6)
 	# Beide gehen erst los, wenn kein Fahrzeug an der Querung ankommt.
 	var peds := [ped, ped2]
+	# Die Fussgaengerampel haelt auch KI an, solange die Figur quert.
+	var pedx_early := PedCrossing.new()
+	pedx_early.name = "PedCrossing"
+	add_child(pedx_early)
+	_pedx = pedx_early
+	peds.append(pedx_early.ped_node())
 	_peds = peds
 	for p in peds:
 		p.watchers = [player] + traffic_cars
@@ -190,6 +197,7 @@ func _ready() -> void:
 	instructor.balls = [ball2]
 	instructor.rescue = rescue
 	instructor.door_car = door_car
+	instructor.ped_crossing = _pedx
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.cam = cam
@@ -262,6 +270,7 @@ func _physics_process(delta: float) -> void:
 var _rbl_t: float = 20.0       ## Cooldown fuer den RvL-Trainer
 var _onc_t: float = 30.0       ## Cooldown fuer den Gegenverkehr-Trainer
 var _peds: Array = []          ## Fussgaenger+Reh — KI-Spawn braucht sie zum Bremsen
+var _pedx                    ## Fussgaengerampel (ped_crossing.gd)
 
 
 ## Zufalls-RvL-Training: naehert sich der Schueler der RvL-Kreuzung

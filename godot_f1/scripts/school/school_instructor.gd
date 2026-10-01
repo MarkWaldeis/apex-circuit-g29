@@ -48,6 +48,7 @@ const TASKS := [
 	{"id": "auspark", "name": "Rückwärts aus der Parkbucht ausgefahren"},
 	{"id": "rueck", "name": "Rückwärts im Pylonen-Korridor"},
 	{"id": "fernlicht", "name": "Fernlicht richtig benutzt (Taste F)"},
+	{"id": "fussampel", "name": "Fußgängerampel: bei Rot angehalten"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -63,6 +64,7 @@ var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
 var school_bus               ## school_bus.gd-Instanz (§20-Halt am Bus)
+var ped_crossing             ## ped_crossing.gd — Fussgaengerampel Hauptstrasse
 var _ped_waiting := {}         ## Fussgaenger-id -> Schueler laesst passieren
 var _ww_t: float = 0.0         ## Zeit gegen die Einbahnrichtung (Rate-Limit)
 var _speed_over: float = 0.0
@@ -1397,6 +1399,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_nacht(spd, delta)
 	_check_nebel(spd, delta)
 	_check_fernlicht(p2, spd, delta)
+	_check_fussampel(p2, spd, delta)
 	_check_baustelle(p2, spd)
 	_check_spiel(p2, spd)
 	_check_schleif(spd, delta)
@@ -1634,6 +1637,34 @@ func _check_fernlicht(p2: Vector2, spd: float, delta: float) -> void:
 			and spd > 8.0 and not near:
 		_fb_hinted = true
 		_say("Dunkel und frei vorne — hier darf das Fernlicht helfen (Taste F, bei Gegenverkehr abblenden!).", 0)
+
+
+## Fussgaengerampel auf der Hauptstrasse (x=40, z=-60): wer bei Rot
+## ueber die Haltelinie faehrt, wird verwarnt; wer vor der Querung
+## ordentlich wartet und bei Gruen weiterfaehrt, ist die Aufgabe los.
+var _fa_waited := false
+var _fa_cd := 0.0
+func _check_fussampel(p2: Vector2, spd: float, delta: float) -> void:
+	if ped_crossing == null:
+		return
+	_fa_cd = maxf(_fa_cd - delta, 0.0)
+	var cx: Vector2 = ped_crossing.cross_pos()
+	var dz := absf(p2.y - cx.y)
+	var dx := p2.x - cx.x
+	if dz > 3.4 or absf(dx) > 40.0:
+		return
+	var ph: String = ped_crossing.car_phase()
+	if ph == "red" and absf(dx) < 12.0 and spd < 0.5:
+		_fa_waited = true
+	if absf(dx) < 2.6:
+		if ph == "red" and _fa_cd <= 0.0:
+			_warn("Rotlicht an der Fußgängerampel! Bei Rot heißt es halten.")
+			_fa_cd = 10.0
+		elif ph == "green" and _fa_waited:
+			_fa_waited = false
+			_done("fussampel", "Fußgängerampel: bei Rot gehalten, bei Grün weiter — genau so.")
+	elif absf(dx) > 20.0:
+		_fa_waited = false
 
 
 func _check_einfadeln(p2: Vector2, spd: float) -> void:
