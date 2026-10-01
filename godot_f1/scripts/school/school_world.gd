@@ -170,6 +170,7 @@ func _ready() -> void:
 	instructor.door_car = door_car
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
+	instructor.cam = cam
 	instructor.traffic = traffic_cars
 	# Ziel-Marker der Pruefungsfahrt: leuchtende Saeule am naechsten Wegpunkt.
 	_exam_beam = MeshInstance3D.new()

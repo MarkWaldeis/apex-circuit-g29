@@ -173,13 +173,21 @@ func _done(id: String, praise: String) -> void:
 
 
 var _exam_errs := 0          ## Warnungen waehrend einer Pruefungsfahrt
+var _exam_log: Array = []    ## Beanstandungen mit Ort (Abschlussprotokoll)
 var _gyaw0 := -999.0         ## generelle Blinkerpflicht: Gier-Referenz
 var _gyaw_ok := false        ## Blinker war waehrend der Drehung an
+var cam                    ## chase_camera.gd — fuer Schulterblick-Ersatz
+var _rear_ok_at: float = -99.0  ## letzte Rückblick-Kamera > 0,5 s
+var _rear_acc: float = 0.0
 
 
 func _say(text: String, level: int) -> void:
 	if exam.active and level >= 1:
 		_exam_errs += 1
+		var road := ""
+		if surfaces != null and car != null:
+			road = String(surfaces.road_at(car.global_position))
+		_exam_log.append({"text": text, "road": road})
 	coached.emit(text, level)
 
 
@@ -195,6 +203,14 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 		return
 	_km_driven += car.linear_velocity.length() * delta
 	_coach_cd = maxf(_coach_cd - delta, 0.0)
+	# Rueckblick-Kamera (Modus 3): laeuft sie mindestens eine halbe
+	# Sekunde, gilt der Schulterblick fuer die naechsten ~4 s als gemacht.
+	if cam != null and int(cam.mode) == 3:
+		_rear_acc += delta
+		if _rear_acc >= 0.5:
+			_rear_ok_at = Time.get_ticks_msec() / 1000.0
+	else:
+		_rear_acc = 0.0
 	var pos: Vector3 = car.global_position
 	var spd: float = linear_speed()
 	var p2 := Vector2(pos.x, pos.z)
@@ -676,6 +692,8 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen links blinken.")
 			elif dyaw < -0.45 and not bool(tr.get("r", false)):
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
+			if dyaw < -0.45:
+				_check_shoulder(p2)
 			if dyaw > 0.45:
 				_check_left_turn_oncoming(tr["j"], tr["arm"])
 			_jturn.erase(key)
@@ -1160,6 +1178,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 						_done("pruefung", "Prüfungsfahrt bestanden — %d Beanstandung(en)!" % _exam_errs)
 					else:
 						_say("Prüfungsfahrt beendet — %d Beanstandung(en): nicht bestanden!" % _exam_errs, 2)
+					_exam_protocol()
 	for c in cams:
 		if is_instance_valid(c) and c.check(p2, spd * 3.6):
 			_say("Geblitzt! %d km/h statt %d — das gibt Post." % [int(spd * 3.6), c.limit], 2)
@@ -1170,10 +1189,47 @@ func toggle_exam() -> void:
 	if exam.active:
 		exam.abort()
 		_say("Prüfungsfahrt abgebrochen.", 0)
+		_exam_protocol()
 	else:
 		exam.begin()
 		_exam_errs = 0
+		_exam_log.clear()
 		_say("Prüfungsfahrt! " + String(exam.wps[0]["text"]), 0)
+
+
+## Abschlussprotokoll: alle Beanstandungen der Pruefungsfahrt mit
+## Straßennamen — wie das Pruefprotokoll in der echten Fuehrerschein-
+## Pruefung. Laeuft als normale Fahrlehrer-Zeilen (level 0).
+func _exam_protocol() -> void:
+	if _exam_log.is_empty():
+		_say("Protokoll: sauber gefahren — keine Beanstandungen.", 0)
+		return
+	var lines := []
+	for e in _exam_log:
+		var where := String(e["road"])
+		if where == "":
+			where = "im Gelaende"
+		lines.append("- %s (%s)" % [String(e["text"]), where])
+	_say("Fehlerliste:\n" + "\n".join(lines), 0)
+
+
+## Schulterblick-Ersatz: beim Rechtsabbiegen mit echtem Verkehr in
+## Reichweite wird erwartet, dass die Rueckblick-Kamera (Modus 3, Taste
+## C) kurz vorher benutzt wurde — ein Ersatz fuer den Blick ueber die
+## Schulter, den eine 3D-Personenperspektive nicht bietet.
+func _check_shoulder(p2: Vector2) -> void:
+	if cam == null:
+		return
+	var hazard := false
+	if cyclist != null and is_instance_valid(cyclist) \
+			and p2.distance_to(cyclist.pos2()) < 45.0:
+		hazard = true
+	for t in traffic:
+		if is_instance_valid(t) \
+				and p2.distance_to(Vector2(t.global_position.x, t.global_position.z)) < 45.0:
+			hazard = true
+	if hazard and Time.get_ticks_msec() / 1000.0 - _rear_ok_at > 4.0:
+		_warn("Schulterblick vergessen — kurz vor dem Rechtsabbiegen den Rückblick (C) prüfen.")
 
 
 func _check_pedestrian(p2: Vector2, spd: float) -> void:
