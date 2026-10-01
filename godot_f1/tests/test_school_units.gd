@@ -5,12 +5,15 @@ extends SceneTree
 ##   * school_surfaces: Untergrund, Tempolimits, Einbahnstraße
 ##   * city_layout: konsistente Daten (Haltelinien liegen auf Straßen)
 ##   * traffic_car: KI-Regeln (Ampel, Stoppschild, Auffahrschutz)
+##   * pedestrian + Fahrlehrer: Zebrastreifen-Vorrang-Aufgabe
 
 const HGearbox = preload("res://scripts/school/h_gearbox.gd")
 const JunctionLights = preload("res://scripts/school/junction_lights.gd")
 const Surfaces = preload("res://scripts/school/school_surfaces.gd")
 const Layout = preload("res://scripts/school/city_layout.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
+const Pedestrian = preload("res://scripts/school/pedestrian.gd")
+const Instructor = preload("res://scripts/school/school_instructor.gd")
 
 var failed: int = 0
 
@@ -33,6 +36,7 @@ func _run() -> void:
 	_test_surfaces()
 	_test_layout()
 	_test_traffic()
+	_test_pedestrian()
 	if failed > 0:
 		print("SCHOOL_UNITS FAIL count=", failed)
 		quit(1)
@@ -169,3 +173,37 @@ func _test_traffic() -> void:
 	_check(v == 0.0, "traffic_brakes_for_student", "v=%.1f" % v)
 	p.free()
 	tc.free()
+
+
+func _test_pedestrian() -> void:
+	var ped := Pedestrian.new()
+	root.add_child(ped)
+	ped.global_position = Vector3(-40.0, 0.0, -53.5)   ## Bordstein
+	ped._walking = true
+	ped._target_z = -66.5
+	var saw_on_road := false
+	for i in range(55):
+		ped._physics_process(0.2)
+		if ped.on_road():
+			saw_on_road = true
+	_check(saw_on_road, "pedestrian_walks_across_road")
+	_check(absf(ped.global_position.z + 66.5) < 0.05, "pedestrian_reaches_far_side",
+		"z=%.2f" % ped.global_position.z)
+
+	var inst := Instructor.new()
+	inst.pedestrian = ped
+	# Schueler wartet vor dem Zebrastreifen, Fussgaenger mittendrin.
+	ped.global_position = Vector3(-40.0, 0.0, -60.0)
+	inst._check_pedestrian(Vector2(-46.0, -60.0), 0.0)
+	_check(inst._ped_waiting, "ped_waiting_registered")
+	# Fussgaenger verlaesst die Fahrbahn -> Aufgabe erledigt.
+	ped.global_position = Vector3(-40.0, 0.0, -66.5)
+	inst._check_pedestrian(Vector2(-46.0, -60.0), 0.0)
+	_check(bool(inst._tasks_done.get("ped", false)), "ped_yield_task_done")
+	# Dichtes Vorbeifahren bei Fussgaenger auf der Bahn -> Ansage.
+	var coached_msgs: Array = []
+	inst.coached.connect(func(t, _l): coached_msgs.append(t))
+	ped.global_position = Vector3(-40.0, 0.0, -60.0)
+	inst._check_pedestrian(Vector2(-41.0, -60.0), 3.0)
+	_check(coached_msgs.size() > 0, "ped_close_pass_coaches")
+	ped.free()

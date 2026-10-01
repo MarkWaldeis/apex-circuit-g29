@@ -25,11 +25,14 @@ const TASKS := [
 	{"id": "stop", "name": "Halt am Stoppschild"},
 	{"id": "light", "name": "Ampelkreuzung bei Grün"},
 	{"id": "zebra", "name": "Zebrastreifen langsam"},
+	{"id": "ped", "name": "Fussgaenger passieren lassen"},
 ]
 
 var car
 var surfaces
 var lights          ## junction_lights.gd Instanz (kann null sein)
+var pedestrian      ## Fussgaenger am Zebrastreifen (kann null sein)
+var _ped_waiting := false
 var _speed_over: float = 0.0
 var _speed_limit: int = -1
 var _speeding: bool = false
@@ -324,6 +327,25 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		var zp: Vector2 = z["pos"]
 		if absf(p2.x - zp.x) < 4.0 and absf(p2.y - zp.y) < 4.0 and spd * 3.6 < 30.0 and spd > 0.5:
 			_done("zebra", "Zebrastreifen langsam — Fußgänger zuerst.")
+	_check_pedestrian(p2, spd)
+
+
+func _check_pedestrian(p2: Vector2, spd: float) -> void:
+	if pedestrian == null:
+		return
+	var ped_p := Vector2(pedestrian.global_position.x, pedestrian.global_position.z)
+	var d := p2.distance_to(ped_p)
+	if pedestrian.on_road():
+		if d < 12.0 and spd * 3.6 < 5.0:
+			_ped_waiting = true        ## Schueler steht und laesst passieren
+		if d < 3.5 and spd > 0.8:
+			_warn("Fussgaenger auf dem Zebrastreifen — anhalten, Vorrang!")
+		if d < 1.4 and spd > 1.0:
+			_say("Unfall! Person am Zebrastreifen angefahren — immer gucken.", 2)
+	else:
+		if _ped_waiting and d < 16.0:
+			_ped_waiting = false
+			_done("ped", "Fussgaenger passieren lassen — vorbildlich.")
 
 
 var _brake_entry: float = -1.0

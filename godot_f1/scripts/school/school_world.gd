@@ -14,6 +14,7 @@ const SchoolCar = preload("res://scripts/school/school_car.gd")
 const SchoolSurfaces = preload("res://scripts/school/school_surfaces.gd")
 const SchoolInstructor = preload("res://scripts/school/school_instructor.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
+const Pedestrian = preload("res://scripts/school/pedestrian.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -70,8 +71,13 @@ func _ready() -> void:
 		add_child(tc)
 		tc.setup(lights, player, s)
 
+	var ped := Pedestrian.new()
+	ped.name = "Pedestrian"
+	add_child(ped)
+
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
+	instructor.pedestrian = ped
 	if DisplayServer.get_name() == "headless":
 		player.set_meta("headless_gas", true)
 		player.assists["auto_gearbox"] = true
