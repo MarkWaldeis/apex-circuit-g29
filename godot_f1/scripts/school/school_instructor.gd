@@ -29,6 +29,7 @@ const TASKS := [
 	{"id": "zebra", "name": "Zebrastreifen langsam"},
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
 	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
+	{"id": "vorfahrt", "name": "Vorfahrt gewährt"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
@@ -611,10 +612,22 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 			else:
 				_done("stop", "Sauber am Stoppschild angehalten — weiter so.")
 		"yield":
-			# Nur auf Wartepflicht-Armen meckern: wer auf der freien
+			# Nur auf Wartepflicht-Armen werten: wer auf der freien
 			# Vorfahrtstrasse durchfaehrt, macht alles richtig.
-			if spd > 6.0 and bool(arm.get("yield", false)):
-				_warn("Vorfahrt gewähren heißt abbremsen — nicht durchschießen.")
+			if bool(arm.get("yield", false)):
+				if spd > 6.0:
+					_warn("Vorfahrt gewähren heißt abbremsen — nicht durchschießen.")
+				else:
+					var ki_nahe := false
+					for tc in traffic:
+						if is_instance_valid(tc) and Vector2(
+								tc.global_position.x, tc.global_position.z
+								).distance_to(Vector2(j["center"])) < 20.0:
+							ki_nahe = true
+					if ki_nahe:
+						_done("vorfahrt", "Vorfahrt gewährt — Querverkehr durchgelassen. Genau so!")
+					else:
+						_done("vorfahrt", "Vorfahrt-Schild beachtet — langsam und geprüft weiter. Gut!")
 		"rbl":
 			if spd > 8.0:
 				_warn("Rechts vor links: langsam reinfahren und rechts schauen.")
