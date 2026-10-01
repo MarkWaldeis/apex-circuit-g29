@@ -53,3 +53,40 @@ static func build(parent: Node3D) -> void:
 	environment.adjustment_contrast = 1.05
 	env.environment = environment
 	parent.add_child(env)
+
+
+## Nachtfahrt: schaltet dieselbe Szene zwischen Nachmittag und Nacht um.
+## Findet die von build() erzeugten Knoten über ihre Namen.
+static func set_night(parent: Node3D, night: bool) -> void:
+	var sun := parent.get_node_or_null("Sun") as DirectionalLight3D
+	var env_node := parent.get_node_or_null("World") as WorldEnvironment
+	if sun:
+		if night:
+			sun.rotation_degrees = Vector3(-70, 20, 0)      ## hoher Mondstand
+			sun.light_color = Color(0.45, 0.58, 0.95)
+			sun.light_energy = 0.28
+		else:
+			sun.rotation_degrees = Vector3(-42, 38, 0)
+			sun.light_color = Color(1.0, 0.95, 0.87)
+			sun.light_energy = 1.55
+	if env_node and env_node.environment:
+		var e := env_node.environment
+		var sky_mat: ProceduralSkyMaterial = null
+		if e.sky:
+			sky_mat = e.sky.sky_material as ProceduralSkyMaterial
+		if night:
+			if sky_mat:
+				sky_mat.sky_top_color = Color(0.03, 0.045, 0.11)
+				sky_mat.sky_horizon_color = Color(0.10, 0.09, 0.16)
+				sky_mat.ground_horizon_color = Color(0.03, 0.045, 0.03)
+			e.ambient_light_energy = 0.42
+			e.fog_density = 0.0013
+			e.fog_light_color = Color(0.07, 0.09, 0.14)
+		else:
+			if sky_mat:
+				sky_mat.sky_top_color = Color(0.22, 0.42, 0.78)
+				sky_mat.sky_horizon_color = Color(0.85, 0.80, 0.72)
+				sky_mat.ground_horizon_color = Color(0.24, 0.32, 0.18)
+			e.ambient_light_energy = 0.75
+			e.fog_density = 0.0009
+			e.fog_light_color = Color(0.78, 0.80, 0.86)

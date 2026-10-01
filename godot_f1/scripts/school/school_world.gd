@@ -33,6 +33,7 @@ var lights := JunctionLights.new()
 var cam
 var _lights_data: Dictionary = {}
 var _spawn := Transform3D.IDENTITY
+var _night := false
 
 
 func _ready() -> void:
@@ -117,3 +118,12 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("quit_game"):
 		get_tree().quit()
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_U:
+		_night = not _night
+		WorldEnv.set_night(self, _night)
+		if instructor:
+			if _night:
+				instructor._say("Nachtfahrt — Abblendlicht an (Taste L).", 0)
+			else:
+				instructor._say("Wieder hell — Licht kann aus bleiben.", 0)

@@ -91,11 +91,11 @@ func setup(wheel_input, surface_model, start: Transform3D) -> void:
 	for sx in [-1.0, 1.0]:
 		var spot := SpotLight3D.new()
 		spot.spot_range = 26.0
-		spot.spot_angle = 38.0
-		spot.light_energy = 5.0
-		spot.spot_attenuation = 0.6
+		spot.spot_angle = 28.0
+		spot.light_energy = 9.0
+		spot.spot_attenuation = 0.9
 		spot.position = Vector3(0.55 * sx, 0.62, 1.95)
-		spot.basis = Basis.from_euler(Vector3(-0.28, PI, 0.0))
+		spot.basis = Basis.from_euler(Vector3(-0.38, PI, 0.0))
 		spot.visible = false
 		add_child(spot)
 		_headlights.append(spot)

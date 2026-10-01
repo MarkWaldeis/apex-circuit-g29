@@ -200,7 +200,7 @@ func _build() -> void:
 	_backup_cam = bk[1]
 
 	# Minimap: Ortho-Kamera von oben, folgt dem Auto, Norden zeigt nach oben.
-	var mm := _mirror_panel(Vector2i(190, 190), 0.0)
+	var mm := _mirror_panel(Vector2i(190, 190), 60.0)
 	mm[0].set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	mm[0].position = Vector2(-202, -202)
 	root.add_child(mm[0])
