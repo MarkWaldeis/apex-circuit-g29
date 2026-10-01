@@ -38,6 +38,7 @@ const TASKS := [
 	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
 	{"id": "einfaden", "name": "Einfädeln auf die 100er-Straße"},
 	{"id": "einbahn", "name": "Einbahnstraße in Fahrtrichtung"},
+	{"id": "ueberhol", "name": "Lkw auf dem Ring überholt"},
 	{"id": "rettung", "name": "Blaulicht: Platz gemacht"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
@@ -113,6 +114,8 @@ var _clutch_ride := 0.0       ## getretene Kupplung bei Fahrt (Sekunden)
 var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
 var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
 var _einbahn_on := false      ## auf der Einbahnstrasse westwaerts unterwegs
+var _ov_armed := false        ## Ueberholvorgang beobachtet
+var _ov_tc = null             ## gerade ueberholtes KI-Fahrzeug
 var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
 var _rescue_ann := false      ## Alarmfahrt schon angesagt
 var _rescue_near := false     ## Schueler war waehrend der Fahrt in Reichweite
@@ -200,6 +203,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_engstelle_vorrang(p2, delta)
 	_check_schulbus(p2, spd)
 	_check_einbahn(pos, p2)
+	_check_ueberhol(p2, spd)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -671,6 +675,47 @@ func _check_schulbus(p2: Vector2, spd: float) -> void:
 ## Einbahnstraße: nur westwärts (Richtung Weststraße) — wer die
 ## komplette Straße in Fahrtrichtung durchfaehrt, hat die Aufgabe.
 ## Gegen die Richtung meldet schon der Geisterfahrer-Check.
+## Ueberholen auf dem 100er-Ring: folgt der Schueler einem KI-Fahrzeug
+## dicht auf derselben Spur, wird der Vorgang beobachtet — liegt das
+## KI-Fahrzeug danach wieder sicher hinten, gilt das Ueberholen.
+func _check_ueberhol(p2: Vector2, spd: float) -> void:
+	if traffic.is_empty():
+		return
+	var s_dir := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	if s_dir == Vector2.ZERO:
+		return
+	var side_dir := Vector2(-s_dir.y, s_dir.x)
+	if not _ov_armed:
+		if not String(surfaces.road_at(car.global_position)).begins_with("Ring") \
+				or spd < 6.0:
+			return
+		for tc in traffic:
+			if not is_instance_valid(tc):
+				continue
+			var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
+			var along := rel.dot(s_dir)
+			var side := absf(rel.dot(side_dir))
+			if along > 5.0 and along < 45.0 and side < 3.0:
+				_ov_armed = true
+				_ov_tc = tc
+				_say("Langsamer vor dir — zum Überholen links blinken, Abstand halten, Sicht prüfen.", 0)
+				break
+		return
+	if not is_instance_valid(_ov_tc):
+		_ov_armed = false
+		return
+	var rel2 := Vector2(_ov_tc.global_position.x, _ov_tc.global_position.z) - p2
+	var along2 := rel2.dot(s_dir)
+	var side2 := absf(rel2.dot(side_dir))
+	if along2 < -12.0:
+		_ov_armed = false
+		if side2 < 4.0:
+			_done("ueberhol", "Überholvorgang sauber beendet — gute Arbeit.")
+	elif absf(along2) > 75.0 or side2 > 25.0:
+		_ov_armed = false    ## aus der Situation rausgefahren
+
+
 func _check_einbahn(pos: Vector3, p2: Vector2) -> void:
 	var on_street := String(surfaces.road_at(pos)) == "Einbahnstraße"
 	if on_street and car.linear_velocity.x < -1.5:

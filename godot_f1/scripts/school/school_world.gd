@@ -100,6 +100,13 @@ func _ready() -> void:
 	add_child(tc_narrow)
 	tc_narrow.setup(lights, player, 2, 2)
 	traffic_cars.append(tc_narrow)
+	# Lkw auf der grossen Ring-Runde (Route D): er zieht mit ~40 km/h
+	# seine Kreise — ein echter Anlass zum sicheren Ueberholen.
+	var tc_truck := TrafficCar.new()
+	tc_truck.name = "TrafficCarTruck"
+	add_child(tc_truck)
+	tc_truck.setup(lights, player, 4, 3)
+	traffic_cars.append(tc_truck)
 
 	var ped := Pedestrian.new()
 	ped.name = "Pedestrian"

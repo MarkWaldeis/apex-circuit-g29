@@ -70,6 +70,26 @@ const ROUTE_C := [
 	Vector2(207.0, -30.0),    # 22 Suedstrasse -> Schleife
 ]
 const CORNERS_C := [2, 8, 12, 15, 21]
+
+## Route D: grosse Ring-Runde im Uhrzeigersinn (Ost -> Nord -> West
+## -> Sued). Auf dem 100er-Ring zieht der Lkw mit ~40 km/h seine
+## Runde — der Schueler bekommt einen echten Ueberhol-Anlass.
+const ROUTE_D := [
+	Vector2(241.5, -40.0),    # 0  Ring Ost nordwaerts
+	Vector2(241.5, -228.0),   # 1
+	Vector2(234.0, -241.0),   # 2  Kurve Nord-Ost
+	Vector2(120.0, -241.5),   # 3  Ring Nord westwaerts
+	Vector2(-230.0, -241.5),  # 4
+	Vector2(-241.0, -234.0),  # 5  Kurve Nord-West
+	Vector2(-241.5, -120.0),  # 6  Ring West suedwaerts
+	Vector2(-241.5, 130.0),   # 7
+	Vector2(-234.0, 141.0),   # 8  Kurve West-Sued
+	Vector2(-120.0, 141.5),   # 9  Ring Sued ostwaerts
+	Vector2(230.0, 141.5),    # 10
+	Vector2(241.0, 134.0),    # 11 Kurve Sued-Ost
+	Vector2(241.5, 0.0),      # 12 Ost zurueck -> Schleife
+]
+const CORNERS_D := [2, 5, 8, 11]
 const CRUISE := 8.3                    ## ~30 km/h
 const CORNER_V := 3.5
 const ACCEL := 6.0
@@ -96,6 +116,8 @@ var _ind_hold := 0.0           ## Nachlaufzeit des Blinkers
 var _blink_t := 0.0
 var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
+var truck := false           ## Lkw-Mesh + langsames Reisetempo
+var cruise := CRUISE
 
 
 func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
@@ -107,12 +129,54 @@ func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
 	elif route == 2:
 		_path = ROUTE_C
 		_corners = CORNERS_C
+	elif route == 3:
+		_path = ROUTE_D
+		_corners = CORNERS_D
+		truck = true
+		cruise = 11.0           ## Lkw schleicht mit ~40 km/h
 	_i = start_i % _path.size()
 	var from: Vector2 = _path[(_i - 1 + _path.size()) % _path.size()]
 	var to: Vector2 = _path[_i]
 	var dir := (to - from).normalized()
 	global_transform = Transform3D(_basis_to(dir), Vector3(from.x, 0.0, from.y))
 	_build_mesh()
+
+
+## Lkw-Aufbau: Zugmaschine + Kofferauflieger, damit der Schueler
+## auf dem Ring von weitem sieht: hier lohnt ein Ueberholvorgang.
+func _build_truck_mesh() -> void:
+	var grey := StandardMaterial3D.new()
+	grey.albedo_color = Color(0.62, 0.64, 0.67)
+	var cab_mat := StandardMaterial3D.new()
+	cab_mat.albedo_color = Color(0.15, 0.35, 0.6)
+	var cab := MeshInstance3D.new()
+	var cb := BoxMesh.new()
+	cb.size = Vector3(2.3, 1.9, 2.2)
+	cab.mesh = cb
+	cab.material_override = cab_mat
+	cab.position = Vector3(0.0, 1.5, 3.0)
+	add_child(cab)
+	var box := MeshInstance3D.new()
+	var bb := BoxMesh.new()
+	bb.size = Vector3(2.5, 2.7, 6.0)
+	box.mesh = bb
+	box.material_override = grey
+	box.position = Vector3(0.0, 1.75, -1.2)
+	add_child(box)
+	var wheel_mat := StandardMaterial3D.new()
+	wheel_mat.albedo_color = Color(0.05, 0.05, 0.05)
+	for wz in [2.9, -0.2, -3.4]:
+		for wx in [-1.0, 1.0]:
+			var w := MeshInstance3D.new()
+			var wm := CylinderMesh.new()
+			wm.top_radius = 0.45
+			wm.bottom_radius = 0.45
+			wm.height = 0.3
+			w.mesh = wm
+			w.material_override = wheel_mat
+			w.rotation.z = PI / 2.0
+			w.position = Vector3(wx, 0.45, wz)
+			add_child(w)
 
 
 func _basis_to(dir: Vector2) -> Basis:
@@ -131,7 +195,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var dir := to.normalized()
 
-	var v := CRUISE
+	var v := cruise
 	if dist < 16.0 and _i in _corners:
 		v = CORNER_V
 	v = _apply_rules(pos, dir, v)
@@ -323,10 +387,18 @@ func _student_has_priority(j: Dictionary, p2: Vector2, p_spd: float, dir: Vector
 func _build_mesh() -> void:
 	var col := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(1.8, 1.25, 4.3)
+	if truck:
+		box.size = Vector3(2.4, 2.9, 8.4)
+		col.position = Vector3(0.0, 1.5, 0.0)
+	else:
+		box.size = Vector3(1.8, 1.25, 4.3)
+		col.position = Vector3(0.0, 0.75, 0.0)
 	col.shape = box
-	col.position = Vector3(0.0, 0.75, 0.0)
 	add_child(col)
+
+	if truck:
+		_build_truck_mesh()
+		return
 
 	var body_mat := StandardMaterial3D.new()
 	body_mat.albedo_color = Color(0.75, 0.12, 0.10)
