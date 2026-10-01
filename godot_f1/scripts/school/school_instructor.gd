@@ -56,6 +56,9 @@ var _grinds_seen: int = 0
 var _stalls_seen: int = 0
 var _offroad_t: float = 0.0
 var _left_lane_t: float = 0.0
+var _hb_t: float = 0.0
+var _idle_rev_t: float = 0.0
+var _rev_t: float = 0.0
 var _coach_cd: float = 0.0
 
 
@@ -124,6 +127,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_junctions(p2, spd)
 	_check_wrong_way(pos, delta)
 	_check_offroad(pos, delta)
+	_check_habits(spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
 	if _coach_cd <= 0.0 and _coach_t_upcoming():
@@ -176,6 +180,35 @@ func _check_offroad(pos: Vector3, delta: float) -> void:
 			_offroad_t = -4.0
 	else:
 		_offroad_t = maxf(_offroad_t - delta, 0.0)
+
+
+func _check_habits(spd: float, delta: float) -> void:
+	var gear: int = int(car.gear)
+	var rpm: float = float(car.rpm)
+	# Handbremse vergessen: Auto rollt trotz angezogener Bremse.
+	if bool(car.get("handbrake_on")) and spd > 1.5:
+		_hb_t += delta
+		if _hb_t > 0.8:
+			_say("Handbremse ist noch angezogen — erst lösen, dann fahren (Leertaste).", 1)
+			_hb_t = -6.0
+	else:
+		_hb_t = minf(_hb_t + delta, 0.0)
+	# Leerlauf-Gas: heulender Motor im Stand bringt nichts.
+	if gear == 0 and rpm > 2800.0:
+		_idle_rev_t += delta
+		if _idle_rev_t > 1.2:
+			_say("Im Leerlauf braucht es kein Gas — das schont den Motor und die Nerven.", 1)
+			_idle_rev_t = -6.0
+	else:
+		_idle_rev_t = minf(_idle_rev_t + delta, 0.0)
+	# Drehzahl-Coaching: zu lange im niedrigen Gang bei hoher Drehzahl.
+	if gear >= 1 and gear <= 3 and rpm > 3800.0 and spd > 3.0:
+		_rev_t += delta
+		if _rev_t > 1.5:
+			_say("Die Drehzahl steht schon hoch — einen Gang höher schalten.", 0)
+			_rev_t = -8.0
+	else:
+		_rev_t = minf(_rev_t + delta, 0.0)
 
 
 func _check_stalls_and_shifts() -> void:
