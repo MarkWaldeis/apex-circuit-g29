@@ -1321,6 +1321,8 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				_say("Parklücke getroffen — aber zu weit vom Rand: näher an den Bordstein.", 1)
 			else:
 				_done("parallel", "Längsparken geschafft — gerade und nah am Bordstein, vorbildlich. Auf der Strasse dabei vorher rechts blinken und Ausschau nach rückwärtigem Verkehr halten.")
+				if not bool(car.get("handbrake_on")):
+					_say("Und sichern nicht vergessen: Handbremse ziehen, Gang drin lassen.", 0)
 			break
 		bay_i += 1
 	# Ausparken: rollt das Auto wieder los, ohne den Linksblinker zu
@@ -1373,6 +1375,8 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				_say("In der Bucht, aber schief — noch gerade einruecken.", 1)
 			else:
 				_done("perp", "Querparken geschafft — in der Lücke gerade ausgerichtet.")
+				if not bool(car.get("handbrake_on")):
+					_say("Zum Schluss sichern: Handbremse ziehen.", 0)
 			break
 
 	# Berganfahren: auf der Rampe ohne Zurückrollen anfahren.
