@@ -1551,9 +1551,9 @@ func _check_pedestrian(p2: Vector2, spd: float) -> void:
 			if d < 12.0 and spd * 3.6 < 5.0:
 				_ped_waiting[pid] = true   ## Schueler steht und laesst passieren
 			if d < 3.5 and spd > 0.8:
-				_warn("Fussgaenger auf dem Zebrastreifen — anhalten, Vorrang!")
+				_warn("Fussgaenger auf der Fahrbahn — anhalten, Vorrang!")
 			if d < 1.4 and spd > 1.0:
-				_say("Unfall! Person am Zebrastreifen angefahren — immer gucken.", 2)
+				_say("Unfall! Person angefahren — immer gucken, besonders in der Spielstrasse.", 2)
 		else:
 			if bool(_ped_waiting.get(pid, false)) and d < 16.0:
 				_ped_waiting[pid] = false

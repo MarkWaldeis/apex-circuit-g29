@@ -126,8 +126,16 @@ func _ready() -> void:
 	add_child(ped2)
 	ped2.setup_crossing(Vector2(-94.5, -150.0), Vector2(-105.5, -150.0),
 		Vector2(-100.0, -150.0), 3.6)
-	# Beide gehen erst los, wenn kein Fahrzeug an der Querung ankommt.
-	var peds := [ped, ped2]
+	# Kind im verkehrsberuhigten Bereich: quert mitten in der
+	# Spielflaeche — hier muss man ohnedies Schritttempo fahren und
+	# jederzeit mit spielenden Kindern rechnen.
+	var ped3 := Pedestrian.new()
+	ped3.name = "KindSpielstrasse"
+	add_child(ped3)
+	ped3.setup_crossing(Vector2(-152.0, -176.5), Vector2(-152.0, -183.5),
+		Vector2(-152.0, -180.0), 4.0)
+	# Alle gehen erst los, wenn kein Fahrzeug an der Querung ankommt.
+	var peds := [ped, ped2, ped3]
 	# Die Fussgaengerampel haelt auch KI an, solange die Figur quert.
 	var pedx_early := PedCrossing.new()
 	pedx_early.name = "PedCrossing"
@@ -192,7 +200,7 @@ func _ready() -> void:
 	instructor.school_bus = built.get("school_bus")
 	_ground_mat = built.get("ground_mat")
 	instructor.setup(player, surfaces, lights)
-	instructor.pedestrians = [ped, ped2]
+	instructor.pedestrians = [ped, ped2, ped3]
 	instructor.deer = deer
 	instructor.rail = rail
 	instructor.ball = ball
