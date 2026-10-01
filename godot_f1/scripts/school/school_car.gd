@@ -82,6 +82,8 @@ var _ind_yaw: float = 0.0            ## seit Blinker-An akkumulierte Drehung
 var _engine_player: AudioStreamPlayer3D
 var _engine_gen: AudioStreamGeneratorPlayback
 var _engine_phase: float = 0.0
+var _click_gap: float = 0.0    ## Samples bis zum naechsten Blinker-Klack
+var _click_left: float = 0.0   ## Samples im aktuellen Klack-Burst
 
 
 func setup(wheel_input, surface_model, start: Transform3D) -> void:
@@ -547,6 +549,7 @@ func _engine_sound(throttle_in: float) -> void:
 	# Abgewuergt: kurzes Abrasseln statt sofortiger Stille.
 	if stalled and _engine_phase > 0.0:
 		vol = 0.05
+	var blinker_an: bool = indicator_left or indicator_right or hazard
 	for i in frames:
 		_engine_phase += freq / mix
 		if _engine_phase >= 1.0:
@@ -555,6 +558,15 @@ func _engine_sound(throttle_in: float) -> void:
 			+ sin(TAU * _engine_phase * 2.0) * 0.28 \
 			+ sin(TAU * _engine_phase * 3.0) * 0.12
 		s = tanh(s * 1.6) * vol
+		# Blinkerrelais: kurzes Klack alle ~0.45 s, solange geblinkt wird.
+		if blinker_an:
+			_click_gap -= 1.0
+			if _click_left > 0.0:
+				_click_left -= 1.0
+				s += (0.22 if _click_left > 40.0 else -0.22) * (_click_left / 60.0)
+			elif _click_gap <= 0.0:
+				_click_left = 60.0      ## ~3 ms Klack bei 22050 Hz
+				_click_gap = 9920.0     ## ~0.45 s wie ein echtes Relais
 		_engine_gen.push_frame(Vector2(s, s))
 
 
