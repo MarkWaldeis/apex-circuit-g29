@@ -368,6 +368,9 @@ func _process(delta: float) -> void:
 	# Laufende Pruefungsfahrt: Beanstandungszaehler hat Vorrang.
 	if instructor and bool(instructor.exam.get("active")):
 		status_text = "Prüfung: %d Beanstandung(en)" % int(instructor._exam_errs)
+	var dmg: float = float(car.get("damage")) if car.get("damage") != null else 0.0
+	if dmg > 0.05:
+		status_text += ("  ·  " if status_text != "" else "") + "Schaden %d%%" % int(dmg * 100.0)
 	_status.text = status_text
 
 	_stall_warn.visible = bool(car.get("stalled"))
