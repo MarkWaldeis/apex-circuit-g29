@@ -162,11 +162,16 @@ func _test_traffic() -> void:
 	tc.lights = jl
 	# Ampel rot -> das KI-Auto muss auf der Ostspur anhalten.
 	jl.state["a"] = "red"
-	var v: float = tc._apply_rules(Vector2(-97.0, -58.2), Vector2(1, 0), 8.0)
+	var v: float = tc._apply_rules(Vector2(-104.0, -58.2), Vector2(1, 0), 8.0)
 	_check(v == 0.0, "traffic_stops_at_red", "v=%.1f" % v)
-	# Ampel gruen -> freie Fahrt.
+	# Gleiche Richtung auf der Nord/Sued-Achse: Rot bremst auch dort.
 	jl.state["a"] = "green"
-	v = tc._apply_rules(Vector2(-97.0, -58.2), Vector2(1, 0), 8.0)
+	jl.state["b"] = "red"
+	v = tc._apply_rules(Vector2(-101.8, -66.0), Vector2(0, 1), 8.0)
+	_check(v == 0.0, "traffic_stops_at_red_b_axis", "v=%.1f" % v)
+	jl.state["b"] = "green"
+	# Ampel gruen -> freie Fahrt.
+	v = tc._apply_rules(Vector2(-104.0, -58.2), Vector2(1, 0), 8.0)
 	_check(v > 0.0, "traffic_goes_on_green", "v=%.1f" % v)
 	# Stoppschild: voller Halt einmal pro Annäherung.
 	v = tc._apply_rules(Vector2(90.5, -58.2), Vector2(1, 0), 8.0)

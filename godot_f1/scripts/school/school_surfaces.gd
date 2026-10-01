@@ -138,7 +138,7 @@ func lane_offset(pos: Vector3, vel: Vector3) -> float:
 	if v.length() < 2.0:
 		return 9999.0
 	v = v.normalized()
-	var right := Vector2(v.y, v.x)
+	var right := Vector2(-v.y, v.x)
 	var p2 := Vector2(pos.x, pos.z)
 	for c in _junction_centers:
 		if p2.distance_to(c) < 14.0:

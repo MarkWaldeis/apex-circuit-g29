@@ -71,6 +71,7 @@ var _lamps: Dictionary = {}
 var headlights_on := false
 var _headlights: Array = []
 var _last_impact_v: float = 0.0
+var _last_impact_name: String = ""
 var _prev_yaw: float = 0.0
 var _ind_yaw: float = 0.0            ## seit Blinker-An akkumulierte Drehung
 
@@ -124,6 +125,7 @@ func _on_body_hit(_body: Node) -> void:
 	var kmh := maxf(linear_velocity.length(), _prev_speed) * 3.6
 	if kmh > 12.0:
 		_last_impact_v = kmh
+		_last_impact_name = _body.name
 		if feedback:
 			feedback.poke("bump", 0.8)
 

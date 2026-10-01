@@ -470,10 +470,12 @@ func _lot(world: Node3D, out: Dictionary) -> void:
 	hvis.material_override = _mat(ASPHALT_LOT)
 	hvis.transform = Transform3D(Basis(Vector3.RIGHT, -slope), Vector3(hp.x, rise * 0.5 + 0.03, hp.y))
 	world.add_child(hvis)
-	# Auffuellung unter der Rampe, sonst schwebt die Platte.
-	_wedge(world, Vector2(hp.x, hp.y), hw, rise - 0.1, run, true)
-	# Plateau als massiver Block (oben anhalten, weiter zur Gegenrampe).
-	var mesa_z: float = hp.y - run * 0.5 - 3.0
+	# Auffuellung unter der Rampe, sonst schwebt die Platte. Die Rampe
+	# steigt nach +z — das volle Ende liegt daher am z-Grossende (zb).
+	_wedge(world, Vector2(hp.x, hp.y), hw, rise - 0.1, run, false)
+	# Plateau als massiver Block hinter dem Rampentop (oben anhalten,
+	# weiter zur Gegenrampe).
+	var mesa_z: float = hp.y + run * 0.5 + 3.0
 	var mcol := CollisionShape3D.new()
 	var mbox := BoxShape3D.new()
 	mbox.size = Vector3(hw, rise, 6.0)
@@ -495,7 +497,7 @@ func _lot(world: Node3D, out: Dictionary) -> void:
 	var dbox := BoxShape3D.new()
 	dbox.size = Vector3(hw, 0.3, dlen)
 	dcol.shape = dbox
-	var dmid_z: float = mesa_z - 3.0 - down * 0.5
+	var dmid_z: float = mesa_z + 3.0 + down * 0.5
 	dcol.transform = Transform3D(Basis(Vector3.RIGHT, dslope), Vector3(hp.x, rise * 0.5 - 0.15, dmid_z))
 	hill_body.add_child(dcol)
 	var dvis := MeshInstance3D.new()
@@ -505,7 +507,8 @@ func _lot(world: Node3D, out: Dictionary) -> void:
 	dvis.material_override = _mat(ASPHALT_LOT)
 	dvis.transform = Transform3D(Basis(Vector3.RIGHT, dslope), Vector3(hp.x, rise * 0.5 + 0.03, dmid_z))
 	world.add_child(dvis)
-	_wedge(world, Vector2(hp.x, dmid_z), hw, rise - 0.1, down, false)
+	# Gegenrampe faellt nach +z ab: volle Kante am z-Kleinende.
+	_wedge(world, Vector2(hp.x, dmid_z), hw, rise - 0.1, down, true)
 
 
 	# Wendekreis: gemalter Ring.

@@ -20,11 +20,11 @@ const OFFTRACK_DIST := 75.0
 
 static func default_route() -> Array:
 	return [
-		{"pos": Vector2(0, -55.0), "text": "Biegen Sie rechts in die Hauptstraße ab."},
+		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
 		{"pos": Vector2(-85, -61.8), "text": "Geradeaus über die Ampelkreuzung — Achtung Zebrastreifen."},
-		{"pos": Vector2(-101.8, -110.0), "text": "Rechts in die Weststraße abbiegen."},
-		{"pos": Vector2(-101.8, -170.0), "text": "An der nächsten Kreuzung links — rechts vor links beachten."},
-		{"pos": Vector2(80, -178.2), "text": "Der Schulstraße folgen (Tempo 30), dann links in die Oststraße."},
+		{"pos": Vector2(-98.2, -110.0), "text": "Rechts in die Weststraße abbiegen."},
+		{"pos": Vector2(-98.2, -170.0), "text": "An der nächsten Kreuzung rechts — rechts vor links beachten."},
+		{"pos": Vector2(80, -178.2), "text": "Der Schulstraße folgen (Tempo 30), dann rechts in die Oststraße."},
 		{"pos": Vector2(98.2, -140.0), "text": "Geradeaus über die Kreuzungen weiter."},
 		{"pos": Vector2(98.2, -80.0), "text": "Rechts in die Hauptstraße abbiegen."},
 		{"pos": Vector2(30, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},

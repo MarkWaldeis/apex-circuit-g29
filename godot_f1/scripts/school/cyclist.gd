@@ -1,6 +1,8 @@
 extends Node3D
 ## Radfahrer, der am rechten Fahrbahnrand der Hauptstraße entlangfährt.
 ## Der Fahrlehrer prüft den Seitenabstand beim Überholen (StVO: >= 1,5 m).
+## Ein kinematischer Kollisionskoerper wandert als Kind mit, damit das
+## Schulauto einen Zusammenstoß physisch spürt.
 
 const SPEED := 5.5          ## Radtempo in m/s
 
@@ -24,6 +26,16 @@ func pos2() -> Vector2:
 
 
 func _ready() -> void:
+	var body := AnimatableBody3D.new()
+	body.name = "Radfahrer"
+	var col := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.45
+	cap.height = 1.7
+	col.shape = cap
+	col.position.y = 0.9
+	body.add_child(col)
+	add_child(body)
 	_build_mesh()
 
 

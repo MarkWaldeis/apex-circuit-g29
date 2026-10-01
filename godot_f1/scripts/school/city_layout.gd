@@ -19,14 +19,16 @@ static func roads() -> Array:
 
 		{"name": "Schulstraße", "from": Vector2(-140, -180), "to": Vector2(140, -180), "limit": 30, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Einbahnstraße", "from": Vector2(100, -120), "to": Vector2(-100, -120), "limit": 30, "width": 5.5, "oneway": 1, "line": false},
-		{"name": "Weststraße", "from": Vector2(-100, -240), "to": Vector2(-100, 128), "limit": 50, "width": 6.5, "oneway": 0, "line": true},
+		{"name": "Weststraße", "from": Vector2(-100, -240), "to": Vector2(-100, 140), "limit": 50, "width": 6.5, "oneway": 0, "line": true},
 		{"name": "Oststraße", "from": Vector2(100, -240), "to": Vector2(100, 140), "limit": 50, "width": 6.5, "oneway": 0, "line": true},
 		# Ring um den Stadtkern: sauberes Rechteck, Tempo 100 außerorts.
 		{"name": "Ring Nord", "from": Vector2(-100, -240), "to": Vector2(-240, -240), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
+		{"name": "Ring Nord", "from": Vector2(240, -240), "to": Vector2(-100, -240), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring West", "from": Vector2(-240, -240), "to": Vector2(-240, 140), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring Süd", "from": Vector2(-240, 140), "to": Vector2(240, 140), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring Ost", "from": Vector2(240, 140), "to": Vector2(240, -60), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring Ost", "from": Vector2(240, -60), "to": Vector2(216, -20), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
+		{"name": "Ring Ost", "from": Vector2(240, -60), "to": Vector2(240, -240), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		# Zufahrt zum Übungsplatz von der Hauptstraße.
 		{"name": "Übungsplatz-Zufahrt", "from": Vector2(0, -60), "to": Vector2(0, 40), "limit": 30, "width": 6.0, "oneway": 0, "line": false},
 		# Kreisverkehr-Arme (Einfahrt in den Kreis bei (200,-60)).
@@ -51,8 +53,8 @@ static func junctions() -> Dictionary:
 			# Vier Haltelinien: Achse "a" = Hauptstraße (Ost/West),
 			# Achse "b" = Weststraße (Nord/Süd).
 			"arms": [
-				{"arm": "a", "pos": Vector2(-92.6, -60), "enter": Vector2(1, 0), "name": "Hauptstraße Ost"},
-				{"arm": "a", "pos": Vector2(-107.4, -60), "enter": Vector2(-1, 0), "name": "Hauptstraße West"},
+				{"arm": "a", "pos": Vector2(-92.6, -60), "enter": Vector2(-1, 0), "name": "Hauptstraße Ost"},
+				{"arm": "a", "pos": Vector2(-107.4, -60), "enter": Vector2(1, 0), "name": "Hauptstraße West"},
 				{"arm": "b", "pos": Vector2(-100, -52.6), "enter": Vector2(0, -1), "name": "Weststraße Nord"},
 				{"arm": "b", "pos": Vector2(-100, -67.4), "enter": Vector2(0, 1), "name": "Weststraße Süd"},
 			],
@@ -69,10 +71,10 @@ static func junctions() -> Dictionary:
 			"kind": "rbl",
 			"center": Vector2(-100, -180),
 			"arms": [
-				{"pos": Vector2(-95, -176), "enter": Vector2(-0.7, 0.7)},
-				{"pos": Vector2(-104, -184), "enter": Vector2(0.7, -0.7)},
-				{"pos": Vector2(-95, -184), "enter": Vector2(-0.7, -0.7)},
-				{"pos": Vector2(-104, -176), "enter": Vector2(0.7, 0.7)},
+				{"pos": Vector2(-100, -174), "enter": Vector2(0, 1)},
+				{"pos": Vector2(-100, -186), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-94, -180), "enter": Vector2(-1, 0)},
+				{"pos": Vector2(-106, -180), "enter": Vector2(1, 0)},
 			],
 		},
 		"zufahrt": {
@@ -80,15 +82,18 @@ static func junctions() -> Dictionary:
 			"center": Vector2(0, -60),
 			# Einfahrt auf die Hauptstraße: Vorfahrt gewähren.
 			"arms": [
-				{"pos": Vector2(0, -57), "enter": Vector2(0, -1)},
+				{"pos": Vector2(0, -57), "enter": Vector2(0, -1), "yield": true},
 			],
 		},
 		"yield_ost": {
 			"kind": "yield",
 			"center": Vector2(100, -180),
+			# Schulstraße gibt Vorfahrt, Oststraße (50) ist die Vorfahrtstraße.
 			"arms": [
-				{"pos": Vector2(95, -176), "enter": Vector2(-0.7, 0.7)},
-				{"pos": Vector2(104, -184), "enter": Vector2(0.7, -0.7)},
+				{"pos": Vector2(94, -180), "enter": Vector2(1, 0), "yield": true},
+				{"pos": Vector2(106, -180), "enter": Vector2(-1, 0), "yield": true},
+				{"pos": Vector2(100, -174), "enter": Vector2(0, 1)},
+				{"pos": Vector2(100, -186), "enter": Vector2(0, -1)},
 			],
 		},
 		"kreis": {
@@ -233,7 +238,7 @@ static func lot() -> Dictionary:
 		],
 		# Bremsbahn: Anfahrt aus dem Westen, Marker alle 10 m.
 		"brake_lane": {"from": Vector2(-45, 46), "to": Vector2(60, 46), "marks": [30, 40, 50]},
-		# Hügel für Berganfahren: Rampe im Nordwesten.
+		# Hügel für Berganfahren: Rampe steigt im Westen nach Süden.
 		"hill": {"pos": Vector2(-66, 66), "rot": 90.0, "run": 14.0, "rise": 2.2, "w": 7.0, "down": 8.0},
 		# Kreis zum Üben von Wendefahrten (markierter Kreis).
 		"circle": {"pos": Vector2(30, 88), "r": 11.0},
@@ -258,7 +263,8 @@ static func bounds() -> Rect2:
 ## Spawn des Fahrschulautos: am Eingang des Übungsplatzes, Blick nach Norden
 ## (auf die Zufahrt Richtung Hauptstraße).
 static func spawn() -> Transform3D:
-	var basis := Basis.looking_at(Vector3(0, 0, -1), Vector3.UP)
+	# +Z des Autos zeigt -z (Norden): Blick auf die Zufahrt zur Hauptstraße.
+	var basis := Basis.looking_at(Vector3(0, 0, 1), Vector3.UP)
 	return Transform3D(basis, Vector3(0, 0.4, 60.0))
 
 
@@ -275,12 +281,12 @@ static func reset_spots() -> Array:
 ## sofort auf Fahrposition steht, ohne erst wenden zu muessen.
 static func exercise_spots() -> Array:
 	return [
-		{"name": "Übungsplatz", "pos": Vector2(0, 60), "dir": Vector2(0, 1)},
+		{"name": "Übungsplatz", "pos": Vector2(0, 60), "dir": Vector2(0, -1)},
 		{"name": "Längsparken", "pos": Vector2(52, 70), "dir": Vector2(1, 0)},
 		{"name": "Querparken", "pos": Vector2(-22, 96), "dir": Vector2(0, 1)},
 		{"name": "Slalom", "pos": Vector2(-62, 64), "dir": Vector2(1, 0)},
 		{"name": "Bremsbahn", "pos": Vector2(-62, 46), "dir": Vector2(1, 0)},
-		{"name": "Berganfahren", "pos": Vector2(-66, 80), "dir": Vector2(0, -1)},
+		{"name": "Berganfahren", "pos": Vector2(-66, 52), "dir": Vector2(0, 1)},
 		{"name": "Wendekreis", "pos": Vector2(30, 104), "dir": Vector2(0, -1)},
 		{"name": "Ampelkreuzung", "pos": Vector2(-78, -60), "dir": Vector2(-1, 0)},
 		{"name": "Stopp-Kreuzung", "pos": Vector2(78, -60), "dir": Vector2(1, 0)},

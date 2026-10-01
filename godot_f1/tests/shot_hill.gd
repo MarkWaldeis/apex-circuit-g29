@@ -10,9 +10,11 @@ func _initialize() -> void:
 	_world = scene.instantiate()
 	root.add_child(_world)
 	var cam := Camera3D.new()
-	cam.position = Vector3(-40.0, 10.0, 78.0)
-	cam.look_at_from_position(cam.position, Vector3(-66.0, 1.0, 60.0), Vector3.UP)
-	cam.fov = 50.0
+	# Von Nordosten auf die Rampe: sie muss vom Platz (niedrig) nach
+	# Sueden zum Plateau (hoch) und dann per Gegenrampe wieder runterfuehren.
+	cam.position = Vector3(-66.0, 14.0, 30.0)
+	cam.look_at_from_position(cam.position, Vector3(-66.0, 0.0, 80.0), Vector3.UP)
+	cam.fov = 55.0
 	_world.add_child(cam)
 	cam.make_current()
 	physics_frame.connect(_on_phys)

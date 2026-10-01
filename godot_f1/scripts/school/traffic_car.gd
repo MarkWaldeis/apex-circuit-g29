@@ -104,10 +104,17 @@ func _physics_process(delta: float) -> void:
 
 
 func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
-	# Ampel: auf der Ost-Spur der Hauptstrasse, wenn Achse a nicht gruen.
-	if lights and dir.x > 0.9 and pos.x > LIGHT_X - 7.0 and pos.x < LIGHT_X + 2.0:
-		if String(lights.phase_of("a")) != "green":
-			v = 0.0
+	# Ampel: gilt fuer beide Fahrbahnachsen — Ost/West (a) und
+	# Nord/Sued (b) — in jeder Fahrtrichtung, solange die Kreuzung voraus liegt.
+	if lights:
+		var j: Dictionary = CityLayout.junctions()["ampel"]
+		var c: Vector2 = j["center"]
+		var d_j := pos.distance_to(c)
+		if d_j < 9.0 and d_j > 1.5 and (c - pos).normalized().dot(dir) > 0.8:
+			if absf(dir.x) > 0.9 and String(lights.phase_of("a")) != "green":
+				v = 0.0
+			elif absf(dir.y) > 0.9 and String(lights.phase_of("b")) != "green":
+				v = 0.0
 	# Stoppschild: einmal voller Halt, dann weiter.
 	if dir.x > 0.9:
 		var d_stop := pos.distance_to(STOP_POS)
@@ -136,7 +143,10 @@ func _yield_check(pos: Vector2, dir: Vector2, v: float) -> float:
 	if player == null:
 		return v
 	var p2 := Vector2(player.global_position.x, player.global_position.z)
-	var p_spd := Vector2(player.linear_velocity.x, player.linear_velocity.z).length()
+	var p_lv = player.get("linear_velocity")
+	var p_spd := 0.0
+	if p_lv != null:
+		p_spd = Vector2(p_lv.x, p_lv.z).length()
 	for j in CityLayout.junctions().values():
 		var kind := String(j["kind"])
 		if kind != "rbl" and kind != "yield":
@@ -187,10 +197,10 @@ func _student_has_priority(j: Dictionary, p2: Vector2, p_spd: float, dir: Vector
 		# Yield-Arme sind die Wartepflichtigen. Stehen wir gar nicht auf
 		# einem, fahren wir auf der Vorfahrtstrasse — der Schueler wartet.
 		var e: Vector2 = ai_arm["enter"]
-		var on_yield_arm: bool = ai_best < 7.0 and dir.normalized().dot(e.normalized()) > 0.6
+		var on_yield_arm: bool = bool(ai_arm.get("yield", false)) and ai_best < 7.0 and dir.normalized().dot(e.normalized()) > 0.6
 		return on_yield_arm
 	# rbl: der Schueler faehrt uns von rechts rein.
-	var right := Vector2(dir.y, dir.x)
+	var right := Vector2(-dir.y, dir.x)
 	var e: Vector2 = p_arm["enter"]
 	return e.normalized().dot(-right) > 0.45
 

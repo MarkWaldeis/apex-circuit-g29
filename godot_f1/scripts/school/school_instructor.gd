@@ -328,7 +328,7 @@ func _check_priority(p2: Vector2, spd: float, delta: float) -> void:
 			if kind == "yield":
 				# Schueler sitzt auf dem Yield-Arm (wartepflichtig).
 				var e: Vector2 = s_arm["enter"]
-				bad = s_dir.dot(e.normalized()) > 0.5
+				bad = bool(s_arm.get("yield", false)) and s_dir.dot(e.normalized()) > 0.5
 			elif kind == "roundabout":
 				# Faehrt der Schueler gerade auf den Ring zu, muss er den
 				# Verkehr im Kreis durchlassen.
@@ -336,7 +336,7 @@ func _check_priority(p2: Vector2, spd: float, delta: float) -> void:
 				bad = d_t < 15.0 and to_c.dot(s_dir) > 0.4
 			else:
 				# rbl: KI kommt dem Schueler von rechts.
-				var right := Vector2(s_dir.y, s_dir.x)
+				var right := Vector2(-s_dir.y, s_dir.x)
 				bad = t_dir.dot(-right) > 0.45
 			if bad:
 				if kind == "roundabout":
@@ -410,7 +410,10 @@ func _check_stalls_and_shifts() -> void:
 	var imp: float = float(car.get("_last_impact_v"))
 	if imp > _impact_seen:
 		_impact_seen = imp
-		if imp > 45.0:
+		var hit := String(car.get("_last_impact_name"))
+		if hit in ["Pedestrian", "Cyclist", "Fussgaenger", "Radfahrer"]:
+			_say("Person angefahren! In der Fahrschule: sofort anhalten. Schulblick, Zebrastreifen und Radfahrer-Abstand sind Pflicht — das ist der schwerste Fehler überhaupt.", 2)
+		elif imp > 45.0:
 			_say("Crash mit %.0f km/h — so eine Prüfungsfahrt ist vorbei, zum Glück nur Übung." % imp, 2)
 		else:
 			_say("Blechschaden (%.0f km/h) — Abstand und Geschwindigkeit anpassen." % imp, 2)
@@ -582,7 +585,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	# Berganfahren: auf der Rampe ohne Zurückrollen anfahren.
 	var hill: Dictionary = lot["hill"]
 	var hp: Vector2 = hill["pos"]
-	var hill_rect := Rect2(hp.x - float(hill["w"]) * 0.5 - 1.0, hp.y - float(hill["run"]) - 9.0, float(hill["w"]) + 2.0, float(hill["run"]) + 15.0)
+	var hill_rect := Rect2(hp.x - float(hill["w"]) * 0.5 - 1.0, hp.y - float(hill["run"]) * 0.5 - 7.0, float(hill["w"]) + 2.0, float(hill["run"]) + float(hill.get("down", 8.0)) + 22.0)
 	if _in_rect(p2, hill_rect):
 		if not _hill_armed and spd < 0.5:
 			_hill_armed = true

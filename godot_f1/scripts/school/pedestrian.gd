@@ -1,7 +1,9 @@
 extends Node3D
 ## Fussgaenger am Zebrastreifen: wartet am Bordstein, geht rueber,
 ## wartet dort, geht zurueck. Der Fahrlehrer liest die Position und
-## prueft, ob der Schueler Vorrang gewaehrt.
+## prueft, ob der Schueler Vorrang gewaehrt. Ein kinematicscher
+## Kollisionskoerper wandert als Kind mit, damit das Schulauto
+## einen Zusammenstoß physisch spürt.
 
 const CROSS_X := -40.0       ## Zebrastreifen aus city_layout.zebras()[0]
 const Z_SIDE_A := -53.5      ## Bordstein suedlich der Hauptstrasse
@@ -19,6 +21,16 @@ var _walking := false
 
 func _ready() -> void:
 	global_position = Vector3(CROSS_X, 0.0, Z_SIDE_A)
+	var body := AnimatableBody3D.new()
+	body.name = "Fussgaenger"
+	var col := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.26
+	cap.height = 1.6
+	col.shape = cap
+	col.position.y = 0.8
+	body.add_child(col)
+	add_child(body)
 	_build_mesh()
 
 
