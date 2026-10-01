@@ -1472,7 +1472,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_einfadeln(p2, spd)
 	_check_distance(p2, spd, delta)
 	_check_weather_speed(spd, delta)
-	_check_fuel()
+	_check_fuel(spd, delta)
 	_check_right_lane(p2, spd, delta)
 	_check_blindspot(spd, delta)
 	_check_free_junction(p2, spd, delta)
@@ -1928,7 +1928,19 @@ func _check_weather_speed(spd: float, delta: float) -> void:
 ## Tankuhr: unter ~18 % Hinweis auf die Tankstelle an der Oststrasse,
 ## bei 0 der Hinweis, dass nur noch die Reserve/Teleport hilft.
 var _fuel_lvl := 0   ## 0 = ok, 1 = knapp gemeldet, 2 = leer gemeldet
-func _check_fuel() -> void:
+var _midle_t := 0.0
+var _midle_cd := 0.0
+func _check_fuel(spd: float, delta: float) -> void:
+	# Standgas-Coaching: laenger als ~75 s mit laufendem Motor stehen
+	# frisst nur Sprit — in der Pruefung gibt es dafuer Minuspunkte.
+	if spd < 0.3 and bool(car.get("motor_on")):
+		_midle_t += delta
+		if _midle_t > 75.0 and _midle_cd <= 0.0:
+			_say("Steht man laenger, gehoert der Motor aus — Standgas frisst nur Sprit.", 1)
+			_midle_cd = 120.0
+	else:
+		_midle_t = 0.0
+	_midle_cd = maxf(_midle_cd - delta, 0.0)
 	var f: float = float(car.get("fuel"))
 	if f > 20.0:
 		_fuel_lvl = 0
