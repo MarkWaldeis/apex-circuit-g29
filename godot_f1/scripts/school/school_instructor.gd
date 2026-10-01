@@ -124,6 +124,7 @@ var rescue                    ## rescue_vehicle.gd-Instanz (kann null sein)
 var door_car                  ## door_car.gd-Instanz: Dooring-Ueberraschung
 var _door_open_cd: float = 0.0
 var _door_praised := false
+var _lt_cd: float = 0.0       ## Linksabbiegen bei Gegenverkehr
 var _rescue_ann := false      ## Alarmfahrt schon angesagt
 var _rescue_near := false     ## Schueler war waehrend der Fahrt in Reichweite
 
@@ -213,6 +214,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_ueberhol(p2, spd)
 	_check_pullout(p2, spd)
 	_check_door_car(p2, spd, delta)
+	_check_left_turn(p2, spd, delta)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -440,6 +442,39 @@ func _check_door_car(p2: Vector2, spd: float, delta: float) -> void:
 	elif not _door_praised:
 		_door_praised = true
 		_say("Gut reagiert — an der offenen Tür in Schrittgeschwindigkeit vorbei.", 0)
+
+
+## Linksabbiegen vor Gegenverkehr: blinkt der Schueler links oder
+## dreht bereits links ein, waehrend ein KI-Fahrzeug frontal in die
+## Kreuzung einfaehrt, muss er warten — §9 Abs. 1.
+func _check_left_turn(p2: Vector2, spd: float, delta: float) -> void:
+	_lt_cd = maxf(_lt_cd - delta, 0.0)
+	if _lt_cd > 0.0 or traffic.is_empty() or spd < 0.8:
+		return
+	if not bool(car.get("indicator_left")) and car.angular_velocity.y < 0.3:
+		return
+	for j in CityLayout.junctions().values():
+		var c: Vector2 = j["center"]
+		var dj := p2.distance_to(c)
+		if dj > 16.0 or dj < 1.5:
+			continue
+		var fwd := Vector2(-car.global_transform.basis.z.x,
+			-car.global_transform.basis.z.z)
+		for tc in traffic:
+			if not is_instance_valid(tc):
+				continue
+			var tdir := Vector2(tc.global_transform.basis.z.x,
+				tc.global_transform.basis.z.z)
+			if fwd.normalized().dot(tdir.normalized()) > -0.5:
+				continue
+			var tp := Vector2(tc.global_position.x, tc.global_position.z)
+			var td := tp.distance_to(c)
+			if td < 26.0 and td > 5.0 \
+					and (c - tp).normalized().dot(tdir.normalized()) > 0.6 \
+					and float(tc.get("speed_ms")) > 2.0:
+				_say("Linksabbiegen: der Gegenverkehr hat Vorfahrt — erst warten, dann abbiegen.", 1)
+				_lt_cd = 12.0
+				return
 
 
 # Radfahrer-Seitenabstand: Überholen erst ab ~1,5 m Seitenabstand.
