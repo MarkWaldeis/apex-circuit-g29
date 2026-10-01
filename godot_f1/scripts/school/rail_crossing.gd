@@ -63,7 +63,9 @@ func _physics_process(delta: float) -> void:
 
 func _update_visuals() -> void:
 	for a in _arms:
-		a["pivot"].rotation_degrees.z = a["dir"] * 68.0 * _barrier_a
+		# _barrier_a 1 = geschlossen: Arm liegt waagrecht ueber der Spur;
+		# 0 = offen: Arm ist ~68 Grad hochgeklappt.
+		a["pivot"].rotation_degrees.z = a["dir"] * 68.0 * (1.0 - _barrier_a)
 	if _train:
 		_train.global_transform.origin = Vector3(center.x + _tx, 0.0, center.y)
 	var lamp_on: bool = is_warning() and fmod(_blink_t, 1.0) < 0.5

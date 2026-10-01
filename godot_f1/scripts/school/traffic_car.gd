@@ -111,6 +111,7 @@ const STOP_WAIT := 1.2
 ## Abstand zur Kreuzungsmitte entscheidet ueber das Halten.
 
 var lights
+var ped_crossing = null       ## Fussgaengerampel (car_phase red/amber -> halten)
 var player
 var speed_ms: float = 0.0
 
@@ -366,6 +367,16 @@ func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
 				and speed_ms > 4.5 and _horn_cd <= 0.0:
 			_horn_left = 15000.0
 			_horn_cd = 7.0
+	# Fussgaengerampel: Rot oder Gelb -> vor der Querung halten.
+	if ped_crossing:
+		var cx: Vector2 = ped_crossing.cross_pos()
+		var crel := cx - pos
+		var cahead := crel.dot(dir)
+		var cside := absf(crel.dot(Vector2(-dir.y, dir.x)))
+		if cahead > 0.0 and cahead < 9.0 and cside < 4.0:
+			var cph: String = ped_crossing.car_phase()
+			if cph == "red" or cph == "amber":
+				v = 0.0
 	# Fussgaenger auf der Querung: Vorrang, wie es die StVO verlangt.
 	for pd in pedestrians:
 		if not is_instance_valid(pd):

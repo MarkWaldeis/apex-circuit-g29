@@ -155,6 +155,7 @@ func _ready() -> void:
 	peds.append(deer)
 	for tc in traffic_cars:
 		tc.pedestrians = peds
+		tc.ped_crossing = _pedx
 
 	# Bahnuebergang an der Ring-Ost-Strasse (Schranken + Zug).
 	var rail := RailCrossing.new()
@@ -346,7 +347,9 @@ func _rbl_trainer_tick(delta: float) -> void:
 	tc.name = "RvlTrainer"
 	add_child(tc)
 	tc.setup(lights, player, 1, -1, [start, goal])
+	tc.ttl = 30.0                 # haengt er fest, verschwindet er wieder
 	tc.pedestrians = _peds
+	tc.ped_crossing = _pedx
 	tc.night = _night
 	instructor.traffic.append(tc)
 
@@ -436,6 +439,7 @@ func _onc_trainer_tick(delta: float) -> void:
 	tc.setup(lights, player, 1, -1, [start, goal])
 	tc.ttl = 30.0                 # blockiert der Schueler den Kurs, despawnt er
 	tc.pedestrians = _peds
+	tc.ped_crossing = _pedx
 	tc.night = _night
 	instructor.traffic.append(tc)
 
@@ -603,6 +607,9 @@ func _toggle_traffic() -> void:
 			tc.name = "TrafficExtra%d" % _extra_traffic.size()
 			add_child(tc)
 			tc.setup(lights, player, int(cfg["start"]), int(cfg["route"]))
+			tc.pedestrians = _peds
+			tc.ped_crossing = _pedx
+			tc.night = _night
 			_extra_traffic.append(tc)
 			instructor.traffic.append(tc)
 		if instructor:

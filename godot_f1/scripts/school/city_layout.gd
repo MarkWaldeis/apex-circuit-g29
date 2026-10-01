@@ -96,8 +96,8 @@ static func junctions() -> Dictionary:
 			# Oststraße (Südarm) in die Schulstraße nach Westen ab
 			# (VZ 306 auf den Biegungsarmen, VZ 215 an den Nebenarmen).
 			# "bend_yaw" markiert die Gier-Richtung des Kurvenverlaufs —
-			# wer ihr folgt, faehrt der Vorfahrtstrasse nach und blinkt
-			# nicht (die Gegenrichtung bleibt blinkerpflichtig).
+			# wer ihr folgt, muss in die Biegungsrichtung blinken
+			# (Anlage 3 zu VZ 306); geradeaus Herausfahren ist blinkfrei.
 			"arms": [
 				{"pos": Vector2(94, -180), "enter": Vector2(1, 0), "bend_yaw": -1.0},
 				{"pos": Vector2(106, -180), "enter": Vector2(-1, 0), "yield": true},

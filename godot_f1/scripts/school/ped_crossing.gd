@@ -35,8 +35,8 @@ func _ready() -> void:
 	_build_markings()
 	_build_mast(Vector2(P_X + 4.5, Z_S), 270.0)   # Ost-Richtung
 	_build_mast(Vector2(P_X - 4.5, Z_N), 90.0)    # West-Richtung
-	_build_ped_lamp(Vector2(P_X + 4.5, Z_S + 1.0), 180.0)
-	_build_ped_lamp(Vector2(P_X - 4.5, Z_N - 1.0), 0.0)
+	_build_ped_lamp(Vector2(P_X + 4.5, Z_S + 1.0), 0.0)
+	_build_ped_lamp(Vector2(P_X - 4.5, Z_N - 1.0), 180.0)
 	_ped = CrossingPed.new()
 	_ped.name = "PedXFigur"
 	_build_figure(_ped)
@@ -80,7 +80,9 @@ func _physics_process(delta: float) -> void:
 	if _ped_walk:
 		_ped_t += delta
 		var u: float = clampf(_ped_t / 9.5, 0.0, 1.0)
-		var z: float = lerpf(Z_S * _ped_side, -Z_S * _ped_side, u)
+		var z_from: float = Z_S if _ped_side > 0.0 else Z_N
+		var z_to: float = Z_N if _ped_side > 0.0 else Z_S
+		var z: float = lerpf(z_from, z_to, u)
 		_ped.global_position = Vector3(P_X + 1.6, 0.0, z)
 		if u >= 1.0:
 			_ped_walk = false
@@ -94,8 +96,10 @@ func _update_lamps() -> void:
 		pair[0].visible = _phase == "red"
 		pair[1].visible = _phase == "amber"
 		pair[2].visible = _phase == "green"
-	_lamp_ped[0].visible = _phase != "red" or _ped_t > 10.5
-	_lamp_ped[1].visible = _phase == "red" and _ped_t <= 10.5
+	# Beide Fussgaengerkoepfe (je [rot, gruen]) umschalten.
+	for i in range(0, _lamp_ped.size(), 2):
+		_lamp_ped[i].visible = _phase != "red" or _ped_t > 10.5
+		_lamp_ped[i + 1].visible = _phase == "red" and _ped_t <= 10.5
 
 
 func _build_figure(n: Node3D) -> void:

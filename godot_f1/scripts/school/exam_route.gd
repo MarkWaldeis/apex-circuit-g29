@@ -52,7 +52,7 @@ static func route_c() -> Array:
 		{"pos": Vector2(-98.2, -150.0), "text": "Der Weststraße nach Norden folgen."},
 		{"pos": Vector2(-98.2, -172.0), "text": "Gleich rechts in die Schulstraße — rechts vor links."},
 		{"pos": Vector2(60, -178.2), "text": "Der Schulstraße folgen — Tempo 30."},
-		{"pos": Vector2(98.2, -140.0), "text": "Rechts in die Oststraße — der Vorfahrtstraße folgen, ohne Blinker."},
+		{"pos": Vector2(98.2, -140.0), "text": "Rechts in die Oststraße — der Vorfahrtstraße folgen, rechts blinken."},
 		{"pos": Vector2(98.2, -80.0), "text": "Weiter zur Hauptstraße."},
 		{"pos": Vector2(40, -61.8), "text": "Rechts in die Hauptstraße abbiegen."},
 		{"pos": Vector2(-10, -61.8), "text": "Gleich links in die Zufahrt zum Übungsplatz."},
@@ -113,7 +113,7 @@ static func route_e() -> Array:
 
 ## Route F: Ampel, Weststraße, rechts-vor-links in die Schulstraße,
 ## verkehrsberuhigter Bereich (Schritttempo), Biegung der Vorfahrtstraße
-## ohne Blinker in die Oststraße und Stoppschild am Heimweg.
+## mit Blinker in die Oststraße und Stoppschild am Heimweg.
 static func route_f() -> Array:
 	return [
 		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
@@ -121,7 +121,7 @@ static func route_f() -> Array:
 		{"pos": Vector2(-98.2, -110.0), "text": "Rechts in die Weststraße abbiegen."},
 		{"pos": Vector2(-98.2, -172.0), "text": "Rechts in die Schulstraße — rechts vor links."},
 		{"pos": Vector2(-60, -178.2), "text": "Verkehrsberuhigter Bereich — Schritttempo!"},
-		{"pos": Vector2(60, -178.2), "text": "Der Biegung der Vorfahrtstraße folgen — rechts in die Oststraße, ohne zu blinken."},
+		{"pos": Vector2(60, -178.2), "text": "Der Biegung der Vorfahrtstraße folgen — rechts in die Oststraße, rechts blinken."},
 		{"pos": Vector2(98.2, -160.0), "text": "Der Oststraße nach Süden folgen."},
 		{"pos": Vector2(98.2, -70.0), "text": "Stoppschild an der Hauptstraße — Stillstand, dann rechts abbiegen."},
 		{"pos": Vector2(40.0, -61.8), "text": "Der Hauptstraße Richtung Zentrum."},

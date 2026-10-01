@@ -140,6 +140,7 @@ var _slip_t := 0.0            ## Zeit am Schleifpunkt in Kriechfahrt
 var _clutch_ride := 0.0       ## getretene Kupplung bei Fahrt (Sekunden)
 var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
 var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
+var _auf_was := false         ## war auf dem Einfaedel-Streifen (Auswertung am Ausgang)
 var _einbahn_on := false      ## auf der Einbahnstrasse westwaerts unterwegs
 var _ov_armed := false        ## Ueberholvorgang beobachtet
 var _ov_tc = null             ## gerade ueberholtes KI-Fahrzeug
@@ -269,7 +270,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts(delta)
 	_check_tasks(p2, spd, delta)
-	_check_alaram_exercise(p2, spd, delta)
+	_check_alarm_exercise(p2, spd, delta)
 	# Warnblinker im fliessenden Verkehr ist kein zulaessiges Blinken.
 	if bool(car.get("hazard")) and spd > 6.0:
 		_haz_t += delta
@@ -302,7 +303,7 @@ var _alarm_react: float = -1.0 ## Reaktionszeit bis Pedal > 0.6
 var _alarm_cool: float = 25.0  ## Sperrzeit bis zur naechsten Uebung
 
 
-func _check_alaram_exercise(p2: Vector2, spd: float, delta: float) -> void:
+func _check_alarm_exercise(p2: Vector2, spd: float, delta: float) -> void:
 	_alarm_cool = maxf(_alarm_cool - delta, 0.0)
 	var l: Dictionary = CityLayout.lot()["rect"]
 	var on_lot: bool = p2.x > float(l["x0"]) and p2.x < float(l["x1"]) \
@@ -450,7 +451,7 @@ func _check_signs(p2: Vector2) -> void:
 		return
 
 
-## Theorie wiederholen (Taste F): das naechste Schild in ~10 m wird
+## Theorie wiederholen (Taste X): das naechste Schild in ~10 m wird
 ## noch einmal erklaert — egal ob schon gesehen oder nicht.
 func explain_nearest_sign(p2: Vector2) -> void:
 	var best := 1e9
@@ -861,29 +862,30 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			tr["l"] = true
 		if bool(car.get("indicator_right")):
 			tr["r"] = true
-		if now_j - float(tr["t0"]) > 1.5:
+		# Biegungsarme der abknickenden Vorfahrtstrasse bekommen ein
+		# laengeres Auswertefenster — die Kurve wird oft gemaechlich
+		# genommen, 1,5 s waeren zu knapp fuer |dyaw|>0,45.
+		var win := 3.0 if float(tr["arm"].get("bend_yaw", 0.0)) != 0.0 else 1.5
+		if now_j - float(tr["t0"]) > win:
 			var dyaw := wrapf(car.global_transform.basis.get_euler().y - float(tr["yaw0"]), -PI, PI)
-			# Abknickende Vorfahrtstrasse: wer dem Knick der Vorfahrtstrasse
-			# folgt (arm["bend_yaw"] markiert die Kurvenrichtung), blinkt
-			# nicht — nur das Abbiegen WEG von der Vorfahrtstrasse braucht
-			# den Blinker (§9 + VZ 306/215).
+			# Abknickende Vorfahrtstrasse (Anlage 3 zu VZ 306): wer der
+			# Biegung FOLGT, muss in die Biegungsrichtung blinken; wer
+			# GERADEAUS herausfaehrt, darf NICHT blinken — das irrefuehrt
+			# die Wartepflichtigen (arm["bend_yaw"] = Biegungsrichtung).
 			var bend: float = float(tr["arm"].get("bend_yaw", 0.0))
 			if dyaw > 0.45 and not bool(tr.get("l", false)) and bend < 0.5:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen links blinken.")
 			elif dyaw < -0.45 and not bool(tr.get("r", false)) and bend > -0.5:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
 			elif bend != 0.0 and signf(dyaw) == signf(bend) and absf(dyaw) > 0.45:
-				if bool(tr.get("l", false)) or bool(tr.get("r", false)):
-					_say("Der Biegung der Vorfahrtstraße gefolgt — Blinker war hier nicht nötig.", 1)
-				else:
-					_done("vorf_knick", "Der abknickenden Vorfahrtstraße gefolgt — ohne Blinken, genau richtig.")
-			elif bend != 0.0 and absf(dyaw) < 0.45:
-				# Geradeaus durch die Biegung = die abknickende Vorfahrt-
-				# strasse VERLASSEN: §9 will den Blinker IN die Biegungs-
-				# richtung (bend>0 = links, bend<0 = rechts).
 				var need := "l" if bend > 0.0 else "r"
-				if not bool(tr.get(need, false)):
-					_warn("Geradeaus aus der abknickenden Vorfahrtstraße — Blinker in die Biegungsrichtung setzen!")
+				if bool(tr.get(need, false)):
+					_done("vorf_knick", "Der abknickenden Vorfahrtstraße gefolgt — Blinker in die Biegungsrichtung, genau richtig.")
+				else:
+					_warn("Der Biegung der Vorfahrtstraße folgen = Blinker in die Biegungsrichtung setzen!")
+			elif bend != 0.0 and absf(dyaw) < 0.45:
+				if bool(tr.get("l", false)) or bool(tr.get("r", false)):
+					_warn("Geradeaus aus der abknickenden Vorfahrtstraße nicht blinken — das irreführt die Wartepflichtigen.")
 			if dyaw < -0.45:
 				_check_shoulder(p2)
 			if dyaw > 0.45:
@@ -908,7 +910,14 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 		# Im Kreisverkehr dreht sich die Karosserie staendig — das
 		# ist kein Abbiegevorgang im Sinne der Blinkerpflicht.
 		var on_ring := p2.distance_to(Vector2(200.0, -60.0)) < 17.0
-		if spd > 4.0 and not on_ring \
+		# Dasselbe in den vier Ring-Kurven: dort folgt die Spur der
+		# Strassenfuehrung, ein Blinker waere verwirrend/falsch.
+		var at_corner := false
+		for cx in [-240.0, 240.0]:
+			for cz in [-240.0, 240.0]:
+				if p2.distance_to(Vector2(cx, cz)) < 22.0:
+					at_corner = true
+		if spd > 4.0 and not on_ring and not at_corner \
 				and String(surfaces.sample(car.global_position).get("surface", "asphalt")) != "grass":
 			_warn("Abbiegen ohne Blinker — rechtzeitig blinken.")
 		_gyaw_acc = 0.0
@@ -1001,7 +1010,7 @@ func _check_ueberhol(p2: Vector2, spd: float) -> void:
 				or spd < 6.0:
 			return
 		for tc in traffic:
-			if not is_instance_valid(tc):
+			if not is_instance_valid(tc) or not bool(tc.get("truck")):
 				continue
 			var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
 			var along := rel.dot(s_dir)
@@ -1444,8 +1453,13 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		if absf(p2.x - zp.x) < 4.0 and absf(p2.y - zp.y) < 4.0 and spd * 3.6 < 30.0 and spd > 0.5:
 			_done("zebra", "Zebrastreifen langsam — Fußgänger zuerst.")
 		# Halten auf/vor dem Zebrastreifen (5 m) ist verboten — ausser ein
-		# Fussgaenger zwingt sowieso zum Anhalten.
-		if absf(p2.x - zp.x) < 10.0 and absf(p2.y - zp.y) < 4.6 and spd < 0.4:
+		# Fussgaenger zwingt sowieso zum Anhalten. Die Box folgt der
+		# Querungs-Rotation: "along" entlang der Fahrbahn, "across" quer.
+		var zrot: float = float(z.get("rot", 0.0))
+		var across := Vector2.RIGHT.rotated(deg_to_rad(zrot))
+		var along := Vector2(-across.y, across.x)
+		var zrel := p2 - zp
+		if absf(zrel.dot(along)) < 10.0 and absf(zrel.dot(across)) < 4.6 and spd < 0.4:
 			var ped_near := false
 			for pd in pedestrians:
 				if is_instance_valid(pd) \
@@ -1653,12 +1667,12 @@ func _check_nacht(spd: float, delta: float) -> void:
 	# Nachtfahrt-Uebung: 150 m im Dunkeln mit Abblendlicht unterwegs
 	# sein — wer ohne Licht faehrt, bekommt den Hinweis.
 	_night_cd = maxf(_night_cd - delta, 0.0)
-	if not night or _tasks_done.get("nacht", false):
+	if not night:
 		_night_dist = 0.0
 		return
 	if bool(car.get("headlights_on")):
 		_night_dist += spd * delta
-		if _night_dist > 150.0:
+		if _night_dist > 150.0 and not _tasks_done.get("nacht", false):
 			_done("nacht", "Nachtfahrt mit Abblendlicht — Abstand und Tempo anpassen!")
 	elif spd > 3.0 and _night_cd <= 0.0:
 		_warn("Bei Dunkelheit Abblendlicht an — Taste L.")
@@ -1726,10 +1740,12 @@ func _check_fussampel(p2: Vector2, spd: float, delta: float) -> void:
 	if dz > 3.4 or absf(dx) > 40.0:
 		return
 	var ph: String = ped_crossing.car_phase()
-	if ph == "red" and absf(dx) < 12.0 and spd < 0.5:
+	if ph == "red" and absf(dx) < 18.0 and spd < 0.5:
 		_fa_waited = true
 	if absf(dx) < 2.6:
-		if ph == "red" and _fa_cd <= 0.0:
+		# Wer innerhalb der Zone bei Rot STEHT, haelt ja schon — die
+		# Rotlicht-Warnung gilt nur dem, der noch faehrt.
+		if ph == "red" and spd > 0.8 and _fa_cd <= 0.0:
 			_warn("Rotlicht an der Fußgängerampel! Bei Rot heißt es halten.")
 			_fa_cd = 10.0
 		elif ph == "green" and _fa_waited:
@@ -1819,19 +1835,23 @@ func _check_einfadeln(p2: Vector2, spd: float) -> void:
 	# den Verkehr aus.
 	var auf_ost := p2.x > 93.0 and p2.x < 107.0 and p2.y < -205.0 and p2.y > -238.0
 	if auf_ost:
+		_auf_was = true
 		if spd > 13.0:
 			_auf_armed = true
 		elif p2.y > -222.0:
 			_auf_slow = true
-	elif _auf_armed and p2.y < -236.5 and absf(p2.x - 100.0) > 8.0:
+	elif _auf_was and p2.y < -236.5 and absf(p2.x - 100.0) > 8.0:
+		# Er hat den Streifen verlassen: zaehlt auch, wer das Arm-Kriterium
+		# (13 m/s) nie erreichte — sonst lernt der langsame Einfaeeler nie.
+		_auf_was = false
 		_auf_armed = false
 		if spd > 16.0:
 			_done("einfaden", "Einfädeln — auf der Auffahrt beschleunigt und flüssig eingeordnet!")
-			_auf_slow = false
 		elif _auf_slow or spd > 8.0:
 			_warn("Beim Einfädeln Gas geben — auf dem Streifen kommt man auf Tempo.")
-			_auf_slow = false
+		_auf_slow = false
 	elif p2.y > -200.0:
+		_auf_was = false
 		_auf_armed = false
 		_auf_slow = false
 
@@ -2189,12 +2209,12 @@ func _check_spiel(p2: Vector2, spd: float) -> void:
 
 func _check_nebel(spd: float, delta: float) -> void:
 	# Nebelfahrt: 150 m bei Sicht unter 100 m mit Abblendlicht.
-	if not fog or _tasks_done.get("nebel", false):
+	if not fog:
 		_fog_dist = 0.0
 		return
 	if bool(car.get("headlights_on")):
 		_fog_dist += spd * delta
-		if _fog_dist > 150.0:
+		if _fog_dist > 150.0 and not _tasks_done.get("nebel", false):
 			_done("nebel", "Nebelfahrt mit Abblendlicht — Abstand verdoppeln, Blick bleibt nah.")
 	elif spd > 3.0 and _night_cd <= 0.0:
 		_warn("Im Nebel Abblendlicht an — Taste L.")
