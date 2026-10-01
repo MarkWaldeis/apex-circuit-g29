@@ -46,7 +46,7 @@ func sample(pos: Vector3, _line_hint: int = -1) -> Dictionary:
 		var r: float = float(_island["island_r"]) - 0.4
 		var d2: Vector2 = Vector2(pos.x, pos.z) - c
 		if d2.length() < r:
-			return ISLAND.duplicate()
+			return _wet_out(ISLAND.duplicate())
 	# Übungsplatz-Fläche.
 	var lr: Dictionary = _lot_rect
 	if pos.x >= lr.get("x0", 0.0) and pos.x <= lr.get("x1", 0.0) \

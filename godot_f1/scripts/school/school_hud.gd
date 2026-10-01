@@ -261,10 +261,10 @@ func _build() -> void:
 	var htext := Label.new()
 	htext.text = (
 		"WASD / Pfeile – Fahren\n"
-		+ "1–6 Gänge · 0 Leerlauf · V Rückwärts\n"
+		+ "1–6 Gänge · 0/N Leerlauf · V Rückwärts\n"
 		+ "Q / E – Blinker links / rechts\n"
 		+ "H – Warnblinker · Leertaste – Handbremse\n"
-		+ "L – Abblendlicht · U – Nacht · N – Nässe\n"
+		+ "L – Abblendlicht · U – Nacht · M – Nässe\n"
 		+ "T – zur nächsten Übung springen\n"
 		+ "P – Prüfungsfahrt starten / beenden\n"
 		+ "C – Kamera · R – zurücksetzen\n"

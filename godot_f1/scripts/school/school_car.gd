@@ -258,6 +258,9 @@ func _teleport_next() -> void:
 	gear = 0
 	stalled = false
 	motor_on = true
+	indicator_left = false
+	indicator_right = false
+	hazard = false
 	last_spot = String(spot["name"])
 	if feedback:
 		feedback.poke("reset", 0.0)
@@ -402,6 +405,10 @@ func _physics_process(delta: float) -> void:
 	gear = int(gb["gear"])
 	rpm = float(gb["rpm"])
 	engine_force = float(gb["engine_force"]) * grip
+	# Blechschaden: ab ~halber Ladung geht dem Motor die Leistung aus —
+	# das merkt man beim Fahren, erst Recht in der Pruefung.
+	if damage > 0.5:
+		engine_force *= lerpf(1.0, 0.4, clampf((damage - 0.5) / 0.5, 0.0, 1.0))
 	# Traktionskontrolle: durchdrehende Antriebsraeder -> Gas weg.
 	if bool(assists.get("traction_control", true)) and engine_force > 0.0:
 		var worst_skid := 1.0
@@ -426,7 +433,9 @@ func _physics_process(delta: float) -> void:
 			crank_clutch = 1.0
 		gearbox.start_motor(crank_clutch)
 	if absf(float(gb.get("judder", 0.0))) > 0.1:
-		apply_central_impulse(global_transform.basis.z * float(gb["judder"]) * mass * 0.001 * 60.0 * delta)
+		# Kurzer Ruck ~1 m/s (nicht Startbeschleunigung): 0,35 s * judder *
+		# mass * Faktor. Mit 0,00006 landet der Delta-v bei ~1,1 m/s.
+		apply_central_impulse(global_transform.basis.z * float(gb["judder"]) * mass * 0.00006 * 60.0 * delta)
 	# Kupplung schleifen lassen = Hitze (Fahrlehrerhinweis, kein Schaden).
 	if clutch_pedal > 0.25 and clutch_pedal < 0.85 and absf(forward_vel) < 4.0 and throttle_in > 0.2:
 		clutch_heat = minf(clutch_heat + delta * 0.25, 3.0)
@@ -528,7 +537,9 @@ func _animate_wheels(delta: float, forward_speed: float) -> void:
 		var wheel: VehicleWheel3D = item["wheel"]
 		if vis == null or wheel == null:
 			continue
-		var yaw: float = wheel.rotation.y
+		# Lenkeinschlag: VehicleWheel3D dreht sein Node nicht mit — wir
+		# nehmen die aktuelle Lenkung nur fuer Vorderraecher.
+		var yaw: float = steering if wheel.use_as_steering else 0.0
 		vis.basis = Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, _wheel_roll)
 
 
@@ -588,6 +599,7 @@ func _reset() -> void:
 	indicator_left = false
 	indicator_right = false
 	hazard = false
+	damage = 0.0
 	if feedback:
 		feedback.poke("reset", 0.0)
 

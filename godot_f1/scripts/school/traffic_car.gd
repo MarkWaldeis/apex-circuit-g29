@@ -56,6 +56,7 @@ var speed_ms: float = 0.0
 var _i: int = 0                  ## Index des aktuellen Ziel-Wegpunkts
 var _stop_left: float = 0.0      ## verbleibende Haltezeit am Stoppschild
 var _stop_done: bool = false     ## Stoppschild diese Runde schon bedient
+var pedestrians: Array = []      ## Fussgaenger, vor denen man anhaelt
 var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
 
@@ -132,6 +133,15 @@ func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
 		var side := absf(rel.dot(Vector2(-dir.y, dir.x)))
 		if ahead > 0.0 and ahead < 10.0 and side < 3.2:
 			v = minf(v, 0.0)
+	# Fussgaenger auf der Querung: Vorrang, wie es die StVO verlangt.
+	for pd in pedestrians:
+		if not is_instance_valid(pd) or not bool(pd.call("on_road")):
+			continue
+		var pp := Vector2(pd.global_position.x, pd.global_position.z)
+		var rel2 := pp - pos
+		var ahead2 := rel2.dot(dir)
+		if ahead2 > 0.0 and ahead2 < 13.0 and absf(rel2.dot(Vector2(-dir.y, dir.x))) < 3.4:
+			v = 0.0
 	v = _yield_check(pos, dir, v)
 	return v
 
@@ -149,7 +159,7 @@ func _yield_check(pos: Vector2, dir: Vector2, v: float) -> float:
 		p_spd = Vector2(p_lv.x, p_lv.z).length()
 	for j in CityLayout.junctions().values():
 		var kind := String(j["kind"])
-		if kind != "rbl" and kind != "yield":
+		if kind != "rbl" and kind != "yield" and kind != "stop" and kind != "roundabout":
 			continue
 		var c: Vector2 = j["center"]
 		var d_ai := pos.distance_to(c)
@@ -199,6 +209,16 @@ func _student_has_priority(j: Dictionary, p2: Vector2, p_spd: float, dir: Vector
 		var e: Vector2 = ai_arm["enter"]
 		var on_yield_arm: bool = bool(ai_arm.get("yield", false)) and ai_best < 7.0 and dir.normalized().dot(e.normalized()) > 0.6
 		return on_yield_arm
+	if String(j["kind"]) == "stop":
+		# Nach dem eigenen Halt: quert der Schueler schon im Knoten oder
+		# kommt er auf der freien Achse (Oststrasse) heran, wartet die KI.
+		if p2.distance_to(c) < 9.0:
+			return true
+		var e2: Vector2 = p_arm["enter"]
+		return absf(e2.y) > 0.5 and p_spd > 2.0
+	if String(j["kind"]) == "roundabout":
+		# Wer IM Ring faehrt, hat Vorfahrt vor der Einfahrt.
+		return p2.distance_to(c) < 13.5
 	# rbl: der Schueler faehrt uns von rechts rein.
 	var right := Vector2(-dir.y, dir.x)
 	var e: Vector2 = p_arm["enter"]

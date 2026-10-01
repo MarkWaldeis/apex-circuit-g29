@@ -87,10 +87,22 @@ func _ready() -> void:
 	var ped := Pedestrian.new()
 	ped.name = "Pedestrian"
 	add_child(ped)
+	# Zweiter Fussgaenger am neuen Zebrastreifen in der Weststrasse.
+	var ped2 := Pedestrian.new()
+	ped2.name = "PedestrianWest"
+	add_child(ped2)
+	ped2.setup_crossing(Vector2(-94.5, -150.0), Vector2(-105.5, -150.0),
+		Vector2(-100.0, -150.0), 3.6)
+	# Beide gehen erst los, wenn kein Fahrzeug an der Querung ankommt.
+	var peds := [ped, ped2]
+	for p in peds:
+		p.watchers = [player] + traffic_cars
+	for tc in traffic_cars:
+		tc.pedestrians = peds
 
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
-	instructor.pedestrian = ped
+	instructor.pedestrians = peds
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.traffic = traffic_cars
@@ -160,7 +172,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				instructor._say("Wieder hell — Licht kann aus bleiben.", 0)
 	if event is InputEventKey and event.pressed and not event.echo \
-			and event.physical_keycode == KEY_N:
+			and event.physical_keycode == KEY_M:
 		_wet = not _wet
 		if surfaces:
 			surfaces.set_wet(_wet)

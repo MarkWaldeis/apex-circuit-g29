@@ -80,9 +80,13 @@ static func junctions() -> Dictionary:
 		"zufahrt": {
 			"kind": "yield",
 			"center": Vector2(0, -60),
-			# Einfahrt auf die Hauptstraße: Vorfahrt gewähren.
+			# Einfahrt auf die Hauptstraße: Vorfahrt gewähren. Die beiden
+			# Hauptstraßen-Arme sind freie Fahrbahn (kein Halt, aber fuer die
+			# Vorfahrt-Auswertung des Querverkehrs noetig).
 			"arms": [
 				{"pos": Vector2(0, -57), "enter": Vector2(0, -1), "yield": true},
+				{"pos": Vector2(-11, -58.2), "enter": Vector2(1, 0)},
+				{"pos": Vector2(11, -61.8), "enter": Vector2(-1, 0)},
 			],
 		},
 		"yield_ost": {
@@ -231,26 +235,31 @@ static func signs() -> Array:
 ## Haltelinien/Bodenmarkierungen (weiße Querbalken auf der Fahrbahn).
 static func stop_lines() -> Array:
 	var out: Array = []
-	# Ampelkreuzung: vier Haltelinien.
-	out.append({"pos": Vector2(-92.6, -60), "rot": 0.0, "w": 3.4})
-	out.append({"pos": Vector2(-107.4, -60), "rot": 0.0, "w": 3.4})
-	out.append({"pos": Vector2(-100, -52.6), "rot": 90.0, "w": 3.2})
-	out.append({"pos": Vector2(-100, -67.4), "rot": 90.0, "w": 3.2})
+	# Ampelkreuzung: vier Haltelinien. `w` laeuft in lokalem X, `rot`
+	# dreht es: Straße entlang x -> rot 90 (Linie quer zur Fahrtrichtung),
+	# Straße entlang z -> rot 0.
+	out.append({"pos": Vector2(-92.6, -60), "rot": 90.0, "w": 3.4})
+	out.append({"pos": Vector2(-107.4, -60), "rot": 90.0, "w": 3.4})
+	out.append({"pos": Vector2(-100, -52.6), "rot": 0.0, "w": 3.2})
+	out.append({"pos": Vector2(-100, -67.4), "rot": 0.0, "w": 3.2})
 	# Stop-Kreuzung.
-	out.append({"pos": Vector2(92.4, -60), "rot": 0.0, "w": 3.2})
-	out.append({"pos": Vector2(107.6, -60), "rot": 0.0, "w": 3.2})
+	out.append({"pos": Vector2(92.4, -60), "rot": 90.0, "w": 3.2})
+	out.append({"pos": Vector2(107.6, -60), "rot": 90.0, "w": 3.2})
 	# Kreisverkehr: Haifischzähne-Ersatz als schmale Linie (an den
 	# Einfahrtsarmen, knapp vor der Ringkante).
-	out.append({"pos": Vector2(184.5, -60), "rot": 0.0, "w": 2.6})
-	out.append({"pos": Vector2(215.5, -60), "rot": 0.0, "w": 2.6})
-	out.append({"pos": Vector2(200, -76.5), "rot": 90.0, "w": 2.6})
-	out.append({"pos": Vector2(200, -47.5), "rot": 90.0, "w": 2.6})
+	out.append({"pos": Vector2(184.5, -60), "rot": 90.0, "w": 2.6})
+	out.append({"pos": Vector2(215.5, -60), "rot": 90.0, "w": 2.6})
+	out.append({"pos": Vector2(200, -76.5), "rot": 0.0, "w": 2.6})
+	out.append({"pos": Vector2(200, -47.5), "rot": 0.0, "w": 2.6})
 	return out
 
 
 ## Zebrastreifen (Querstreifen über die Fahrbahn).
 static func zebras() -> Array:
-	return [{"pos": Vector2(-40, -60), "rot": 0.0, "w": 6.8}]
+	return [
+		{"pos": Vector2(-40, -60), "rot": 0.0, "w": 6.8},
+		{"pos": Vector2(-100, -150), "rot": 90.0, "w": 6.0},
+	]
 
 
 ## Strassenlaternen: Standorte am Gehwegrand mit Richtung zur Fahrbahn.
@@ -288,9 +297,9 @@ static func lot() -> Dictionary:
 		"gate": {"pos": Vector2(0, 42), "w": 8.0},
 		# Längsparken: zwei Buchten an der Ostkante, eine mit Übungs-Pkw belegt.
 		"parallel_bays": [
-			{"pos": Vector2(72, 62), "rot": 0.0, "len": 6.2, "occupied": false},
-			{"pos": Vector2(72, 70), "rot": 0.0, "len": 6.2, "occupied": true},
-			{"pos": Vector2(72, 78), "rot": 0.0, "len": 6.2, "occupied": false},
+			{"pos": Vector2(72, 62), "rot": 0.0, "len": 6.2, "occupied": true},
+			{"pos": Vector2(72, 70), "rot": 0.0, "len": 6.2, "occupied": false},
+			{"pos": Vector2(72, 78), "rot": 0.0, "len": 6.2, "occupied": true},
 		],
 		# Querparken: vier Buchten an der Südkante.
 		"perp_bays": [
@@ -314,11 +323,12 @@ static func lot() -> Dictionary:
 
 
 ## Radfahrer-Rundkurs: rechte Fahrbahnseite der Hauptstraße (ostwärts
-## z=-56, westwärts z=-64), Wenden über die Fahrbahn an den Enden.
+## z=-57,2 — rechter Rand seiner Spur — westwärts z=-62,8), Wenden über
+## die Fahrbahn an den Enden.
 static func cyclist() -> Array:
 	return [
-		Vector2(-160, -56.0), Vector2(160, -56.0), Vector2(166, -60.0),
-		Vector2(160, -64.0), Vector2(-160, -64.0), Vector2(-166, -60.0),
+		Vector2(-160, -57.2), Vector2(160, -57.2), Vector2(166, -60.0),
+		Vector2(160, -62.8), Vector2(-160, -62.8), Vector2(-166, -60.0),
 	]
 
 

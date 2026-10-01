@@ -35,11 +35,12 @@ var car
 var surfaces
 var cyclist
 var lights          ## junction_lights.gd Instanz (kann null sein)
-var pedestrian      ## Fussgaenger am Zebrastreifen (kann null sein)
+var pedestrians: Array = []  ## Fussgaenger an den Zebrastreifen
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
-var _ped_waiting := false
+var _ped_waiting := {}         ## Fussgaenger-id -> Schueler laesst passieren
+var _ww_t: float = 0.0         ## Zeit gegen die Einbahnrichtung (Rate-Limit)
 var _speed_over: float = 0.0
 var _speed_limit: int = -1
 var _speeding: bool = false
@@ -236,7 +237,12 @@ func _check_signs(p2: Vector2) -> void:
 func _check_wrong_way(pos: Vector3, delta: float) -> void:
 	var road: String = surfaces.wrong_way(pos, car.linear_velocity)
 	if road != "":
-		_say("Einbahnstraße! Du fährst gegen die Fahrtrichtung — wende.", 2)
+		_ww_t += delta
+		if _ww_t > 0.3:
+			_say("Einbahnstraße! Du fährst gegen die Fahrtrichtung — wende.", 2)
+			_ww_t = -5.0
+	else:
+		_ww_t = minf(_ww_t + delta * 2.0, 0.0)
 	# Rechtsfahrgebot: anhaltend links der Mitte = Gegenverkehr.
 	var left: String = surfaces.left_lane(pos, car.linear_velocity)
 	if left != "":
@@ -461,12 +467,15 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 		if prev <= 0.0 and d > 0.0 and spd > 1.0:
 			_on_stop_line_crossed(j, arm, key, spd)
 			# Blinker-Merker: beim Abbiegen an einer Kreuzung Blinker erwarten.
-			_jturn[key] = {
+			# Ausnahme Kreisverkehr: Einfahren ist BLINKFREI, erst das
+			# Ausfahren braucht den Rechtsblinker (eigener Check unten).
+			if String(j["kind"]) != "roundabout":
+				_jturn[key] = {
 				"yaw0": car.global_transform.basis.get_euler().y,
-				"t0": Time.get_ticks_msec() / 1000.0,
-				"j": j,
-				"arm": arm,
-			}
+					"t0": Time.get_ticks_msec() / 1000.0,
+					"j": j,
+					"arm": arm,
+				}
 		# Wer vor der Linie wirklich steht, merkt es sich (Stopschild-Pflicht):
 		# Schleichen zählt nicht — erst nach ~1 s echtem Stillstand gilt es als Halt.
 		var now_s := Time.get_ticks_msec() / 1000.0
@@ -597,7 +606,9 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 			else:
 				_done("stop", "Sauber am Stoppschild angehalten — weiter so.")
 		"yield":
-			if spd > 6.0:
+			# Nur auf Wartepflicht-Armen meckern: wer auf der freien
+			# Vorfahrtstrasse durchfaehrt, macht alles richtig.
+			if spd > 6.0 and bool(arm.get("yield", false)):
 				_warn("Vorfahrt gewähren heißt abbremsen — nicht durchschießen.")
 		"rbl":
 			if spd > 8.0:
@@ -654,6 +665,9 @@ func _check_tasks(p2: Vector2, spd: float, delta: float) -> void:
 
 func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> void:
 	var lot: Dictionary = CityLayout.lot()
+	# Schritttempo-Gebot: wer ueber den Platz ballert, wird abgemahnt.
+	if spd * 3.6 > 30.0:
+		_warn("Auf dem Übungsplatz gilt Schritttempo — deutlich langsamer fahren.")
 	# Gefahrbremsung: auf der Bremsbahn von >25 km/h auf 0 mit Vollbremsung.
 	var bl: Dictionary = lot["brake_lane"]
 	var bla: Vector2 = bl["from"]
@@ -727,7 +741,11 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	var hp: Vector2 = hill["pos"]
 	var hill_rect := Rect2(hp.x - float(hill["w"]) * 0.5 - 1.0, hp.y - float(hill["run"]) * 0.5 - 7.0, float(hill["w"]) + 2.0, float(hill["run"]) + float(hill.get("down", 8.0)) + 22.0)
 	if _in_rect(p2, hill_rect):
-		if not _hill_armed and spd < 0.5:
+		if not _hill_armed and spd < 0.5 \
+				and p2.y > hp.y - float(hill["run"]) * 0.5 - 3.0 \
+				and p2.y < hp.y + 1.0:
+			# Nur wer AN der Rampe haelt, bekommt die Bergwertung — Anhalten
+			# auf der flachen Zufahrt zaehlt nicht.
 			_hill_armed = true
 			_hill_ref = p2.y
 		elif _hill_armed:
@@ -748,10 +766,14 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			_done("zebra", "Zebrastreifen langsam — Fußgänger zuerst.")
 		# Halten auf/vor dem Zebrastreifen (5 m) ist verboten — ausser ein
 		# Fussgaenger zwingt sowieso zum Anhalten.
-		if absf(p2.x - zp.x) < 10.0 and absf(p2.y - zp.y) < 4.6 and spd < 0.4 \
-				and (pedestrian == null or not is_instance_valid(pedestrian) \
-				or Vector2(pedestrian.global_position.x, pedestrian.global_position.z).distance_to(zp) > 14.0):
-			_warn("Nicht auf dem Zebrastreifen halten — 5 m Abstand einhalten.")
+		if absf(p2.x - zp.x) < 10.0 and absf(p2.y - zp.y) < 4.6 and spd < 0.4:
+			var ped_near := false
+			for pd in pedestrians:
+				if is_instance_valid(pd) \
+						and Vector2(pd.global_position.x, pd.global_position.z).distance_to(zp) < 14.0:
+					ped_near = true
+			if not ped_near:
+				_warn("Nicht auf dem Zebrastreifen halten — 5 m Abstand einhalten.")
 	_check_pedestrian(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -761,8 +783,12 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				"offtrack":
 					_warn("Sie sind vom Kurs ab — wenden Sie und folgen Sie der Anweisung.")
 				"done":
-					var verdict := "bestanden" if _exam_errs <= 2 else "nicht bestanden"
-					_done("pruefung", "Prüfungsfahrt beendet — %d Beanstandung(en): %s!" % [_exam_errs, verdict])
+					# Haekchen nur bei bestandener Fahrt — ein durchgefallener
+					# Lauf bekommt die Ansage, aber keinen Listenpunkt.
+					if _exam_errs <= 2:
+						_done("pruefung", "Prüfungsfahrt bestanden — %d Beanstandung(en)!" % _exam_errs)
+					else:
+						_say("Prüfungsfahrt beendet — %d Beanstandung(en): nicht bestanden!" % _exam_errs, 2)
 	for c in cams:
 		if is_instance_valid(c) and c.check(p2, spd * 3.6):
 			_say("Geblitzt! %d km/h statt %d — das gibt Post." % [int(spd * 3.6), c.limit], 2)
@@ -780,21 +806,23 @@ func toggle_exam() -> void:
 
 
 func _check_pedestrian(p2: Vector2, spd: float) -> void:
-	if pedestrian == null:
-		return
-	var ped_p := Vector2(pedestrian.global_position.x, pedestrian.global_position.z)
-	var d := p2.distance_to(ped_p)
-	if pedestrian.on_road():
-		if d < 12.0 and spd * 3.6 < 5.0:
-			_ped_waiting = true        ## Schueler steht und laesst passieren
-		if d < 3.5 and spd > 0.8:
-			_warn("Fussgaenger auf dem Zebrastreifen — anhalten, Vorrang!")
-		if d < 1.4 and spd > 1.0:
-			_say("Unfall! Person am Zebrastreifen angefahren — immer gucken.", 2)
-	else:
-		if _ped_waiting and d < 16.0:
-			_ped_waiting = false
-			_done("ped", "Fussgaenger passieren lassen — vorbildlich.")
+	for pedestrian in pedestrians:
+		if not is_instance_valid(pedestrian):
+			continue
+		var ped_p := Vector2(pedestrian.global_position.x, pedestrian.global_position.z)
+		var d := p2.distance_to(ped_p)
+		var pid: int = pedestrian.get_instance_id()
+		if pedestrian.on_road():
+			if d < 12.0 and spd * 3.6 < 5.0:
+				_ped_waiting[pid] = true   ## Schueler steht und laesst passieren
+			if d < 3.5 and spd > 0.8:
+				_warn("Fussgaenger auf dem Zebrastreifen — anhalten, Vorrang!")
+			if d < 1.4 and spd > 1.0:
+				_warn("Unfall! Person am Zebrastreifen angefahren — immer gucken.")
+		else:
+			if bool(_ped_waiting.get(pid, false)) and d < 16.0:
+				_ped_waiting[pid] = false
+				_done("ped", "Fussgaenger passieren lassen — vorbildlich.")
 
 
 var _brake_entry: float = -1.0

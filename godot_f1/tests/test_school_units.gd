@@ -189,6 +189,39 @@ func _test_layout() -> void:
 		var travel := Vector3(best["enter"].x, 0.0, best["enter"].y)
 		_check(face.dot(-travel) > 0.5, "sign_faces_traffic",
 			"kind=%s pos=%s rot=%s" % [sg["kind"], sp, sg["rot_y"]])
+	# Haltelinien stehen quer zur Fahrtrichtung ihres Arms: Strasse
+	# entlang x (enter.x != 0) braucht rot=90, Strasse entlang z rot=0.
+	for stop in Layout.stop_lines():
+		var sp2: Vector2 = stop["pos"]
+		var sarm: Dictionary = {}
+		var sd := 3.0
+		for arm in arms:
+			var d := sp2.distance_to(arm["pos"])
+			if d < sd:
+				sd = d
+				sarm = arm
+		if sarm.is_empty():
+			continue
+		var want_rot := 90.0 if absf(sarm["enter"].x) > 0.5 else 0.0
+		_check(float(stop["rot"]) == want_rot, "stop_line_crosswise",
+			"pos=%s rot=%s want=%s" % [sp2, stop["rot"], want_rot])
+	# Radfahrer bleibt auf der Fahrbahn (z in [-63.5,-56.5]) und faehrt
+	# Rechtsverkehr: ostwaerts auf der suedlichen (z>-60) Spurhaelfte.
+	for p3 in Layout.cyclist():
+		if absf(p3.x) < 165.0:
+			_check(p3.y > -63.5 and p3.y < -56.5, "cyclist_on_road", "p=%s" % p3)
+	var cyc := Layout.cyclist()
+	_check(cyc[1].x > cyc[0].x and cyc[0].y > -60.0, "cyclist_eastbound_right_side")
+	_check(cyc[4].x < cyc[3].x and cyc[3].y < -60.0, "cyclist_westbound_right_side")
+	# Zufahrt: eigener wartepflichtiger Arm + zwei freie Hauptstrassen-Arme
+	# (ohne die ist die Vorfahrt-Auswertung tot).
+	var zuf: Dictionary = Layout.junctions()["zufahrt"]
+	var z_yield := 0
+	for arm in zuf["arms"]:
+		if bool(arm.get("yield", false)):
+			z_yield += 1
+	_check(zuf["arms"].size() >= 3 and z_yield == 1, "zufahrt_arms_complete",
+		"arms=%d yield=%d" % [zuf["arms"].size(), z_yield])
 
 
 func _test_traffic() -> void:
@@ -226,8 +259,7 @@ func _test_pedestrian() -> void:
 	var ped := Pedestrian.new()
 	root.add_child(ped)
 	ped.global_position = Vector3(-40.0, 0.0, -53.5)   ## Bordstein
-	ped._walking = true
-	ped._target_z = -66.5
+	ped._walking = true   ## Richtung: Standard-Querung -> _to (-66.5)
 	var saw_on_road := false
 	for i in range(55):
 		ped._physics_process(0.2)
@@ -238,11 +270,11 @@ func _test_pedestrian() -> void:
 		"z=%.2f" % ped.global_position.z)
 
 	var inst := Instructor.new()
-	inst.pedestrian = ped
+	inst.pedestrians = [ped]
 	# Schueler wartet vor dem Zebrastreifen, Fussgaenger mittendrin.
 	ped.global_position = Vector3(-40.0, 0.0, -60.0)
 	inst._check_pedestrian(Vector2(-46.0, -60.0), 0.0)
-	_check(inst._ped_waiting, "ped_waiting_registered")
+	_check(bool(inst._ped_waiting.get(ped.get_instance_id(), false)), "ped_waiting_registered")
 	# Fussgaenger verlaesst die Fahrbahn -> Aufgabe erledigt.
 	ped.global_position = Vector3(-40.0, 0.0, -66.5)
 	inst._check_pedestrian(Vector2(-46.0, -60.0), 0.0)

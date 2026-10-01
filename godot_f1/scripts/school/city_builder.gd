@@ -224,17 +224,21 @@ func _markings(world: Node3D) -> void:
 		m.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(float(s["rot"]))),
 				Vector3(p.x, 0.025, p.y))
 		world.add_child(m)
-	# Zebrastreifen: weiße Querbalken.
+	# Zebrastreifen: weiße Querbalken. `rot` dreht wie bei den Haltelinien
+	# die ganze Querung — die Balken-Abfolge laeuft daher entlang der
+	# gedrehten Achse, nicht immer in x.
 	for z in CityLayout.zebras():
 		var p: Vector2 = z["pos"]
 		var w: float = float(z["w"])
+		var axis := Vector2.RIGHT.rotated(deg_to_rad(float(z["rot"])))
 		for i in range(6):
 			var m := MeshInstance3D.new()
 			var bm := BoxMesh.new()
 			bm.size = Vector3(0.45, 0.014, w)
 			m.mesh = bm
 			m.material_override = _mat(LINE_C)
-			m.position = Vector3(p.x - 1.5 + i * 0.6, 0.026, p.y)
+			var off: Vector2 = axis * (-1.5 + i * 0.6)
+			m.position = Vector3(p.x + off.x, 0.026, p.y + off.y)
 			m.rotation_degrees.y = float(z["rot"])
 			world.add_child(m)
 

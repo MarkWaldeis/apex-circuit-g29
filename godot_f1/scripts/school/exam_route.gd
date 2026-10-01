@@ -116,7 +116,10 @@ func update(p2: Vector2) -> Array:
 	elif not _said and d < SAY_DIST:
 		_said = true
 		out.append({"ev": "say", "text": wps[idx]["text"]})
-	elif not _offtrack_warned and d > OFFTRACK_DIST and _said:
+	elif not _offtrack_warned and ((d > OFFTRACK_DIST and _said) or d > OFFTRACK_DIST * 1.7):
+		# 75 m ab Ansage -> Kurskorrektur; >~128 m ist das Abkommen so gross,
+		# dass es auch ohne Ansage gemeldet wird (wer die Route voellig
+		# verlaesst, darf nicht ohne Hinweis weiterfahren).
 		_offtrack_warned = true
 		out.append({"ev": "offtrack"})
 	return out

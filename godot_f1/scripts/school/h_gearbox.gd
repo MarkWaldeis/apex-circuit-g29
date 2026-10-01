@@ -154,17 +154,19 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	# gas_rpm: was der Motor ohne Last aus dem Gas macht. lock: wie fest die
 	# Kupplung die Drehzahl an die Räder bindet (erst über der Hälfte des
 	# Schleifpunkts — darunter schlüpft sie und der Motor läuft frei).
+	# geared_rpm auch für die Abwürg-Erkennung weiter unten.
 	var geared_rpm: float = rpm_for(gear, speed)
-	var gas_rpm: float = IDLE_RPM + throttle * (REDLINE - IDLE_RPM) * 0.85
-	if auto:
-		# Wandler: das Motordrehzahl folgt Gas + etwas Radkupplung.
-		rpm = lerpf(rpm, gas_rpm * 0.8 + geared_rpm * 0.45, clampf(delta * 6.0, 0.0, 1.0))
-	elif engage < 0.5 or gear == 0:
-		rpm = lerpf(rpm, gas_rpm, clampf(delta * 7.0, 0.0, 1.0))
-	else:
-		var lock := clampf((engage - 0.5) / 0.45, 0.0, 1.0)
-		rpm = lerpf(rpm, lerpf(gas_rpm, maxf(geared_rpm, 0.0), lock), clampf(delta * 12.0, 0.0, 1.0))
-	rpm = clampf(rpm, 0.0, REDLINE + 300.0)
+	if motor_on:
+		var gas_rpm: float = IDLE_RPM + throttle * (REDLINE - IDLE_RPM) * 0.85
+		if auto:
+			# Wandler: das Motordrehzahl folgt Gas + etwas Radkupplung.
+			rpm = lerpf(rpm, gas_rpm * 0.8 + geared_rpm * 0.45, clampf(delta * 6.0, 0.0, 1.0))
+		elif engage < 0.5 or gear == 0:
+			rpm = lerpf(rpm, gas_rpm, clampf(delta * 7.0, 0.0, 1.0))
+		else:
+			var lock := clampf((engage - 0.5) / 0.45, 0.0, 1.0)
+			rpm = lerpf(rpm, lerpf(gas_rpm, maxf(geared_rpm, 0.0), lock), clampf(delta * 12.0, 0.0, 1.0))
+		rpm = clampf(rpm, 0.0, REDLINE + 300.0)
 
 	# ---- Abwürgen -----------------------------------------------------------
 	if motor_on and not stalled and not auto:
