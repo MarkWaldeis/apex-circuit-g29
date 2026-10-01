@@ -56,7 +56,8 @@ var speed_ms: float = 0.0
 var _i: int = 0                  ## Index des aktuellen Ziel-Wegpunkts
 var _stop_left: float = 0.0      ## verbleibende Haltezeit am Stoppschild
 var _stop_done: bool = false     ## Stoppschild diese Runde schon bedient
-var pedestrians: Array = []      ## Fussgaenger, vor denen man anhaelt
+var pedestrians: Array = []    ## Fussgaenger, vor denen man anhaelt
+var _brake_lamps: Array = []   ## Rueckleuchten-Meshs (gemeinsames Material)
 var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
 
@@ -98,6 +99,10 @@ func _physics_process(delta: float) -> void:
 
 	var accel := ACCEL if v > speed_ms else ACCEL * 2.2
 	speed_ms = move_toward(speed_ms, v, accel * delta)
+	# Bremslichter: an, sobald die KI bremst oder (fuer Regeln) steht.
+	if not _brake_lamps.is_empty():
+		var on := v < speed_ms + 0.01 or speed_ms < 0.05
+		_brake_lamps[0].material_override.emission_energy_multiplier = 3.0 if on else 0.05
 	pos += dir * speed_ms * delta
 	# Eine einzige Transform-Zuweisung: global_position lesen liefert im
 	# selben Physik-Tick noch den alten Wert und wuerde den Schritt ruecksetzen.
@@ -268,3 +273,19 @@ func _build_mesh() -> void:
 		w.rotation.z = PI / 2.0
 		w.position = hub
 		add_child(w)
+
+	# Bremslichter: Front zeigt +z, also sitzen die Leuchten hinten (-z).
+	var lamp_mat := StandardMaterial3D.new()
+	lamp_mat.albedo_color = Color(0.30, 0.03, 0.03)
+	lamp_mat.emission_enabled = true
+	lamp_mat.emission = Color(1.0, 0.05, 0.03)
+	lamp_mat.emission_energy_multiplier = 0.05
+	for lx in [-0.62, 0.62]:
+		var lamp := MeshInstance3D.new()
+		var lm := BoxMesh.new()
+		lm.size = Vector3(0.42, 0.16, 0.06)
+		lamp.mesh = lm
+		lamp.material_override = lamp_mat
+		lamp.position = Vector3(lx, 0.68, -2.12)
+		add_child(lamp)
+		_brake_lamps.append(lamp)
