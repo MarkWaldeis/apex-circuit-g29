@@ -140,6 +140,8 @@ func _ready() -> void:
 	rescue.setup(player)
 
 	instructor = SchoolInstructor.new()
+	# Der Schulbus geht an den Fahrlehrer: §20-Schritttempo-Check.
+	instructor.school_bus = built.get("school_bus")
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrians = peds
 	instructor.rail = rail

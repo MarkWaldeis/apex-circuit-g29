@@ -52,6 +52,7 @@ var ball                     ## street_ball.gd-Instanz (kann null sein)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
+var school_bus               ## school_bus.gd-Instanz (§20-Halt am Bus)
 var _ped_waiting := {}         ## Fussgaenger-id -> Schueler laesst passieren
 var _ww_t: float = 0.0         ## Zeit gegen die Einbahnrichtung (Rate-Limit)
 var _speed_over: float = 0.0
@@ -195,6 +196,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_cyclist(p2, spd, delta)
 	_check_following(p2, spd, delta)
 	_check_engstelle_vorrang(p2, delta)
+	_check_schulbus(p2, spd)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -642,6 +644,25 @@ func _check_left_turn_oncoming(j: Dictionary, arm: Dictionary) -> void:
 
 var _follow_t := 0.0
 var _engstelle_cd := 0.0
+var _bus_passed := false
+
+
+## §20 StVO: an einem haltenden Bus mit Warnblinklicht darf nur
+## Schrittgeschwindigkeit gefahren werden — hier in beiden Richtungen,
+## weil die Schulstrasse eng ist. Zu schnell vorbei -> Verwarnung.
+func _check_schulbus(p2: Vector2, spd: float) -> void:
+	if school_bus == null or not is_instance_valid(school_bus):
+		return
+	var bp := Vector2(school_bus.global_position.x, school_bus.global_position.z)
+	var near := p2.distance_to(bp) < 13.0
+	if not near:
+		_bus_passed = false
+		return
+	if bool(school_bus.get("hazards_on")) and spd > 2.8:
+		_warn("Haltender Schulbus mit Warnblinker — nur Schritttempo vorbeifahren!")
+	elif bool(school_bus.get("hazards_on")) and spd <= 2.8 and not _bus_passed:
+		_bus_passed = true
+		_say("Schulbus mit Warnblinker passiert — Schritttempo, richtig so.", 0)
 
 
 ## Engstelle Kreis-Nordstrasse: die parkenden Autos stehen auf der

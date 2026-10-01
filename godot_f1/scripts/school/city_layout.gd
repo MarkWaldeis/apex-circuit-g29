@@ -375,6 +375,12 @@ static func street_ball() -> Dictionary:
 	}
 
 
+## Schulbus an der Schulstraße: haelt am Bordstein und blinkt —
+## §20 StVO: an einem haltenden Bus nur Schrittgeschwindigkeit.
+static func school_bus() -> Dictionary:
+	return {"pos": Vector2(40.0, -177.6), "rot": 0.0}
+
+
 ## Radfahrer-Rundkurs: rechte Fahrbahnseite der Hauptstraße (ostwärts
 ## z=-57,2 — rechter Rand seiner Spur — westwärts z=-62,8), Wenden über
 ## die Fahrbahn an den Enden.
