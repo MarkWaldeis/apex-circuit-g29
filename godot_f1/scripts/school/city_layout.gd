@@ -16,7 +16,7 @@ const EYE := 0.0   ## Straßenhöhe
 static func roads() -> Array:
 	return [
 		{"name": "Hauptstraße", "from": Vector2(-196, -60), "to": Vector2(172, -60), "limit": 50, "width": 7.0, "oneway": 0, "line": true},
-		{"name": "Hauptstraße Ost", "from": Vector2(212, -60), "to": Vector2(196, -60), "limit": 50, "width": 7.0, "oneway": 0, "line": true},
+
 		{"name": "Schulstraße", "from": Vector2(-140, -180), "to": Vector2(140, -180), "limit": 30, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Einbahnstraße", "from": Vector2(100, -120), "to": Vector2(-100, -120), "limit": 30, "width": 5.5, "oneway": 1, "line": false},
 		{"name": "Weststraße", "from": Vector2(-100, -240), "to": Vector2(-100, 128), "limit": 50, "width": 6.5, "oneway": 0, "line": true},
@@ -25,12 +25,13 @@ static func roads() -> Array:
 		{"name": "Ring Nord", "from": Vector2(-100, -240), "to": Vector2(-240, -240), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring West", "from": Vector2(-240, -240), "to": Vector2(-240, 140), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Ring Süd", "from": Vector2(-240, 140), "to": Vector2(240, 140), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
-		{"name": "Ring Ost", "from": Vector2(240, 140), "to": Vector2(240, -40), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
-		{"name": "Ring Ost", "from": Vector2(240, -40), "to": Vector2(216, -20), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
+		{"name": "Ring Ost", "from": Vector2(240, 140), "to": Vector2(240, -60), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
+		{"name": "Ring Ost", "from": Vector2(240, -60), "to": Vector2(216, -20), "limit": 100, "width": 6.0, "oneway": 0, "line": true},
 		# Zufahrt zum Übungsplatz von der Hauptstraße.
 		{"name": "Übungsplatz-Zufahrt", "from": Vector2(0, -60), "to": Vector2(0, 40), "limit": 30, "width": 6.0, "oneway": 0, "line": false},
 		# Kreisverkehr-Arme (Einfahrt in den Kreis bei (200,-60)).
-		{"name": "Kreisverkehr Westarm", "from": Vector2(186, -60), "to": Vector2(212, -60), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
+		{"name": "Kreisverkehr Westarm", "from": Vector2(172, -60), "to": Vector2(184, -60), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
+		{"name": "Kreisverkehr Ostarm", "from": Vector2(216, -60), "to": Vector2(240, -60), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
 		{"name": "Kreisverkehr Nordarm", "from": Vector2(200, -86), "to": Vector2(200, -74), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
 		{"name": "Kreisverkehr Südarm", "from": Vector2(200, -46), "to": Vector2(200, -34), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
 		{"name": "Kreisverkehr Nordstraße", "from": Vector2(200, -140), "to": Vector2(200, -86), "limit": 50, "width": 6.0, "oneway": 0, "line": true},
@@ -86,6 +87,7 @@ static func junctions() -> Dictionary:
 			"island_r": 7.0,
 			"arms": [
 				{"pos": Vector2(184.5, -60), "enter": Vector2(1, 0)},
+				{"pos": Vector2(215.5, -60), "enter": Vector2(-1, 0)},
 				{"pos": Vector2(200, -88.5), "enter": Vector2(0, 1)},
 				{"pos": Vector2(200, -31.5), "enter": Vector2(0, -1)},
 			],
@@ -129,6 +131,7 @@ static func signs() -> Array:
 		{"kind": "roundabout", "pos": Vector3(184.0, 0, -56.0), "rot_y": 90.0},
 		{"kind": "roundabout", "pos": Vector3(196.0, 0, -88.0), "rot_y": 0.0},
 		{"kind": "roundabout", "pos": Vector3(196.0, 0, -32.0), "rot_y": 180.0},
+		{"kind": "roundabout", "pos": Vector3(216.0, 0, -56.0), "rot_y": 270.0},
 		# Zebrastreifen Hauptstraße bei x = -40.
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 180.0},
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 0.0},
@@ -219,7 +222,7 @@ static func lot() -> Dictionary:
 		# Bremsbahn: Anfahrt aus dem Westen, Marker alle 10 m.
 		"brake_lane": {"from": Vector2(-45, 46), "to": Vector2(60, 46), "marks": [30, 40, 50]},
 		# Hügel für Berganfahren: Rampe im Nordwesten.
-		"hill": {"pos": Vector2(-66, 66), "rot": 90.0, "run": 14.0, "rise": 2.2, "w": 7.0},
+		"hill": {"pos": Vector2(-66, 66), "rot": 90.0, "run": 14.0, "rise": 2.2, "w": 7.0, "down": 8.0},
 		# Kreis zum Üben von Wendefahrten (markierter Kreis).
 		"circle": {"pos": Vector2(30, 88), "r": 11.0},
 	}

@@ -381,7 +381,11 @@ func _physics_process(delta: float) -> void:
 	stalled = now_stalled
 	motor_on = bool(gb["motor_on"])
 	if stalled:
-		gearbox.start_motor(clutch_pedal)
+		# Tastatur hat kein Kupplungspedal: Anlasser dreht von allein.
+		var crank_clutch: float = clutch_pedal
+		if g29 == null or not g29.connected:
+			crank_clutch = 1.0
+		gearbox.start_motor(crank_clutch)
 	if absf(float(gb.get("judder", 0.0))) > 0.1:
 		apply_central_impulse(global_transform.basis.z * float(gb["judder"]) * mass * 0.001 * 60.0 * delta)
 	# Kupplung schleifen lassen = Hitze (Fahrlehrerhinweis, kein Schaden).

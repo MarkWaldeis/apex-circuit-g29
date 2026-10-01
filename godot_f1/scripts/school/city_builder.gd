@@ -98,23 +98,38 @@ func _road_segment(body: StaticBody3D, world: Node3D, a: Vector2, b: Vector2, wi
 	vis.material_override = _mat(ASPHALT_C)
 	vis.transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(mid.x, 0.001, mid.y))
 	world.add_child(vis)
-	# Bordsteine an beiden Rändern (erhöht, hell — Kerb-Zone in den Surfaces).
+	# Bordsteine an beiden Rändern — unterbrochen an Kreuzungen/Einfahrten,
+	# sonst fährt man beim Abbiegen über die Kanten.
+	var gaps := _kerb_gaps(a, dir.normalized(), length)
 	for side in [-1.0, 1.0]:
 		var off := Vector2(dir.y, -dir.x).normalized() * (width * 0.5 + 0.55)
-		var k := MeshInstance3D.new()
-		var kb := BoxMesh.new()
-		kb.size = Vector3(1.1, KERB_H * 2.0, length + 1.5)
-		k.mesh = kb
-		k.material_override = _mat(KERB_C, 0.95)
-		k.transform = Transform3D(Basis(Vector3.UP, yaw),
-				Vector3(mid.x + off.x, KERB_H * 0.5, mid.y + off.y))
-		world.add_child(k)
-		var kcol := CollisionShape3D.new()
-		var kbox := BoxShape3D.new()
-		kbox.size = Vector3(1.1, KERB_H * 2.0, length + 1.5)
-		kcol.shape = kbox
-		kcol.transform = k.transform
-		body.add_child(kcol)
+		var t0 := 0.0
+		var runs: Array = []
+		for g in gaps:
+			if g.x > t0:
+				runs.append(Vector2(t0, minf(g.x, length)))
+			t0 = maxf(t0, g.y)
+		if t0 < length:
+			runs.append(Vector2(t0, length))
+		for r in runs:
+			var rl: float = r.y - r.x
+			if rl < 1.2:
+				continue
+			var rm: Vector2 = a + dir.normalized() * (r.x + rl * 0.5)
+			var k := MeshInstance3D.new()
+			var kb := BoxMesh.new()
+			kb.size = Vector3(1.1, KERB_H * 2.0, rl)
+			k.mesh = kb
+			k.material_override = _mat(KERB_C, 0.95)
+			k.transform = Transform3D(Basis(Vector3.UP, yaw),
+					Vector3(rm.x + off.x, KERB_H * 0.5, rm.y + off.y))
+			world.add_child(k)
+			var kcol := CollisionShape3D.new()
+			var kbox := BoxShape3D.new()
+			kbox.size = Vector3(1.1, KERB_H * 2.0, rl)
+			kcol.shape = kbox
+			kcol.transform = k.transform
+			body.add_child(kcol)
 	# Mittellinie: gestrichelt, nur wo markiert.
 	if line:
 		var dash := 3.0
@@ -130,6 +145,40 @@ func _road_segment(body: StaticBody3D, world: Node3D, a: Vector2, b: Vector2, wi
 			lm.material_override = _mat(LINE_C)
 			lm.transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(p.x, 0.02, p.y))
 			world.add_child(lm)
+
+
+## Schnitt-Intervalle (Parameter t entlang des Segments) sammeln, in denen
+## Bordsteine pausieren muessen: jede Kreuzung (Radius je Typ) und jede
+## andere Strasse, deren Korridor dieses Segment schneidet.
+func _kerb_gaps(a: Vector2, dir: Vector2, length: float) -> Array:
+	var gaps: Array = []
+	for road in CityLayout.roads():
+		var rd: Vector2 = road["to"] - road["from"]
+		var rlen := rd.length()
+		var den: float = dir.x * rd.y - dir.y * rd.x
+		if rlen < 0.5 or absf(den) < 0.01:
+			continue
+		var rel: Vector2 = road["from"] - a
+		var t: float = (rel.x * rd.y - rel.y * rd.x) / den
+		var s: float = (rel.x * dir.y - rel.y * dir.x) / den
+		# Schnittpunkt muss auf beiden Segmenten liegen (Enden mitdulden).
+		if t < -3.0 or t > length + 3.0 or s < -3.0 or s > rlen + 3.0:
+			continue
+		var g: float = (float(road["width"]) * 0.5 + 1.8) / absf(den)
+		gaps.append(Vector2(t - g, t + g))
+	for j in CityLayout.junctions().values():
+		var c: Vector2 = j["center"]
+		var tproj: float = clampf((c - a).dot(dir), 0.0, length)
+		var nearest: Vector2 = a + dir * tproj
+		var r := 11.0
+		match String(j["kind"]):
+			"light": r = 14.0
+			"stop": r = 12.0
+			"roundabout": r = 18.0
+		if nearest.distance_to(c) < r:
+			gaps.append(Vector2(tproj - r, tproj + r))
+	gaps.sort_custom(func(p, q): return p.x < q.x)
+	return gaps
 
 
 func _roads(world: Node3D) -> StaticBody3D:
@@ -234,12 +283,12 @@ func _roundabout(world: Node3D) -> void:
 	var torus := TorusMesh.new()
 	torus.inner_radius = float(j["island_r"])
 	torus.outer_radius = 16.0
-	torus.rings = 4
-	torus.ring_segments = 48
+	torus.rings = 48
+	torus.ring_segments = 8
 	ring.mesh = torus
 	ring.material_override = _mat(ASPHALT_C)
+	ring.scale.y = 0.04
 	ring.position = Vector3(c.x, 0.005, c.y)
-	ring.rotation_degrees.x = 90.0
 	world.add_child(ring)
 	var rcol := CollisionShape3D.new()
 	var rbox := BoxShape3D.new()
@@ -252,12 +301,12 @@ func _roundabout(world: Node3D) -> void:
 	var et := TorusMesh.new()
 	et.inner_radius = 15.85
 	et.outer_radius = 16.0
-	et.rings = 3
-	et.ring_segments = 48
+	et.rings = 48
+	et.ring_segments = 6
 	edge.mesh = et
 	edge.material_override = _mat(LINE_C)
+	edge.scale.y = 0.05
 	edge.position = Vector3(c.x, 0.03, c.y)
-	edge.rotation_degrees.x = 90.0
 	world.add_child(edge)
 
 
@@ -415,20 +464,44 @@ func _lot(world: Node3D, out: Dictionary) -> void:
 	hvis.material_override = _mat(ASPHALT_LOT)
 	hvis.transform = Transform3D(Basis(Vector3.RIGHT, -slope), Vector3(hp.x, rise * 0.5 + 0.03, hp.y))
 	world.add_child(hvis)
-	# Plateau hinter der Rampe (damit man oben anhalten kann).
-	var pcol := CollisionShape3D.new()
-	var pbox := BoxShape3D.new()
-	pbox.size = Vector3(hw, 0.3, 6.0)
-	pcol.shape = pbox
-	pcol.position = Vector3(hp.x, rise - 0.15, hp.y - run * 0.5 - 3.0)
-	hill_body.add_child(pcol)
-	var pvis := MeshInstance3D.new()
-	var pbm := BoxMesh.new()
-	pbm.size = Vector3(hw, 0.06, 6.0)
-	pvis.mesh = pbm
-	pvis.material_override = _mat(ASPHALT_LOT)
-	pvis.position = Vector3(hp.x, rise + 0.03, hp.y - run * 0.5 - 3.0)
-	world.add_child(pvis)
+	# Auffuellung unter der Rampe, sonst schwebt die Platte.
+	_wedge(world, Vector2(hp.x, hp.y), hw, rise - 0.1, run, true)
+	# Plateau als massiver Block (oben anhalten, weiter zur Gegenrampe).
+	var mesa_z: float = hp.y - run * 0.5 - 3.0
+	var mcol := CollisionShape3D.new()
+	var mbox := BoxShape3D.new()
+	mbox.size = Vector3(hw, rise, 6.0)
+	mcol.shape = mbox
+	mcol.position = Vector3(hp.x, rise * 0.5, mesa_z)
+	hill_body.add_child(mcol)
+	var mvis := MeshInstance3D.new()
+	var mbm := BoxMesh.new()
+	mbm.size = Vector3(hw, rise, 6.0)
+	mvis.mesh = mbm
+	mvis.material_override = _mat(ASPHALT_LOT)
+	mvis.position = Vector3(hp.x, rise * 0.5 + 0.01, mesa_z)
+	world.add_child(mvis)
+	# Gegenrampe runter — flacher, Platz ist knapp bis zum Zaun.
+	var down: float = float(hill.get("down", 8.0))
+	var dslope := atan2(rise, down)
+	var dlen := sqrt(down * down + rise * rise)
+	var dcol := CollisionShape3D.new()
+	var dbox := BoxShape3D.new()
+	dbox.size = Vector3(hw, 0.3, dlen)
+	dcol.shape = dbox
+	var dmid_z: float = mesa_z - 3.0 - down * 0.5
+	dcol.transform = Transform3D(Basis(Vector3.RIGHT, dslope), Vector3(hp.x, rise * 0.5 - 0.15, dmid_z))
+	hill_body.add_child(dcol)
+	var dvis := MeshInstance3D.new()
+	var dbm := BoxMesh.new()
+	dbm.size = Vector3(hw, 0.06, dlen)
+	dvis.mesh = dbm
+	dvis.material_override = _mat(ASPHALT_LOT)
+	dvis.transform = Transform3D(Basis(Vector3.RIGHT, dslope), Vector3(hp.x, rise * 0.5 + 0.03, dmid_z))
+	world.add_child(dvis)
+	_wedge(world, Vector2(hp.x, dmid_z), hw, rise - 0.1, down, false)
+
+
 	# Wendekreis: gemalter Ring.
 	var circle: Dictionary = lot["circle"]
 	var cp: Vector2 = circle["pos"]
@@ -436,12 +509,12 @@ func _lot(world: Node3D, out: Dictionary) -> void:
 	var torus := TorusMesh.new()
 	torus.inner_radius = float(circle["r"]) - 0.12
 	torus.outer_radius = float(circle["r"])
-	torus.rings = 3
-	torus.ring_segments = 40
+	torus.rings = 40
+	torus.ring_segments = 6
 	ringm.mesh = torus
 	ringm.material_override = _mat(LINE_C)
+	ringm.scale.y = 0.03
 	ringm.position = Vector3(cp.x, 0.02, cp.y)
-	ringm.rotation_degrees.x = 90.0
 	world.add_child(ringm)
 
 
@@ -581,6 +654,44 @@ func _parked_car(world: Node3D, pos: Vector3, rot: float, color: Color) -> Node3
 
 
 # ---------------------------------------------------------------- Umgebung
+
+## Erdkeil unter einer Rampe (x = Breite, z = Laenge, y = Hoehe am einen Ende).
+## top_at_low_z=true: volle Hoehe am kleineren z-Ende (Auffahrtsrampe).
+func _wedge(world: Node3D, c: Vector2, w: float, h: float, length: float, top_at_low_z: bool) -> void:
+	var x0 := -w * 0.5
+	var x1 := w * 0.5
+	var za := -length * 0.5
+	var zb := length * 0.5
+	var zf: float = za if top_at_low_z else zb   ## voll-hohe Kante
+	var v: Array = [
+		Vector3(x0, 0, za), Vector3(x1, 0, za),
+		Vector3(x0, 0, zb), Vector3(x1, 0, zb),
+		Vector3(x0, h, zf), Vector3(x1, h, zf),
+	]
+	var tris: Array = [
+		[v[0], v[3], v[1]], [v[0], v[2], v[3]],       ## Boden
+		[v[0], v[4], v[5]], [v[0], v[5], v[1]],       ## Stirnseite (hohes Ende)
+		[v[2], v[5], v[4]], [v[2], v[3], v[5]],       ## Schraege oben
+		[v[0], v[2], v[4]],                            ## Seite x0
+		[v[1], v[5], v[3]],                            ## Seite x1
+	]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for tri in tris:
+		for vtx in tri:
+			st.add_vertex(vtx)
+	st.generate_normals()
+	var mesh := st.commit()
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.30, 0.26, 0.20)
+	m.roughness = 1.0
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	mi.position = Vector3(c.x, 0.0, c.y)
+	world.add_child(mi)
+
 
 func _buildings(world: Node3D) -> void:
 	# Häuserzeilen an Haupt- und Schulstraße — Kulisse, kein Fahrzeugkontakt.

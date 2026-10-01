@@ -310,7 +310,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	# Berganfahren: auf der Rampe ohne Zurückrollen anfahren.
 	var hill: Dictionary = lot["hill"]
 	var hp: Vector2 = hill["pos"]
-	var hill_rect := Rect2(hp.x - float(hill["w"]) * 0.5 - 1.0, hp.y - float(hill["run"]) - 3.0, float(hill["w"]) + 2.0, float(hill["run"]) + 9.0)
+	var hill_rect := Rect2(hp.x - float(hill["w"]) * 0.5 - 1.0, hp.y - float(hill["run"]) - 9.0, float(hill["w"]) + 2.0, float(hill["run"]) + 15.0)
 	if _in_rect(p2, hill_rect):
 		if not _hill_armed and spd < 0.5:
 			_hill_armed = true

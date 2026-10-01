@@ -320,6 +320,11 @@ func _process(delta: float) -> void:
 	_status.text = status_text
 
 	_stall_warn.visible = bool(car.get("stalled"))
+	if _stall_warn.visible:
+		var g = car.get("g29")
+		var wheel_on: bool = g != null and bool(g.connected)
+		_stall_warn.text = "ABGEWÜRGT — Kupplung treten, dann hält der Motor" \
+			if wheel_on else "ABGEWÜRGT — der Anlasser startet den Motor neu"
 
 	# Fahrlehrer-Text läuft ab.
 	_coach_t -= delta
