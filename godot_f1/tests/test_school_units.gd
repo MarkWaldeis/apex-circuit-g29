@@ -14,6 +14,7 @@ const Layout = preload("res://scripts/school/city_layout.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
 const Instructor = preload("res://scripts/school/school_instructor.gd")
+const ExamRoute = preload("res://scripts/school/exam_route.gd")
 
 var failed: int = 0
 
@@ -37,6 +38,7 @@ func _run() -> void:
 	_test_layout()
 	_test_traffic()
 	_test_pedestrian()
+	_test_exam_route()
 	if failed > 0:
 		print("SCHOOL_UNITS FAIL count=", failed)
 		quit(1)
@@ -207,3 +209,47 @@ func _test_pedestrian() -> void:
 	inst._check_pedestrian(Vector2(-41.0, -60.0), 3.0)
 	_check(coached_msgs.size() > 0, "ped_close_pass_coaches")
 	ped.free()
+
+
+func _test_exam_route() -> void:
+	var ex := ExamRoute.new()
+	ex.begin()
+	_check(ex.active, "exam_active_after_begin")
+	_check(ex.wps.size() >= 8, "exam_route_has_waypoints", "n=%d" % ex.wps.size())
+	# Erste Anweisung gilt beim Start als gesprochen -> fernab keine Events.
+	var evs: Array = ex.update(Vector2(0, 20))
+	_check(evs.is_empty(), "exam_silent_when_far")
+	# Ersten Wegpunkt erreichen -> "next", idx=1.
+	evs = ex.update(Vector2(0, -54.0))
+	var advanced := false
+	for e in evs:
+		if String(e["ev"]) == "next":
+			advanced = true
+	_check(advanced and ex.idx == 1, "exam_advances_on_reach")
+	# In Ansage-Naehe des zweiten Wegpunkts -> "say".
+	evs = ex.update(Vector2(-60.0, -61.8))
+	var said := false
+	for e in evs:
+		if String(e["ev"]) == "say":
+			said = true
+	_check(said, "exam_says_next_instruction")
+	# Vom Kurs ab -> offtrack-Warnung.
+	evs = ex.update(Vector2(100.0, -61.8))
+	var off := false
+	for e in evs:
+		if String(e["ev"]) == "offtrack":
+			off = true
+	_check(off, "exam_warns_offtrack")
+	# Alle Wegpunkte abfahren -> done.
+	var done := false
+	var guard := 0
+	while ex.active and guard < 40:
+		var wp: Vector2 = ex.next_wp()
+		for i in range(3):
+			evs = ex.update(wp)
+			for e in evs:
+				if String(e["ev"]) == "done":
+					done = true
+		guard += 1
+	_check(done, "exam_completes_route")
+	ex.abort()

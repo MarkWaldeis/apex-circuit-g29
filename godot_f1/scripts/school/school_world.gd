@@ -28,6 +28,7 @@ var ffb_settings
 var menu
 var hud
 var instructor
+var _exam_beam: MeshInstance3D
 var surfaces := SchoolSurfaces.new()
 var lights := JunctionLights.new()
 var cam
@@ -79,6 +80,22 @@ func _ready() -> void:
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrian = ped
+	# Ziel-Marker der Pruefungsfahrt: leuchtende Saeule am naechsten Wegpunkt.
+	_exam_beam = MeshInstance3D.new()
+	var bcyl := CylinderMesh.new()
+	bcyl.top_radius = 0.45
+	bcyl.bottom_radius = 0.45
+	bcyl.height = 26.0
+	_exam_beam.mesh = bcyl
+	var bmat := StandardMaterial3D.new()
+	bmat.albedo_color = Color(0.2, 0.9, 1.0, 0.35)
+	bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bmat.emission_enabled = true
+	bmat.emission = Color(0.2, 0.9, 1.0)
+	bmat.emission_energy_multiplier = 1.6
+	_exam_beam.material_override = bmat
+	_exam_beam.visible = false
+	add_child(_exam_beam)
 	if DisplayServer.get_name() == "headless":
 		player.set_meta("headless_gas", true)
 		player.assists["auto_gearbox"] = true
@@ -108,6 +125,7 @@ func _physics_process(delta: float) -> void:
 			light.set_phase(lights.phase_of(String(item["arm"])))
 	if instructor:
 		instructor.update(delta)
+		_update_exam_beam()
 	if player and DisplayServer.get_name() == "headless":
 		var frames: int = Engine.get_physics_frames()
 		if frames in [60, 180, 360, 720, 1440]:
@@ -127,3 +145,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				instructor._say("Nachtfahrt — Abblendlicht an (Taste L).", 0)
 			else:
 				instructor._say("Wieder hell — Licht kann aus bleiben.", 0)
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_P:
+		if instructor:
+			instructor.toggle_exam()
+
+
+func _update_exam_beam() -> void:
+	if instructor == null or _exam_beam == null:
+		return
+	var on: bool = instructor.exam.active
+	_exam_beam.visible = on
+	if on:
+		var wp: Vector2 = instructor.exam.next_wp()
+		_exam_beam.position = Vector3(wp.x, 13.0, wp.y)

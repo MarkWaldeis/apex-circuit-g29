@@ -10,6 +10,7 @@ extends RefCounted
 signal coached(text: String, level: int)
 
 const CityLayout = preload("res://scripts/school/city_layout.gd")
+const ExamRoute = preload("res://scripts/school/exam_route.gd")
 
 ## Übungsliste — die komplette Fahrschul-Grundausbildung.
 const TASKS := [
@@ -26,12 +27,14 @@ const TASKS := [
 	{"id": "light", "name": "Ampelkreuzung bei Grün"},
 	{"id": "zebra", "name": "Zebrastreifen langsam"},
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
+	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
 var car
 var surfaces
 var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrian      ## Fussgaenger am Zebrastreifen (kann null sein)
+var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var _ped_waiting := false
 var _speed_over: float = 0.0
 var _speed_limit: int = -1
@@ -328,6 +331,25 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		if absf(p2.x - zp.x) < 4.0 and absf(p2.y - zp.y) < 4.0 and spd * 3.6 < 30.0 and spd > 0.5:
 			_done("zebra", "Zebrastreifen langsam — Fußgänger zuerst.")
 	_check_pedestrian(p2, spd)
+	if exam.active:
+		for ev in exam.update(p2):
+			match String(ev["ev"]):
+				"say":
+					_say(String(ev["text"]), 0)
+				"offtrack":
+					_warn("Sie sind vom Kurs ab — wenden Sie und folgen Sie der Anweisung.")
+				"done":
+					_done("pruefung", "Prüfungsfahrt absolviert — bestanden!")
+
+
+## Taste P: Pruefungsfahrt starten (erneut = abbrechen).
+func toggle_exam() -> void:
+	if exam.active:
+		exam.abort()
+		_say("Prüfungsfahrt abgebrochen.", 0)
+	else:
+		exam.begin()
+		_say("Prüfungsfahrt! " + String(exam.wps[0]["text"]), 0)
 
 
 func _check_pedestrian(p2: Vector2, spd: float) -> void:
