@@ -353,6 +353,9 @@ func _process(delta: float) -> void:
 	_spot_t -= delta
 	if _spot_t > 0.0:
 		status_text = "Übung: %s" % _spot_shown
+	# Laufende Pruefungsfahrt: Beanstandungszaehler hat Vorrang.
+	if instructor and bool(instructor.exam.get("active")):
+		status_text = "Prüfung: %d Beanstandung(en)" % int(instructor._exam_errs)
 	_status.text = status_text
 
 	_stall_warn.visible = bool(car.get("stalled"))

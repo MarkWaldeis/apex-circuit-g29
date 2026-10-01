@@ -150,6 +150,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_habits(spd, delta)
 	_check_door_zone(p2, spd, delta)
 	_check_cyclist(p2, spd, delta)
+	_check_following(p2, spd, delta)
 	_check_priority(p2, spd, delta)
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
@@ -490,6 +491,36 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			_warn("Abbiegen ohne Blinker — rechtzeitig blinken.")
 		_gyaw0 = yaw_now
 		_gyaw_ok = false
+
+
+var _follow_t := 0.0
+
+
+## Sicherheitsabstand: halber Tacho — klebt der Schueler laenger als ~2 s
+## hinter einem KI-Auto in derselben Spur, gibts einen Hinweis.
+func _check_following(p2: Vector2, spd: float, delta: float) -> void:
+	if traffic.is_empty() or spd < 5.0:
+		_follow_t = 0.0
+		return
+	var s_dir := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	var want: float = spd * 3.6 * 0.5            ## Meter = halbe km/h
+	var too_close := false
+	for tc in traffic:
+		if not is_instance_valid(tc):
+			continue
+		var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
+		var along := rel.dot(s_dir)
+		var side := absf(rel.dot(Vector2(-s_dir.y, s_dir.x)))
+		if along > 1.0 and along < want and side < 2.4:
+			too_close = true
+	if too_close:
+		_follow_t += delta
+		if _follow_t > 2.0:
+			_warn("Zu dicht aufgefahren — halber Tacho: bei %d km/h etwa %d m Abstand." % [int(spd * 3.6), int(spd * 3.6 * 0.5)])
+			_follow_t = -6.0
+	else:
+		_follow_t = minf(_follow_t + delta * 0.5, 0.0)
 
 
 func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: float) -> void:
