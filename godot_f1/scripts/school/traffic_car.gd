@@ -126,6 +126,8 @@ var truck := false           ## Lkw-Mesh + langsames Reisetempo
 var cruise := CRUISE
 var _blink: Array = CORNERS_A
 var _oneshot := false         ## freier Kurs: am Ende verschwindet das Auto
+var night := false            ## Welt setzt es — Scheinwerfer gluehen
+var _head_mat: StandardMaterial3D
 var _horn_player: AudioStreamPlayer3D
 var _horn_gen                ## AudioStreamGeneratorPlayback
 var _horn_left: float = 0.0  ## restliche Horn-Samples
@@ -201,6 +203,36 @@ func _build_truck_mesh() -> void:
 			w.rotation.z = PI / 2.0
 			w.position = Vector3(wx, 0.45, wz)
 			add_child(w)
+
+	# Leuchten am Lkw: Scheinwerfer an der Fahrerhaus-Front (z≈4.15),
+	# Rueckleuchten am Koffer-Heck (z≈-4.25).
+	_head_mat = StandardMaterial3D.new()
+	_head_mat.albedo_color = Color(0.85, 0.85, 0.78)
+	_head_mat.emission_enabled = true
+	_head_mat.emission = Color(1.0, 0.98, 0.82)
+	_head_mat.emission_energy_multiplier = 0.15
+	for hx in [-0.85, 0.85]:
+		var hl := MeshInstance3D.new()
+		var hm := BoxMesh.new()
+		hm.size = Vector3(0.45, 0.20, 0.06)
+		hl.mesh = hm
+		hl.material_override = _head_mat
+		hl.position = Vector3(hx, 0.75, 4.15)
+		add_child(hl)
+	var tlamp := StandardMaterial3D.new()
+	tlamp.albedo_color = Color(0.30, 0.03, 0.03)
+	tlamp.emission_enabled = true
+	tlamp.emission = Color(1.0, 0.05, 0.03)
+	tlamp.emission_energy_multiplier = 0.05
+	for tx in [-0.95, 0.95]:
+		var tl := MeshInstance3D.new()
+		var tm := BoxMesh.new()
+		tm.size = Vector3(0.30, 0.35, 0.06)
+		tl.mesh = tm
+		tl.material_override = tlamp
+		tl.position = Vector3(tx, 0.85, -4.25)
+		add_child(tl)
+		_brake_lamps.append(tl)
 
 
 ## Hupe: zweigestrichener Zweiklang wie beim Schulauto — die KI
@@ -281,6 +313,8 @@ func _physics_process(delta: float) -> void:
 	if not _brake_lamps.is_empty():
 		var on := v < speed_ms - 0.05 or speed_ms < 0.05
 		_brake_lamps[0].material_override.emission_energy_multiplier = 3.0 if on else 0.05
+	if _head_mat:
+		_head_mat.emission_energy_multiplier = 2.6 if night else 0.15
 	pos += dir * speed_ms * delta
 	# Eine einzige Transform-Zuweisung: global_position lesen liefert im
 	# selben Physik-Tick noch den alten Wert und wuerde den Schritt ruecksetzen.
@@ -516,6 +550,22 @@ func _build_mesh() -> void:
 		lamp.position = Vector3(lx, 0.68, -2.12)
 		add_child(lamp)
 		_brake_lamps.append(lamp)
+
+	# Scheinwerfer vorn (+z): bei Nacht gluehen sie weiss — der Schueler
+	# sieht den Gegenverkehr wie im echten Leben aufleuchten.
+	_head_mat = StandardMaterial3D.new()
+	_head_mat.albedo_color = Color(0.85, 0.85, 0.78)
+	_head_mat.emission_enabled = true
+	_head_mat.emission = Color(1.0, 0.98, 0.82)
+	_head_mat.emission_energy_multiplier = 0.15
+	for hx in [-0.62, 0.62]:
+		var hl := MeshInstance3D.new()
+		var hm := BoxMesh.new()
+		hm.size = Vector3(0.40, 0.16, 0.06)
+		hl.mesh = hm
+		hl.material_override = _head_mat
+		hl.position = Vector3(hx, 0.68, 2.12)
+		add_child(hl)
 
 	# Blinker: gelbe Eckleuchten vorn/hinten je Seite. Fahrtrichtung +z,
 	# Fahrer-Links = +x, Fahrer-Rechts = -x.

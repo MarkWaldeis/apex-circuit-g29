@@ -220,6 +220,10 @@ func _physics_process(delta: float) -> void:
 		_rain.global_position = player.global_position + Vector3(0, 18, 0)
 	if instructor:
 		instructor.night = _night
+		# Bei Nacht leuchten die Scheinwerfer des Gegenverkehrs.
+		for t in instructor.traffic:
+			if is_instance_valid(t):
+				t.night = _night
 		instructor.update(delta)
 		_update_exam_beam()
 	if player and DisplayServer.get_name() == "headless":
