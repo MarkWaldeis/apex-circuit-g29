@@ -257,6 +257,24 @@ func _check_signs(p2: Vector2) -> void:
 		return
 
 
+## Theorie wiederholen (Taste F): das naechste Schild in ~10 m wird
+## noch einmal erklaert — egal ob schon gesehen oder nicht.
+func explain_nearest_sign(p2: Vector2) -> void:
+	var best := 1e9
+	var best_kind := ""
+	for s in CityLayout.signs():
+		var sp: Vector3 = s["pos"]
+		var d := Vector2(sp.x - p2.x, sp.z - p2.y).length()
+		if d < best:
+			best = d
+			best_kind = String(s["kind"])
+	if best > 10.0:
+		_say("Kein Schild in der Nähe — näher ranfahren, dann frag ich dich nicht.", 0)
+		return
+	var text := String(SIGN_LESSON.get(best_kind, "Ein Verkehrszeichen — genau hinsehen."))
+	_say("Theorie: " + text, 0)
+
+
 func _check_wrong_way(pos: Vector3, delta: float) -> void:
 	var road: String = surfaces.wrong_way(pos, car.linear_velocity)
 	if road != "":

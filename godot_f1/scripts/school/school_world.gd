@@ -251,6 +251,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.physical_keycode == KEY_G:
 		_toggle_traffic()
 	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_F:
+		if instructor and player:
+			instructor.explain_nearest_sign(
+				Vector2(player.global_position.x, player.global_position.z))
+	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_U:
 		_night = not _night
 		if instructor:
