@@ -274,6 +274,31 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var ball := _disc(0.05, 16, white, 0.02)
 			ball.position = Vector3(0.13, -0.10, 0.03)
 			face.add_child(ball)
+		"spiel_end":
+			## Zeichen 325.2: Ende — wie 325.1, aber ausgegraut mit
+			## vier roten Diagonalbalken.
+			var back := _bar(Vector3(0.62, 0.62, 0.03), grey)
+			face.add_child(back)
+			var rim := _bar(Vector3(0.54, 0.54, 0.02), white)
+			rim.position.z = 0.02
+			face.add_child(rim)
+			var innen := _bar(Vector3(0.48, 0.48, 0.02), grey)
+			innen.position.z = 0.022
+			face.add_child(innen)
+			var kopf := _disc(0.045, 16, white, 0.02)
+			kopf.position = Vector3(-0.12, 0.14, 0.03)
+			face.add_child(kopf)
+			var rumpf := _bar(Vector3(0.09, 0.20, 0.02), white)
+			rumpf.position = Vector3(-0.12, -0.03, 0.03)
+			face.add_child(rumpf)
+			var ball := _disc(0.05, 16, white, 0.02)
+			ball.position = Vector3(0.13, -0.10, 0.03)
+			face.add_child(ball)
+			for i in range(4):
+				var stripe := _bar(Vector3(0.045, 0.72, 0.01), red)
+				stripe.rotation_degrees.z = 45
+				stripe.position = Vector3(-0.135 + i * 0.09, 0.0, 0.04)
+				face.add_child(stripe)
 		"zebra":
 			var back := _bar(Vector3(0.62, 0.62, 0.03), blue)
 			face.add_child(back)

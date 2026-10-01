@@ -22,9 +22,10 @@ const ROUTE_A := [
 	Vector2(101.8, -174.0),   # 7 Oststraße, Richtung Nord -> Kurve zu 0
 ]
 const CORNERS_A := [2, 4, 6, 0]   ## Ziel-Indizes, vor denen abgebremst wird
-## Blinken nicht an Index 0: dort biegt die Vorfahrtstrasse ab (Ost-
-## Sued -> Schul-West, VZ 306) — dem Knick folgt man OHNE Blinker.
-const BLINK_A := [2, 4, 6]
+## An Index 0 biegt die Vorfahrtstrasse ab (Ost-Sued -> Schul-West,
+## VZ 306): dem Knick folgen = Blinker IN die Biegungsrichtung —
+## hier links (Anlage 3 StVO). Geradeaus hinaus wuerde man nicht blinken.
+const BLINK_A := [0, 2, 4, 6]
 
 ## Route B: Kreisverkehr-Schleife — Südarm rein, Ostarm raus, ueber die
 ## Ring-Ost-Diagonale zurueck in die Suedstrasse. Lerneffekt: wer in den

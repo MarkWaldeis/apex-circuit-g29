@@ -120,7 +120,7 @@ static func route_f() -> Array:
 		{"pos": Vector2(-90, -61.8), "text": "Geradeaus über die Ampelkreuzung."},
 		{"pos": Vector2(-98.2, -110.0), "text": "Rechts in die Weststraße abbiegen."},
 		{"pos": Vector2(-98.2, -172.0), "text": "Rechts in die Schulstraße — rechts vor links."},
-		{"pos": Vector2(-60, -178.2), "text": "Verkehrsberuhigter Bereich — Schritttempo!"},
+		{"pos": Vector2(-60, -178.2), "text": "Schulstraße — Tempo 30, Schritttempo erst im Spielbereich."},
 		{"pos": Vector2(60, -178.2), "text": "Der Biegung der Vorfahrtstraße folgen — rechts in die Oststraße, rechts blinken."},
 		{"pos": Vector2(98.2, -160.0), "text": "Der Oststraße nach Süden folgen."},
 		{"pos": Vector2(98.2, -70.0), "text": "Stoppschild an der Hauptstraße — Stillstand, dann rechts abbiegen."},

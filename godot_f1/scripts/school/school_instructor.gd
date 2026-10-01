@@ -659,7 +659,10 @@ func _check_left_turn(p2: Vector2, spd: float, delta: float) -> void:
 			if td < 26.0 and td > 5.0 \
 					and (c - tp).normalized().dot(tdir.normalized()) > 0.6 \
 					and float(tc.get("speed_ms")) > 2.0:
-				_say("Linksabbiegen: der Gegenverkehr hat Vorfahrt — erst warten, dann abbiegen.", 1)
+				# Wer ordentlich wartet (steht/schleicht), bekommt nur den
+				# Hinweis — die Beanstandung gibt es beim echten Abbiegen.
+				var lvl := 1 if spd > 2.5 else 0
+				_say("Linksabbiegen: der Gegenverkehr hat Vorfahrt — erst warten, dann abbiegen.", lvl)
 				_lt_cd = 12.0
 				return
 
@@ -958,7 +961,10 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 	# draussen und der Rechtsblinker kommt zu frueh, wenn man noch im
 	# Kreis faegert.
 	if _in_circle and d_k > 16.5:
-		if _kreis_d <= 16.5 and not bool(car.get("indicator_right")):
+		# Teleport-Wache: sprang der Abstand um mehr als 3 m, wurde das
+		# Auto versetzt — das ist kein Ausfahren, keine Warnung.
+		if _kreis_d <= 16.5 and absf(d_k - _kreis_d) < 3.0 \
+				and not bool(car.get("indicator_right")):
 			_warn("Beim Ausfahren aus dem Kreisverkehr rechts blinken!")
 		_in_circle = false
 	if d_k < 14.0:
@@ -1103,16 +1109,22 @@ func _check_pullout(p2: Vector2, spd: float, delta: float) -> void:
 	if s_dir == Vector2.ZERO:
 		return
 	var side_dir := Vector2(-s_dir.y, s_dir.x)
+	# Kolonne ausschliessen: steht ein KI-Wagen dicht voraus, war der
+	# Stand eine Schlange — dort gilt keine Auspark-Blinkerpflicht.
 	var near := false
+	var queue := false
 	for tc in traffic:
 		if not is_instance_valid(tc):
 			continue
 		var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
 		var along := rel.dot(s_dir)
 		var side := absf(rel.dot(side_dir))
+		if along > 0.0 and along < 8.0 and side < 3.2:
+			queue = true
 		if along > -22.0 and along < -1.0 and side < 3.5:
 			near = true
-			break
+	if queue:
+		return
 	if near:
 		var blinked := bool(car.get("indicator_left"))
 		if blinked:
@@ -1170,6 +1182,10 @@ func _check_following(p2: Vector2, spd: float, delta: float) -> void:
 	for tc in traffic:
 		if not is_instance_valid(tc):
 			continue
+		var tf := Vector2(tc.global_transform.basis.z.x,
+			tc.global_transform.basis.z.z)
+		if tf.dot(s_dir) < 0.5:
+			continue    ## Gegenverkehr/stehende Autos sind kein Vordermann
 		var rel := Vector2(tc.global_position.x, tc.global_position.z) - p2
 		var along := rel.dot(s_dir)
 		var side := absf(rel.dot(Vector2(-s_dir.y, s_dir.x)))
@@ -1189,7 +1205,7 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 	match kind:
 		"light":
 			var phase: String = lights.phase_of(String(arm["arm"])) if lights else "green"
-			if phase == "red":
+			if phase == "red" or phase == "red_amber":
 				_say("Rotlicht! Bei Rot hält man an der Haltelinie — das ist ein Verstoß.", 2)
 			elif phase == "amber":
 				_say("Gelb gefahren — wer noch gefahrlos anhalten kann, hält. Fürs nächste Mal: früher vom Gas.", 1)
@@ -1485,7 +1501,13 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		var across := Vector2.RIGHT.rotated(deg_to_rad(zrot))
 		var along := Vector2(-across.y, across.x)
 		var zrel := p2 - zp
-		if absf(zrel.dot(along)) < 10.0 and absf(zrel.dot(across)) < 4.6 and spd < 0.4:
+		# §26: Halteverbot nur VOR der Querung (5 m) und darauf —
+		# dahinter darf man halten. td = Abstand entlang der eigenen
+		# Fahrtrichtung (negativ = vor der Querung).
+		var sfwd := Vector2(car.global_transform.basis.z.x,
+			car.global_transform.basis.z.z)
+		var td := zrel.dot(along) * signf(sfwd.dot(along))
+		if td > -5.0 and td < 3.0 and absf(zrel.dot(across)) < 4.6 and spd < 0.4:
 			var ped_near := false
 			for pd in pedestrians:
 				if is_instance_valid(pd) \
@@ -1780,8 +1802,9 @@ func _check_fussampel(p2: Vector2, spd: float, delta: float) -> void:
 		_fa_waited = true
 	if absf(dx) < 2.6:
 		# Wer innerhalb der Zone bei Rot STEHT, haelt ja schon — die
-		# Rotlicht-Warnung gilt nur dem, der noch faehrt.
-		if ph == "red" and spd > 0.8 and _fa_cd <= 0.0:
+		# Rotlicht-Warnung gilt nur dem, der noch faehrt. Gelb und
+		# Rot+Gelb sind wie an der Hauptampel ebenfalls Haltepflicht.
+		if ph != "green" and spd > 0.8 and _fa_cd <= 0.0:
 			_warn("Rotlicht an der Fußgängerampel! Bei Rot heißt es halten.")
 			_fa_cd = 10.0
 		elif ph == "green" and _fa_waited:
@@ -2115,13 +2138,25 @@ func _check_free_junction(p2: Vector2, spd: float, delta: float) -> void:
 		_fj_t = 0.0
 		return
 	var in_junction := false
+	var at_stop_line := false
+	var waiting_red := false
 	for j in CityLayout.junctions().values():
 		var c: Vector2 = j["center"]
 		var r: float = 16.0 if String(j["kind"]) == "roundabout" else 11.0
-		if p2.distance_to(c) < r:
-			in_junction = true
+		if p2.distance_to(c) >= r:
+			continue
+		in_junction = true
+		# Wer an einer Arm-Haltelinie wartet, steht legal — Ampel-Rot,
+		# Stoppschild oder Vorfahrt gewaehren sind kein Verstoss.
+		for arm in j["arms"]:
+			if p2.distance_to(Vector2(arm["pos"])) < 2.5:
+				at_stop_line = true
+			if String(j["kind"]) == "light" and lights != null \
+					and String(arm.get("arm", "")) != "" \
+					and String(lights.phase_of(String(arm["arm"]))) != "green":
+				waiting_red = true
 			break
-	if not in_junction:
+	if not in_junction or at_stop_line or waiting_red:
 		_fj_t = 0.0
 		return
 	# Fahrzeug dicht voraus = Stau-Schlange — hinter dem Vordermann

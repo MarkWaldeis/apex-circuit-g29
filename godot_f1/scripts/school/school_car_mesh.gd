@@ -11,7 +11,7 @@ const GLASS := Color(0.10, 0.14, 0.18, 1.0)
 const TYRE := Color(0.05, 0.05, 0.055)
 const RIM := Color(0.62, 0.63, 0.66)
 
-## Naben (x rechts +, z vorne +, y = Radmitte). Schule-Auto: Spur 1.56,
+## Naben (x links +, z vorne +, y = Radmitte). Schule-Auto: Spur 1.56,
 ## Radstand 2.6, Radius 0.32.
 const HUBS := {
 	"FL": Vector3(0.78, 0.32, 1.30), "FR": Vector3(-0.78, 0.32, 1.30),

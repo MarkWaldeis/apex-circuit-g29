@@ -152,6 +152,7 @@ static func junctions() -> Dictionary:
 			"arms": [
 				{"pos": Vector2(100, -114), "enter": Vector2(0, -1)},
 				{"pos": Vector2(100, -126), "enter": Vector2(0, 1)},
+				{"pos": Vector2(94, -120), "enter": Vector2(-1, 0)},
 			],
 		},
 		"einbahn_west": {
@@ -247,7 +248,7 @@ static func signs() -> Array:
 		{"kind": "limit", "arg": "30", "pos": Vector3(-134, 0, -176.0), "rot_y": 270.0},
 		{"kind": "limit", "arg": "30", "pos": Vector3(134, 0, -184.0), "rot_y": 90.0},
 		{"kind": "limit", "arg": "30", "pos": Vector3(96.5, 0, -116.5), "rot_y": 90.0},
-		{"kind": "limit_end", "pos": Vector3(-96.5, 0, -127.5), "rot_y": 270.0},
+		{"kind": "limit_end", "pos": Vector3(-96.5, 0, -112.5), "rot_y": 90.0},
 		{"kind": "limit", "arg": "50", "pos": Vector3(-96.5, 0, -70.0), "rot_y": 0.0},
 		{"kind": "limit", "arg": "50", "pos": Vector3(96.5, 0, -50.0), "rot_y": 180.0},
 		{"kind": "limit", "arg": "100", "pos": Vector3(-96.0, 0, -233.0), "rot_y": 0.0},
@@ -260,6 +261,9 @@ static func signs() -> Array:
 		# Schilder an beiden Enden der Zone.
 		{"kind": "spiel", "pos": Vector3(-176.5, 0, -183.0), "rot_y": 90.0},
 		{"kind": "spiel", "pos": Vector3(-234.0, 0, -175.5), "rot_y": 270.0},
+		# VZ 325.2 am Zonenende: fuer die hinausfahrende Richtung.
+		{"kind": "spiel_end", "pos": Vector3(-181.5, 0, -183.0), "rot_y": 270.0},
+		{"kind": "spiel_end", "pos": Vector3(-236.5, 0, -175.5), "rot_y": 90.0},
 		{"kind": "limit_end", "pos": Vector3(-226.0, 0, -56.0), "rot_y": 270.0},
 		# Vorfahrt gewähren an den vier neuen Ring-Einfahrten.
 		{"kind": "yield", "pos": Vector3(-230.0, 0, -64.0), "rot_y": 90.0},
@@ -466,7 +470,7 @@ static func tankstelle() -> Dictionary:
 
 
 ## Rueckwaerts-Ausparken: Parkbucht am oestlichen Fahrbahnrand der
-## Oststraße (suedlich der Einbahnstraße). Die KI-Route A faehrt dort
+## Oststraße (noerdlich der Einbahnstraße). Die KI-Route A faehrt dort
 ## nordwaerts vorbei — der Schueler lernt, beim Herausfahren aus der
 ## Bucht den fliessenden Verkehr vorbeizulassen.
 static func auspark_zone() -> Rect2:

@@ -132,8 +132,8 @@ func _ready() -> void:
 	var ped3 := Pedestrian.new()
 	ped3.name = "KindSpielstrasse"
 	add_child(ped3)
-	ped3.setup_crossing(Vector2(-152.0, -176.5), Vector2(-152.0, -183.5),
-		Vector2(-152.0, -180.0), 4.0)
+	ped3.setup_crossing(Vector2(-206.0, -176.5), Vector2(-206.0, -183.5),
+		Vector2(-206.0, -180.0), 4.0)
 	# Alle gehen erst los, wenn kein Fahrzeug an der Querung ankommt.
 	var peds := [ped, ped2, ped3]
 	# Die Fussgaengerampel haelt auch KI an, solange die Figur quert.
@@ -730,8 +730,8 @@ func _place_warndreieck() -> void:
 	var fwd := Vector2(player.global_transform.basis.z.x,
 		player.global_transform.basis.z.z).normalized()
 	var spot := p2 - fwd * 50.0
-	# Auf der Fahrbahnkante der Schulstrasse bleiben, nicht daneben.
-	spot.x = clampf(spot.x, zone.position.x + 1.5, zone.end.x - 1.5)
+	# Nur die Querachse auf die Fahrbahn klemmen — die 50 m Rueckstand
+	# in Laengsrichtung bleiben erhalten, egal wo in der Zone man parkt.
 	spot.y = clampf(spot.y, -183.5, -180.5)
 	var tri := _build_warndreieck()
 	tri.position = Vector3(spot.x, 0.0, spot.y)
