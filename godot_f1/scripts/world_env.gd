@@ -94,3 +94,19 @@ static func set_night(parent: Node3D, night: bool) -> void:
 	if parent.is_inside_tree():
 		for lamp in parent.get_tree().get_nodes_in_group("night_lamps"):
 			lamp.visible = night
+
+
+## Nebel: Sichtweite auf unter ~100 m druecken — Uebung fuer angepasstes
+## Fahren bei schlechter Sicht. Unabhaengig von Tag/Nacht.
+static func set_fog(parent: Node3D, fog: bool) -> void:
+	var env_node := parent.get_node_or_null("World") as WorldEnvironment
+	if env_node and env_node.environment:
+		var e := env_node.environment
+		if fog:
+			e.fog_density = 0.012
+			e.fog_light_color = Color(0.55, 0.57, 0.60)
+			e.fog_sky_affect = 0.9
+		else:
+			e.fog_density = 0.0009
+			e.fog_light_color = Color(0.78, 0.80, 0.86)
+			e.fog_sky_affect = 0.35

@@ -31,6 +31,7 @@ const TASKS := [
 	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
 	{"id": "vorfahrt", "name": "Vorfahrt gewährt"},
 	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
+	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
@@ -88,7 +89,9 @@ var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
 var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
 var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
 var night := false            ## wird von school_world gesetzt (Taste U)
+var fog := false              ## wird von school_world gesetzt (Taste I)
 var _night_dist := 0.0        ## gefahrene Meter bei Nacht mit Licht
+var _fog_dist := 0.0          ## gefahrene Meter im Nebel mit Licht
 var _night_cd := 0.0
 var _km_driven := 0.0         ## Gesamtstrecke fuer die Zwischenbilanz (Z)
 var _warn_cnt := 0            ## abgegebene Hinweise/Verwarnungen
@@ -826,6 +829,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_engstelle(p2, spd)
 	_check_panne(p2, spd, delta)
 	_check_nacht(spd, delta)
+	_check_nebel(spd, delta)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -936,6 +940,20 @@ func _check_nacht(spd: float, delta: float) -> void:
 			_done("nacht", "Nachtfahrt mit Abblendlicht — Abstand und Tempo anpassen!")
 	elif spd > 3.0 and _night_cd <= 0.0:
 		_warn("Bei Dunkelheit Abblendlicht an — Taste L.")
+		_night_cd = 8.0
+
+
+func _check_nebel(spd: float, delta: float) -> void:
+	# Nebelfahrt: 150 m bei Sicht unter 100 m mit Abblendlicht.
+	if not fog or _tasks_done.get("nebel", false):
+		_fog_dist = 0.0
+		return
+	if bool(car.get("headlights_on")):
+		_fog_dist += spd * delta
+		if _fog_dist > 150.0:
+			_done("nebel", "Nebelfahrt mit Abblendlicht — Abstand verdoppeln, Blick bleibt nah.")
+	elif spd > 3.0 and _night_cd <= 0.0:
+		_warn("Im Nebel Abblendlicht an — Taste L.")
 		_night_cd = 8.0
 
 

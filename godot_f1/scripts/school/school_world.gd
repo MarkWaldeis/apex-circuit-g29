@@ -37,6 +37,7 @@ var cam
 var _lights_data: Dictionary = {}
 var _spawn := Transform3D.IDENTITY
 var _night := false
+var _fog := false
 var _wet := false
 
 
@@ -191,11 +192,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		if instructor:
 			instructor.night = _night
 		WorldEnv.set_night(self, _night)
+		if _fog:
+			WorldEnv.set_fog(self, true)    ## Nebeldichte zuruecksetzen
 		if instructor:
 			if _night:
 				instructor._say("Nachtfahrt — Abblendlicht an (Taste L).", 0)
 			else:
 				instructor._say("Wieder hell — Licht kann aus bleiben.", 0)
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_I:
+		_fog = not _fog
+		WorldEnv.set_fog(self, _fog)
+		if instructor:
+			instructor.fog = _fog
+			if _fog:
+				instructor._say("Nebel — Sichtweite unter 100 m: Abblendlicht an, Tempo runter, Abstand größer.", 0)
+			else:
+				instructor._say("Nebel hat sich gelichtet.", 0)
+		if not _fog and _night:
+			WorldEnv.set_night(self, true)   ## Nacht-Nebelwerte zurueck
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_M:
 		_wet = not _wet
