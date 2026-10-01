@@ -76,6 +76,9 @@ var _weave_cd: float = 0.0
 var _slalom_from: int = 0     ## korrekt passierte Pylonen von Westen
 var _slalom_to: int = -1      ## ... und von Osten (-1 = noch nicht init)
 var _slalom_armed := {}       ## Pylone -> darf wieder gezaehlt werden
+var _in_circle := false       ## Schueler aktuell auf der Kreisverkehr-Insel
+var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
+var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -159,6 +162,16 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
+	# Warnblinker im fliessenden Verkehr ist kein zulaessiges Blinken.
+	if bool(car.get("hazard")) and spd > 6.0:
+		_haz_t += delta
+		if _haz_t > 2.5:
+			_warn("Warnblinker ausschalten — nur für Pannen und Gefahrensituationen.")
+			_haz_t = -6.0
+	elif not bool(car.get("hazard")):
+		_haz_t = 0.0
+	else:
+		_haz_t = minf(_haz_t + delta * 0.5, 0.0)
 	_coach_idle(spd, delta)
 
 
@@ -451,6 +464,8 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			_jturn[key] = {
 				"yaw0": car.global_transform.basis.get_euler().y,
 				"t0": Time.get_ticks_msec() / 1000.0,
+				"j": j,
+				"arm": arm,
 			}
 		# Wer vor der Linie wirklich steht, merkt es sich (Stopschild-Pflicht):
 		# Schleichen zählt nicht — erst nach ~1 s echtem Stillstand gilt es als Halt.
@@ -477,6 +492,8 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen links blinken.")
 			elif dyaw < -0.45 and not bool(tr.get("r", false)):
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
+			if dyaw > 0.45:
+				_check_left_turn_oncoming(tr["j"], tr["arm"])
 			_jturn.erase(key)
 	# Generelle Blinkerpflicht ohne Haltelinie (Zufahrt, Ring-Anschluss,
 	# Einmuendung): deutliche Gierdrehung im fliessenden Verkehr ohne
@@ -497,6 +514,40 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			_warn("Abbiegen ohne Blinker — rechtzeitig blinken.")
 		_gyaw0 = yaw_now
 		_gyaw_ok = false
+
+	# Kreisverkehr: beim Ausfahren wird rechts geblinkt — Einfahren ohne
+	# Blinker ist sogar Pflicht. Wechsel Insel -> Ausfahrtsarm ohne
+	# Rechtsblinker -> Hinweis. Hysterese gegen Flattern, _kreis_d-Guard
+	# gegen Fehlmeldung nach Teleport/Reset.
+	var k: Dictionary = CityLayout.junctions()["kreis"]
+	var d_k: float = p2.distance_to(k["center"])
+	if _in_circle and d_k > 13.5:
+		if _kreis_d <= 13.5 and not bool(car.get("indicator_right")):
+			_warn("Beim Ausfahren aus dem Kreisverkehr rechts blinken!")
+		_in_circle = false
+	if d_k < 11.5:
+		_in_circle = true
+	_kreis_d = d_k
+
+
+## Linksabbieger muessen Gegenverkehr durchlassen: faehrt beim Abbiegen
+## noch ein KI-Auto auf der Gegenspur zur Kreuzung hin, wird gewarnt.
+func _check_left_turn_oncoming(j: Dictionary, arm: Dictionary) -> void:
+	var opp: Vector2 = -Vector2(arm["enter"])   # Gegenrichtung der Einfahrt
+	var opp3 := Vector3(opp.x, 0.0, opp.y)
+	var center: Vector2 = j["center"]
+	for t in traffic:
+		if not is_instance_valid(t):
+			continue
+		var t_dir := Vector3(t.global_transform.basis.z.x, 0.0,
+			t.global_transform.basis.z.z).normalized()
+		if t_dir.dot(opp3) < 0.7:
+			continue   # faehrt nicht auf der Gegenspur
+		var tp := Vector2(t.global_position.x, t.global_position.z)
+		if tp.distance_to(center) > 45.0 or (center - tp).dot(opp) <= 0.0:
+			continue   # zu weit weg oder schon an der Kreuzung vorbei
+		_warn("Linksabbiegen: Gegenverkehr kommt — durchlassen!")
+		return
 
 
 var _follow_t := 0.0
@@ -695,6 +746,12 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		var zp: Vector2 = z["pos"]
 		if absf(p2.x - zp.x) < 4.0 and absf(p2.y - zp.y) < 4.0 and spd * 3.6 < 30.0 and spd > 0.5:
 			_done("zebra", "Zebrastreifen langsam — Fußgänger zuerst.")
+		# Halten auf/vor dem Zebrastreifen (5 m) ist verboten — ausser ein
+		# Fussgaenger zwingt sowieso zum Anhalten.
+		if absf(p2.x - zp.x) < 10.0 and absf(p2.y - zp.y) < 4.6 and spd < 0.4 \
+				and (pedestrian == null or not is_instance_valid(pedestrian) \
+				or Vector2(pedestrian.global_position.x, pedestrian.global_position.z).distance_to(zp) > 14.0):
+			_warn("Nicht auf dem Zebrastreifen halten — 5 m Abstand einhalten.")
 	_check_pedestrian(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
