@@ -60,6 +60,7 @@ var _hb_t: float = 0.0
 var _idle_rev_t: float = 0.0
 var _rev_t: float = 0.0
 var _coach_cd: float = 0.0
+var _signs_seen := {}
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -125,6 +126,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 
 	_check_speed(spd, p2, delta)
 	_check_junctions(p2, spd)
+	_check_signs(p2)
 	_check_wrong_way(pos, delta)
 	_check_offroad(pos, delta)
 	_check_habits(spd, delta)
@@ -153,6 +155,42 @@ func _check_speed(spd: float, p2: Vector2, delta: float) -> void:
 			_speed_over = -4.0
 	else:
 		_speed_over = maxf(_speed_over - delta, 0.0)
+
+
+# Fahrlehrer erklärt Verkehrszeichen: beim Heranfahren an ein Schild
+# (unter ~30 m) sagt er einmal pro Schildart, was es bedeutet.
+const SIGN_LESSON := {
+	"stop": "Stoppschild — das Fahrzeug muss zum Stillstand kommen, dann vorsichtig weiter.",
+	"yield": "Vorfahrt gewähren — den Querverkehr durchlassen, dann darf man weiter.",
+	"rbl": "Rechts vor links — wer von rechts kommt, fährt zuerst. Langsam reinfahren.",
+	"one_way": "Einbahnstraße — nur in Pfeilrichtung erlaubt.",
+	"no_entry": "Einfahrt verboten — von dieser Seite führt kein Weg rein.",
+	"limit": "Tempolimit — ab hier gilt die Zahl auf dem Schild als Höchsttempo.",
+	"limit_end": "Tempolimit aufgehoben — wieder normale Geschwindigkeit erlaubt.",
+	"roundabout": "Kreisverkehr — wer im Kreis fährt, hat Vorfahrt. Beim Rausfahren blinken.",
+	"zebra": "Zebrastreifen — Fußgänger haben Vorrang, rechtzeitig abbremsen.",
+	"parking": "Parkplatz — hier werden die Einpark-Übungen gemacht.",
+}
+
+func _check_signs(p2: Vector2) -> void:
+	if _coach_cd > 0.0:
+		return
+	var vel := Vector2(car.linear_velocity.x, car.linear_velocity.z)
+	for s in CityLayout.signs():
+		var kind := String(s["kind"])
+		if _signs_seen.get(kind, false):
+			continue
+		var sp: Vector3 = s["pos"]
+		var to := Vector2(sp.x, sp.z) - p2
+		var dist := to.length()
+		if dist > 30.0 or dist < 2.0:
+			continue
+		if vel.length() > 0.5 and to.normalized().dot(vel.normalized()) < 0.35:
+			continue
+		_signs_seen[kind] = true
+		_say(String(SIGN_LESSON.get(kind, "Da vorne ein Verkehrszeichen.")) , 0)
+		_coach_cd = 5.0
+		return
 
 
 func _check_wrong_way(pos: Vector3, delta: float) -> void:
