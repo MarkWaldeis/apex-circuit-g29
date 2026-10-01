@@ -114,6 +114,10 @@ func limit_at(pos: Vector3) -> int:
 	var ba: Dictionary = CityLayout.baustelle()
 	if Rect2(ba["zone"]).has_point(Vector2(pos.x, pos.z)):
 		return int(ba["limit"])
+	# Verkehrsberuhigter Bereich: Schritttempo (ca. 7 km/h).
+	var sp: Dictionary = CityLayout.spiel()
+	if Rect2(sp["rect"]).has_point(Vector2(pos.x, pos.z)):
+		return int(sp["limit"])
 	# Mitten im Kreuzungsbereich gilt kein eigenes Limit — das Limit
 	# der Strasse behalten, von der man kommt (sonst gewinnt eine
 	# zufaellige Straße aus der Liste).

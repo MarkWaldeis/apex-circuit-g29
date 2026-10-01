@@ -230,6 +230,26 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 				var bein := _bar(Vector3(0.025, 0.11, 0.02), black)
 				bein.position = Vector3(lx, -0.115, 0.02)
 				face.add_child(bein)
+		"spiel":
+			## Zeichen 325.1: Verkehrsberuhigter Bereich — blaues
+			## Quadrat, weisser Rahmen, Spielfigur und Ball.
+			var back := _bar(Vector3(0.62, 0.62, 0.03), blue)
+			face.add_child(back)
+			var rim := _bar(Vector3(0.54, 0.54, 0.02), white)
+			rim.position.z = 0.02
+			face.add_child(rim)
+			var innen := _bar(Vector3(0.48, 0.48, 0.02), blue)
+			innen.position.z = 0.022
+			face.add_child(innen)
+			var kopf := _disc(0.045, 16, white, 0.02)
+			kopf.position = Vector3(-0.12, 0.14, 0.03)
+			face.add_child(kopf)
+			var rumpf := _bar(Vector3(0.09, 0.20, 0.02), white)
+			rumpf.position = Vector3(-0.12, -0.03, 0.03)
+			face.add_child(rumpf)
+			var ball := _disc(0.05, 16, white, 0.02)
+			ball.position = Vector3(0.13, -0.10, 0.03)
+			face.add_child(ball)
 		"zebra":
 			var back := _bar(Vector3(0.62, 0.62, 0.03), blue)
 			face.add_child(back)

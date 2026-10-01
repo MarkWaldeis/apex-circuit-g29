@@ -36,6 +36,7 @@ const TASKS := [
 	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
 	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
 	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
+	{"id": "spiel", "name": "Verkehrsberuhigt: Schritttempo"},
 	{"id": "einfaden", "name": "Einfädeln auf die 100er-Straße"},
 	{"id": "einbahn", "name": "Einbahnstraße in Fahrtrichtung"},
 	{"id": "ueberhol", "name": "Lkw auf dem Ring überholt"},
@@ -111,6 +112,8 @@ var _km_driven := 0.0         ## Gesamtstrecke fuer die Zwischenbilanz (Z)
 var _warn_cnt := 0            ## abgegebene Hinweise/Verwarnungen
 var _ba_in := false           ## Schueler aktuell in der Baustellenzone
 var _ba_clean := true         ## Durchfahrt ohne Tempoverstoss
+var _sp_in := false           ## Schueler aktuell in der Spielflaeche
+var _sp_clean := true         ## Durchfahrt mit Schritttempo
 var _slip_t := 0.0            ## Zeit am Schleifpunkt in Kriechfahrt
 var _clutch_ride := 0.0       ## getretene Kupplung bei Fahrt (Sekunden)
 var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
@@ -346,6 +349,7 @@ const SIGN_LESSON := {
 	"priority": "Vorfahrtstraße — auf dieser Straße hat man Vorfahrt, Querstraßen müssen warten.",
 	"zebra": "Zebrastreifen — Fußgänger haben Vorrang, rechtzeitig abbremsen.",
 	"wild": "Wildwechsel — Tiere springen hier unvermittelt auf die Straße; vom Gas, bremsbereit, nicht ausweichen.",
+	"spiel": "Verkehrsberuhigter Bereich — Schritttempo Pflicht, Kinder duerfen die ganze Strasse bespielen.",
 	"parking": "Parkplatz — hier werden die Einpark-Übungen gemacht.",
 }
 
@@ -1251,6 +1255,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_nacht(spd, delta)
 	_check_nebel(spd, delta)
 	_check_baustelle(p2, spd)
+	_check_spiel(p2, spd)
 	_check_schleif(spd, delta)
 	_check_einfadeln(p2, spd)
 	_check_rescue(spd)
@@ -1533,6 +1538,25 @@ func _check_baustelle(p2: Vector2, spd: float) -> void:
 		_ba_in = false
 		if _ba_clean:
 			_done("baustelle", "Baustelle mit Tempo 30 durch — Hand am Rad, Kegel im Blick.")
+
+
+## Verkehrsberuhigter Bereich auf der Schulstrasse West: einmal sauber
+## mit Schritttempo durch — der ganze Strassenraum ist Spielflaeche.
+func _check_spiel(p2: Vector2, spd: float) -> void:
+	var z: Dictionary = CityLayout.spiel()
+	var inz: bool = Rect2(z["rect"]).has_point(p2)
+	if inz and not _sp_in:
+		_sp_in = true
+		_sp_clean = true
+		_say("Verkehrsberuhigter Bereich — Schritttempo, Kinder duerfen überall spielen.", 0)
+	elif inz:
+		if spd * 3.6 > float(z["limit"]) + 5.0:
+			_sp_clean = false
+			_warn("Schritttempo! Hier spielen Kinder — nur kriechen.")
+	elif _sp_in:
+		_sp_in = false
+		if _sp_clean:
+			_done("spiel", "Verkehrsberuhigter Bereich mit Schritttempo — vorsichtig, das ist richtig.")
 
 
 func _check_nebel(spd: float, delta: float) -> void:

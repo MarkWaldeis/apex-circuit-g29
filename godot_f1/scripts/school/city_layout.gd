@@ -247,6 +247,10 @@ static func signs() -> Array:
 		# Schilder ~25 m vorher in beide Richtungen.
 		{"kind": "wild", "pos": Vector3(-236.5, 0, -15.0), "rot_y": 0.0},
 		{"kind": "wild", "pos": Vector3(-243.5, 0, -65.0), "rot_y": 180.0},
+		# Verkehrsberuhigter Bereich (VZ 325.1) Schulstrasse West,
+		# Schilder an beiden Enden der Zone.
+		{"kind": "spiel", "pos": Vector3(-176.5, 0, -183.0), "rot_y": 90.0},
+		{"kind": "spiel", "pos": Vector3(-234.0, 0, -175.5), "rot_y": 270.0},
 		{"kind": "limit_end", "pos": Vector3(-226.0, 0, -56.0), "rot_y": 270.0},
 		# Vorfahrt gewähren an den vier neuen Ring-Einfahrten.
 		{"kind": "yield", "pos": Vector3(-230.0, 0, -64.0), "rot_y": 90.0},
@@ -358,6 +362,12 @@ static func speed_cams() -> Array:
 
 
 ## Übungsplatz: Grundstück, Zaun, Elemente.
+static func spiel() -> Dictionary:
+	## Verkehrsberuhigter Bereich (VZ 325.1) auf der Schulstrasse West:
+	## der ganze Strassenraum ist Spielflaeche, es gilt Schritttempo.
+	return {"rect": Rect2(-238.0, -184.5, 58.0, 9.0), "limit": 7}
+
+
 static func lot() -> Dictionary:
 	return {
 		# Platzfläche (Asphalt) — z Klapp in z-Richtung.
