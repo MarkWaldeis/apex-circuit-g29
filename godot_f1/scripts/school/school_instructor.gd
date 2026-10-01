@@ -197,10 +197,37 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 		var prev: float = float(track["d"])
 		if prev <= 0.0 and d > 0.0 and spd > 1.0:
 			_on_stop_line_crossed(j, arm, key, spd)
-		# Wer vor der Linie anhält, merkt es sich (Stopschild-Pflicht).
-		if d < 0.2 and d > -4.5 and spd < 0.3:
-			_stop_armed[key] = Time.get_ticks_msec() / 1000.0
+			# Blinker-Merker: beim Abbiegen an einer Kreuzung Blinker erwarten.
+			_jturn[key] = {
+				"yaw0": car.global_transform.basis.get_euler().y,
+				"t0": Time.get_ticks_msec() / 1000.0,
+			}
+		# Wer vor der Linie wirklich steht, merkt es sich (Stopschild-Pflicht):
+		# Schleichen zählt nicht — erst nach ~1 s echtem Stillstand gilt es als Halt.
+		var now_s := Time.get_ticks_msec() / 1000.0
+		if d < 0.2 and d > -4.5 and spd < 0.12:
+			if not _stop_still.has(key):
+				_stop_still[key] = now_s
+			if now_s - float(_stop_still[key]) > 0.9:
+				_stop_armed[key] = now_s
+		else:
+			_stop_still.erase(key)
 		track["d"] = d
+	# Blinker-Pflicht auswerten: ~1,5 s nach dem Haltelinien-Schnitt die Drehung messen.
+	var now_j := Time.get_ticks_msec() / 1000.0
+	for key in _jturn.keys():
+		var tr: Dictionary = _jturn[key]
+		if bool(car.get("indicator_left")):
+			tr["l"] = true
+		if bool(car.get("indicator_right")):
+			tr["r"] = true
+		if now_j - float(tr["t0"]) > 1.5:
+			var dyaw := wrapf(car.global_transform.basis.get_euler().y - float(tr["yaw0"]), -PI, PI)
+			if dyaw > 0.45 and not bool(tr.get("l", false)):
+				_warn("Abbiegen ohne Blinker — vor dem Abbiegen links blinken.")
+			elif dyaw < -0.45 and not bool(tr.get("r", false)):
+				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
+			_jturn.erase(key)
 
 
 func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: float) -> void:
@@ -243,11 +270,12 @@ func _check_tasks(p2: Vector2, spd: float, delta: float) -> void:
 	# Hochschalten 1 -> 2 (oder höher) unter Fahrt.
 	if gear >= 2 and forward > 4.0 and not bool(car.get("stalled")):
 		_done("shift", "Sauber geschaltet — Kupplung ganz durch, Gang rein, langsam kommen lassen.")
-	# Rückwärtsfahren: 10 m im Rückwärtsgang.
+	# Rückwärtsfahren: 10 m im Rückwärtsgang (nur reale Rückwärtsbewegung zählt).
 	if gear == -1:
-		_rev_acc += absf(forward) * delta
-		if _rev_acc > 10.0:
-			_done("reverse", "Rückwärtsfahren geübt — Schulterblick nicht vergessen.")
+		if forward < -0.2:
+			_rev_acc += -forward * delta
+			if _rev_acc > 10.0:
+				_done("reverse", "Rückwärtsfahren geübt — Schulterblick nicht vergessen.")
 	else:
 		_rev_acc = maxf(_rev_acc - delta * 2.0, 0.0)
 
@@ -284,11 +312,23 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	var in_lane := _in_rect(p2, lane_rect)
 	if not in_lane:
 		_brake_entry = -1.0
+		_brake_dec = 0.0
+		_brake_peak = 0.0
 	elif _brake_entry < 0.0 and spd * 3.6 > 25.0:
 		_brake_entry = spd
-	elif _brake_entry > 0.0 and spd < 0.2:
-		_brake_entry = -1.0
-		_done("brake", "Gefahrbremsung geschafft — voller Tritt, gerade bleiben, Kupplung treten kurz vor dem Stillstand.")
+		_brake_dec = 0.0
+		_brake_peak = 0.0
+		_brake_prev = spd
+	elif _brake_entry > 0.0:
+		_brake_dec = maxf(_brake_dec, (_brake_prev - spd) / maxf(delta, 0.001))
+		_brake_peak = maxf(_brake_peak, float(car.get("brake_strength")))
+		_brake_prev = spd
+		if spd < 0.2:
+			_brake_entry = -1.0
+			if _brake_dec > 4.0 and _brake_peak > 0.55:
+				_done("brake", "Gefahrbremsung geschafft — voller Tritt, gerade bleiben, Kupplung treten kurz vor dem Stillstand.")
+			else:
+				_say("Zu schwach gebremst — bei der Gefahrbremsung gehört das Pedal ganz durchgetreten.", 1)
 
 	# Längsparken: still in einer Parallelbucht stehen.
 	for bay in lot["parallel_bays"]:
@@ -376,6 +416,11 @@ func _check_pedestrian(p2: Vector2, spd: float) -> void:
 
 var _brake_entry: float = -1.0
 var _brake_at: float = 0.0
+var _brake_dec: float = 0.0
+var _brake_peak: float = 0.0
+var _brake_prev: float = 0.0
+var _stop_still := {}
+var _jturn := {}
 
 
 func _check_roundabout(p2: Vector2, spd: float) -> void:

@@ -71,6 +71,8 @@ static func junctions() -> Dictionary:
 			"arms": [
 				{"pos": Vector2(-95, -176), "enter": Vector2(-0.7, 0.7)},
 				{"pos": Vector2(-104, -184), "enter": Vector2(0.7, -0.7)},
+				{"pos": Vector2(-95, -184), "enter": Vector2(-0.7, -0.7)},
+				{"pos": Vector2(-104, -176), "enter": Vector2(0.7, 0.7)},
 			],
 		},
 		"yield_ost": {

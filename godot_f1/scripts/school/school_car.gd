@@ -54,6 +54,7 @@ var stall_events: int = 0
 var last_spot: String = ""             ## zuletzt angesteuerte Uebungsstation
 var _spot_i: int = -1
 var clutch_heat: float = 0.0              ## Lern-Feedback: zu lange schleifen
+var brake_strength: float = 0.0           ## aktueller Fußbremse-Input 0..1
 
 var _wheels: Array = []                   ## {vis, wheel, front, rear}
 var _wheel_roll: float = 0.0
@@ -395,6 +396,7 @@ func _physics_process(delta: float) -> void:
 		clutch_heat = maxf(clutch_heat - delta, 0.0)
 
 	# Bremsen: Fußbremse auf alle Räder, Handbremse auf die Hinterachse.
+	brake_strength = brake_in
 	var brake_force: float = brake_in * BRAKE_MAX
 	if brake_in > 0.06:
 		engine_force = minf(engine_force, 0.0)
