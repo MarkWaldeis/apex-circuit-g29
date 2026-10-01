@@ -211,6 +211,13 @@ static func signs() -> Array:
 		{"kind": "roundabout", "pos": Vector3(196.0, 0, -88.0), "rot_y": 180.0},
 		{"kind": "roundabout", "pos": Vector3(203.5, 0, -32.0), "rot_y": 0.0},
 		{"kind": "roundabout", "pos": Vector3(216.0, 0, -63.5), "rot_y": 90.0},
+		# Baustelle Ring Sued: Warnschilder + 30er + Ende-Schilder.
+		{"kind": "baustelle", "pos": Vector3(-58.0, 0, 143.4), "rot_y": 270.0},
+		{"kind": "limit", "arg": "30", "pos": Vector3(-42.0, 0, 143.4), "rot_y": 270.0},
+		{"kind": "limit_end", "pos": Vector3(26.0, 0, 143.4), "rot_y": 270.0},
+		{"kind": "baustelle", "pos": Vector3(32.0, 0, 136.6), "rot_y": 90.0},
+		{"kind": "limit", "arg": "30", "pos": Vector3(24.0, 0, 136.6), "rot_y": 90.0},
+		{"kind": "limit_end", "pos": Vector3(-46.0, 0, 136.6), "rot_y": 90.0},
 		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
 		{"kind": "yield", "pos": Vector3(-4.4, 0, -57.0), "rot_y": 0.0},
 		# Zeichen 306 Vorfahrtstraße: die Hauptstraße hat vor der Zufahrt
@@ -331,6 +338,18 @@ static func lot() -> Dictionary:
 ## und kreuzen die Straße bei center.
 static func rail_crossing() -> Dictionary:
 	return {"center": Vector2(240.0, -150.0)}
+
+
+## Baustelle auf der Ring-Sued-Strasse (z=140): suedliche Spur ist
+## x von -40 bis +20 verengt/abgesperrt — Tempo 30, Kegelfuehrung.
+static func baustelle() -> Dictionary:
+	return {
+		"zone": Rect2(Vector2(-40.0, 137.0), Vector2(60.0, 6.0)),
+		"limit": 30,
+		# Kegel stehen auf der Suedspur (z ~ 141.5), Autos muessen auf die
+		# Nordspur — einseitig verengte Fahrbahn.
+		"cones": true,
+	}
 
 
 ## Pannen-Übung: ruhiges Teilstueck am westlichen Fahrbahnrand der

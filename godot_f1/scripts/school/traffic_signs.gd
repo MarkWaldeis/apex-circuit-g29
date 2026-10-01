@@ -249,6 +249,17 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 			var dn := _arrow(true, false, red)
 			dn.position = Vector3(0.12, 0.0, 0.03)
 			face.add_child(dn)
+		"baustelle":
+			## Zeichen 123: Baustelle — Warndreieck mit schwarzem
+			## Arbeiterhaufen (stilisiert als kleine schwarze Zacken).
+			var back := _tri(0.48, red, false)
+			face.add_child(back)
+			var inner := _tri(0.38, yellow, false)
+			inner.position.z = 0.004
+			face.add_child(inner)
+			var heap := _tri(0.13, black, false)
+			heap.position = Vector3(0.0, -0.10, 0.02)
+			face.add_child(heap)
 		"parking":
 			var back := _bar(Vector3(0.55, 0.55, 0.03), blue)
 			face.add_child(back)

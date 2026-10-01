@@ -88,6 +88,10 @@ func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 ## Tempolimit an dieser Stelle: die nächste Straße liefert es. -1 = keins
 ## (Übungsplatz: Schritttempo wird vom Fahrlehrer selbst erwartet).
 func limit_at(pos: Vector3) -> int:
+	# Baustelle hat Vorrang vor dem Strassenlimit (Tempo-30-Zone).
+	var ba: Dictionary = CityLayout.baustelle()
+	if Rect2(ba["zone"]).has_point(Vector2(pos.x, pos.z)):
+		return int(ba["limit"])
 	var best := 999.0
 	var limit := -1
 	for road in _roads:

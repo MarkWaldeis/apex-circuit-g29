@@ -52,6 +52,7 @@ func build(world: Node3D) -> Dictionary:
 	_trees(world)
 	_lamps(world)
 	out["cams"] = _speed_cams(world)
+	_baustelle(world)
 	# Abgestellte Autos am Straßenrand — dazwischen rollt der Ball.
 	for cp in CityLayout.street_ball()["cars"]:
 		_parked_car(world, Vector3(cp.x, 0.0, cp.y), 0.0, Color(0.25, 0.4, 0.65))
@@ -615,6 +616,34 @@ func _speed_cams(world: Node3D) -> Array:
 		cam.setup(spec["watch"], int(spec["limit"]))
 		out.append(cam)
 	return out
+
+
+## Baustelle auf der Ring-Süd-Straße: Kegel führen die Südspur zu,
+## der Verkehr muss über die Nordspur — Tempo-30-Zone liegt auf
+## denselben Koordinaten (city_layout.baustelle()).
+func _baustelle(world: Node3D) -> void:
+	var z: Dictionary = CityLayout.baustelle()
+	var rect: Rect2 = z["zone"]
+	# Hauptreihe entlang der gesperrten Südspur.
+	var x := rect.position.x + 2.0
+	while x <= rect.position.x + rect.size.x - 2.0:
+		_cone(world, Vector3(x, 0.0, 141.5))
+		x += 3.5
+	# Einfädeln von Westen: Kegel ziehen schräg von der Fahrbahnmitte
+	# auf die Sperrlinie zu.
+	var t := 0.0
+	while t <= 1.0:
+		_cone(world, Vector3(
+			lerpf(rect.position.x - 12.0, rect.position.x, t),
+			0.0, lerpf(140.0, 141.5, t)))
+		t += 0.25
+	# Ausfädeln Richtung Osten.
+	t = 0.0
+	while t <= 1.0:
+		_cone(world, Vector3(
+			lerpf(rect.position.x + rect.size.x, rect.position.x + rect.size.x + 10.0, t),
+			0.0, lerpf(141.5, 140.0, t)))
+		t += 0.25
 
 
 func _cone(world: Node3D, pos: Vector3) -> Node3D:

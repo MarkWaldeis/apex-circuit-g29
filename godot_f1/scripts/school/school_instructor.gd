@@ -32,6 +32,7 @@ const TASKS := [
 	{"id": "vorfahrt", "name": "Vorfahrt gewährt"},
 	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
 	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
+	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
@@ -95,6 +96,8 @@ var _fog_dist := 0.0          ## gefahrene Meter im Nebel mit Licht
 var _night_cd := 0.0
 var _km_driven := 0.0         ## Gesamtstrecke fuer die Zwischenbilanz (Z)
 var _warn_cnt := 0            ## abgegebene Hinweise/Verwarnungen
+var _ba_in := false           ## Schueler aktuell in der Baustellenzone
+var _ba_clean := true         ## Durchfahrt ohne Tempoverstoss
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -830,6 +833,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_panne(p2, spd, delta)
 	_check_nacht(spd, delta)
 	_check_nebel(spd, delta)
+	_check_baustelle(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -941,6 +945,23 @@ func _check_nacht(spd: float, delta: float) -> void:
 	elif spd > 3.0 and _night_cd <= 0.0:
 		_warn("Bei Dunkelheit Abblendlicht an — Taste L.")
 		_night_cd = 8.0
+
+
+func _check_baustelle(p2: Vector2, spd: float) -> void:
+	# Baustelle auf der Ring Sued: einmal sauber mit Tempo 30 durch.
+	var z: Dictionary = CityLayout.baustelle()
+	var inz: bool = Rect2(z["zone"]).has_point(p2)
+	if inz and not _ba_in:
+		_ba_in = true
+		_ba_clean = true
+	elif inz:
+		if spd * 3.6 > float(z["limit"]) + 4.0:
+			_ba_clean = false
+			_warn("Baustelle — Tempo %d, Kegel beachten!" % int(z["limit"]))
+	elif _ba_in:
+		_ba_in = false
+		if _ba_clean:
+			_done("baustelle", "Baustelle mit Tempo 30 durch — Hand am Rad, Kegel im Blick.")
 
 
 func _check_nebel(spd: float, delta: float) -> void:
