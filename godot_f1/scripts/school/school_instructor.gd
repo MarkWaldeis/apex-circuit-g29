@@ -233,6 +233,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_schulbus(p2, spd)
 	_check_einbahn(pos, p2)
 	_check_ueberhol(p2, spd)
+	_check_lane_change(pos, spd, delta)
 	_check_pullout(p2, spd)
 	_check_door_car(p2, spd, delta)
 	_check_left_turn(p2, spd, delta)
@@ -335,6 +336,41 @@ func _check_speed(spd: float, p2: Vector2, delta: float) -> void:
 			_speed_over = -4.0
 	else:
 		_speed_over = maxf(_speed_over - delta, 0.0)
+
+
+## Ausscheren zum Ueberholen: wandert das Auto spuerbar nach links
+## (lane_offset faellt), muessen Blinker links UND Schulterblick
+## sitzen — die klassische Reihenfolge Spiegel-Schulterblick-Blinker.
+var _lo_prev: float = 9999.0
+var _lo_drift: float = 0.0
+var _lane_cd: float = 0.0
+
+
+func _check_lane_change(pos: Vector3, spd: float, delta: float) -> void:
+	_lane_cd = maxf(_lane_cd - delta, 0.0)
+	if spd < 5.0 or surfaces == null:
+		_lo_prev = 9999.0
+		return
+	var lo: float = surfaces.lane_offset(pos, car.linear_velocity)
+	if lo >= 9998.0:
+		_lo_prev = 9999.0
+		_lo_drift = 0.0
+		return
+	if _lo_prev < 9998.0:
+		var dlo: float = lo - _lo_prev
+		if dlo < 0.0:
+			_lo_drift += dlo
+		elif _lo_drift < 0.0:
+			_lo_drift = minf(_lo_drift + dlo, 0.0)
+		if _lo_drift < -1.4 and _lane_cd <= 0.0:
+			_lane_cd = 15.0
+			_lo_drift = 0.0
+			var now := Time.get_ticks_msec() / 1000.0
+			if not bool(car.get("indicator_left")):
+				_warn("Vor dem Ausscheren links blinken — der Verkehr muss die Absicht sehen.")
+			elif now - _rear_ok_at > 4.0:
+				_warn("Schulterblick links vor dem Ausscheren — im toten Winkel kann einer fahren.")
+	_lo_prev = lo
 
 
 # Fahrlehrer erklärt Verkehrszeichen: beim Heranfahren an ein Schild
