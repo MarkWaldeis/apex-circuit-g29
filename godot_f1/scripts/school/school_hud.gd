@@ -33,6 +33,9 @@ var _mini_cam: Camera3D
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
+var _license: Label
+var _license_t: float = 0.0
+var _license_shown := false
 var _spot_t: float = 0.0
 var _spot_shown: String = ""
 
@@ -224,6 +227,15 @@ func _build() -> void:
 	_stall_warn.visible = false
 	top.add_child(_stall_warn)
 
+	# Grosses Erfolgs-Banner, wenn die Prüfungsfahrt bestanden ist.
+	_license = Label.new()
+	_license.text = "FÜHRERSCHEIN BESTANDEN — Glückwunsch!"
+	UI.title(_license, 30)
+	_license.add_theme_color_override("font_color", Color(0.35, 0.95, 0.45))
+	_license.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_license.visible = false
+	top.add_child(_license)
+
 	# --- Rechts: Übungsliste --------------------------------------------------
 	var tasks_panel := PanelContainer.new()
 	tasks_panel.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 10))
@@ -364,6 +376,17 @@ func _process(delta: float) -> void:
 		var wheel_on: bool = g != null and bool(g.connected)
 		_stall_warn.text = "ABGEWÜRGT — Kupplung treten, dann hält der Motor" \
 			if wheel_on else "ABGEWÜRGT — der Anlasser startet den Motor neu"
+
+	# Bestandene Pruefungsfahrt -> einmalig das Fuehrerschein-Banner.
+	if not _license_shown and instructor \
+			and bool(instructor._tasks_done.get("pruefung", false)):
+		_license_shown = true
+		_license_t = 14.0
+		_license.visible = true
+	if _license.visible:
+		_license_t -= delta
+		if _license_t <= 0.0:
+			_license.visible = false
 
 	# Fahrlehrer-Text läuft ab.
 	_coach_t -= delta
