@@ -15,9 +15,9 @@ const EYE := 0.0   ## Straßenhöhe
 ## name (für den Fahrlehrer), lanes (Mittellinie ja/nein).
 static func roads() -> Array:
 	return [
-		{"name": "Hauptstraße", "from": Vector2(-196, -60), "to": Vector2(172, -60), "limit": 50, "width": 7.0, "oneway": 0, "line": true},
+		{"name": "Hauptstraße", "from": Vector2(-240, -60), "to": Vector2(172, -60), "limit": 50, "width": 7.0, "oneway": 0, "line": true},
 
-		{"name": "Schulstraße", "from": Vector2(-140, -180), "to": Vector2(140, -180), "limit": 30, "width": 6.0, "oneway": 0, "line": true},
+		{"name": "Schulstraße", "from": Vector2(-240, -180), "to": Vector2(240, -180), "limit": 30, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Einbahnstraße", "from": Vector2(100, -120), "to": Vector2(-100, -120), "limit": 30, "width": 5.5, "oneway": 1, "line": false},
 		{"name": "Weststraße", "from": Vector2(-100, -240), "to": Vector2(-100, 140), "limit": 50, "width": 6.5, "oneway": 0, "line": true},
 		{"name": "Oststraße", "from": Vector2(100, -240), "to": Vector2(100, 140), "limit": 50, "width": 6.5, "oneway": 0, "line": true},
@@ -36,7 +36,7 @@ static func roads() -> Array:
 		{"name": "Kreisverkehr Ostarm", "from": Vector2(216, -60), "to": Vector2(240, -60), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
 		{"name": "Kreisverkehr Nordarm", "from": Vector2(200, -86), "to": Vector2(200, -74), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
 		{"name": "Kreisverkehr Südarm", "from": Vector2(200, -46), "to": Vector2(200, -34), "limit": 30, "width": 5.5, "oneway": 0, "line": false},
-		{"name": "Kreisverkehr Nordstraße", "from": Vector2(200, -140), "to": Vector2(200, -86), "limit": 50, "width": 6.0, "oneway": 0, "line": true},
+		{"name": "Kreisverkehr Nordstraße", "from": Vector2(200, -240), "to": Vector2(200, -86), "limit": 50, "width": 6.0, "oneway": 0, "line": true},
 		{"name": "Kreisverkehr Südstraße", "from": Vector2(200, -34), "to": Vector2(216, -20), "limit": 50, "width": 6.0, "oneway": 0, "line": true},
 	]
 
@@ -98,6 +98,44 @@ static func junctions() -> Dictionary:
 				{"pos": Vector2(106, -180), "enter": Vector2(-1, 0), "yield": true},
 				{"pos": Vector2(100, -174), "enter": Vector2(0, -1)},
 				{"pos": Vector2(100, -186), "enter": Vector2(0, 1)},
+			],
+		},
+		# Vier T-Einfahrten auf den 100er-Ring: die mündende Straße
+		# gewährt Vorfahrt, der Ring fließt durch.
+		"ring_west_haupt": {
+			"kind": "yield",
+			"center": Vector2(-240, -60),
+			"arms": [
+				{"pos": Vector2(-232, -61.8), "enter": Vector2(-1, 0), "yield": true},
+				{"pos": Vector2(-240, -66), "enter": Vector2(0, 1)},
+				{"pos": Vector2(-240, -54), "enter": Vector2(0, -1)},
+			],
+		},
+		"ring_west_schul": {
+			"kind": "yield",
+			"center": Vector2(-240, -180),
+			"arms": [
+				{"pos": Vector2(-232, -181.8), "enter": Vector2(-1, 0), "yield": true},
+				{"pos": Vector2(-240, -186), "enter": Vector2(0, 1)},
+				{"pos": Vector2(-240, -174), "enter": Vector2(0, -1)},
+			],
+		},
+		"ring_ost_schul": {
+			"kind": "yield",
+			"center": Vector2(240, -180),
+			"arms": [
+				{"pos": Vector2(232, -178.2), "enter": Vector2(1, 0), "yield": true},
+				{"pos": Vector2(240, -186), "enter": Vector2(0, 1)},
+				{"pos": Vector2(240, -174), "enter": Vector2(0, -1)},
+			],
+		},
+		"ring_nord_kreis": {
+			"kind": "yield",
+			"center": Vector2(200, -240),
+			"arms": [
+				{"pos": Vector2(201.8, -232), "enter": Vector2(0, -1), "yield": true},
+				{"pos": Vector2(194, -240), "enter": Vector2(1, 0)},
+				{"pos": Vector2(206, -240), "enter": Vector2(-1, 0)},
 			],
 		},
 		# T-Knoten ohne Licht/Schild: Rechts vor links gilt. Sie werden
@@ -205,7 +243,12 @@ static func signs() -> Array:
 		{"kind": "limit", "arg": "50", "pos": Vector3(96.5, 0, -50.0), "rot_y": 180.0},
 		{"kind": "limit", "arg": "100", "pos": Vector3(-96.0, 0, -233.0), "rot_y": 0.0},
 		{"kind": "limit", "arg": "100", "pos": Vector3(-104.5, 0, 132.0), "rot_y": 180.0},
-		{"kind": "limit_end", "pos": Vector3(-196.5, 0, -56.0), "rot_y": 90.0},
+		{"kind": "limit_end", "pos": Vector3(-226.0, 0, -56.0), "rot_y": 270.0},
+		# Vorfahrt gewähren an den vier neuen Ring-Einfahrten.
+		{"kind": "yield", "pos": Vector3(-230.0, 0, -64.0), "rot_y": 90.0},
+		{"kind": "yield", "pos": Vector3(-230.0, 0, -184.5), "rot_y": 90.0},
+		{"kind": "yield", "pos": Vector3(230.0, 0, -175.5), "rot_y": 270.0},
+		{"kind": "yield", "pos": Vector3(204.5, 0, -230.0), "rot_y": 0.0},
 		# Kreisverkehr-Schilder vor den drei Einfahrten.
 		{"kind": "roundabout", "pos": Vector3(184.0, 0, -56.0), "rot_y": 270.0},
 		{"kind": "roundabout", "pos": Vector3(196.0, 0, -88.0), "rot_y": 180.0},
@@ -268,6 +311,11 @@ static func stop_lines() -> Array:
 	out.append({"pos": Vector2(215.5, -60), "rot": 90.0, "w": 2.6})
 	out.append({"pos": Vector2(200, -76.5), "rot": 0.0, "w": 2.6})
 	out.append({"pos": Vector2(200, -44.3), "rot": 0.0, "w": 2.6})
+	# Ring-Einfahrten (yield): Haltelinien auf den mündenden Armen.
+	out.append({"pos": Vector2(-232, -61.8), "rot": 90.0, "w": 3.4})
+	out.append({"pos": Vector2(-232, -181.8), "rot": 90.0, "w": 3.0})
+	out.append({"pos": Vector2(232, -178.2), "rot": 90.0, "w": 3.0})
+	out.append({"pos": Vector2(201.8, -232), "rot": 0.0, "w": 3.0})
 	return out
 
 
