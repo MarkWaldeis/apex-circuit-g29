@@ -39,6 +39,27 @@ static func route_b() -> Array:
 	]
 
 
+## Route C: Stoppschild, Oststrasse Sued, Einbahnstrasse (nur Westwaerts),
+## rechts-vor-links am Einbahn-Ende und an der Schulstrasse, Tempo-30-Zone.
+static func route_c() -> Array:
+	return [
+		{"pos": Vector2(0, -55.0), "text": "Biegen Sie rechts in die Hauptstraße ab."},
+		{"pos": Vector2(60, -58.2), "text": "Gleich Stoppschild — zum Stillstand kommen, dann vorsichtig weiter."},
+		{"pos": Vector2(98.2, -95.0), "text": "Rechts in die Oststraße abbiegen."},
+		{"pos": Vector2(98.2, -117.0), "text": "Gleich rechts in die Einbahnstraße."},
+		{"pos": Vector2(60, -121.4), "text": "Einbahnstraße — nur in diese Richtung erlaubt."},
+		{"pos": Vector2(-94, -120.0), "text": "Am Ende links in die Weststraße — rechts vor links beachten."},
+		{"pos": Vector2(-101.8, -150.0), "text": "Der Weststraße nach Süden folgen."},
+		{"pos": Vector2(-101.8, -172.0), "text": "Gleich links in die Schulstraße — rechts vor links."},
+		{"pos": Vector2(60, -178.2), "text": "Der Schulstraße folgen — Tempo 30."},
+		{"pos": Vector2(98.2, -140.0), "text": "Links in die Oststraße — rechts vor links."},
+		{"pos": Vector2(98.2, -80.0), "text": "Weiter zur Hauptstraße."},
+		{"pos": Vector2(40, -61.8), "text": "Links in die Hauptstraße abbiegen."},
+		{"pos": Vector2(-10, -61.8), "text": "Gleich rechts in die Zufahrt zum Übungsplatz."},
+		{"pos": Vector2(0, 20.0), "text": "Zurück am Übungsplatz — stellen Sie das Auto ab."},
+	]
+
+
 static func default_route() -> Array:
 	return [
 		{"pos": Vector2(0, -55.0), "text": "Biegen Sie links in die Hauptstraße ab."},
@@ -57,8 +78,14 @@ var _route_i := -1   ## Routen A/B wechseln sich bei jedem Start ab
 
 
 func begin() -> void:
-	_route_i = (_route_i + 1) % 2
-	wps = default_route() if _route_i == 0 else route_b()
+	_route_i = (_route_i + 1) % 3
+	match _route_i:
+		0:
+			wps = default_route()
+		1:
+			wps = route_b()
+		_:
+			wps = route_c()
 	idx = 0
 	active = true
 	_said = true   ## erste Anweisung wird beim Start gesprochen
