@@ -86,6 +86,9 @@ var _click_gap: float = 0.0    ## Samples bis zum naechsten Blinker-Klack
 var _click_left: float = 0.0   ## Samples im aktuellen Klack-Burst
 var _horn_left: float = 0.0    ## verbleibende Horn-Samples (Taste B)
 var _horn_phase: float = 0.0
+var _pdc_gap: float = 0.0      ## Samples bis zum naechsten Parkpiep
+var _pdc_left: float = 0.0     ## Samples im Piep-Burst
+var _pdc_phase: float = 0.0
 
 
 func setup(wheel_input, surface_model, start: Transform3D) -> void:
@@ -554,6 +557,13 @@ func _engine_sound(throttle_in: float) -> void:
 	var blinker_an: bool = indicator_left or indicator_right or hazard
 	var horn_f1 := 420.0 / mix
 	var horn_f2 := 530.0 / mix
+	# Einparkpiepser: nur im Rueckwaertsgang, Abstandsfrequenz.
+	var pdc_gap_frames := -1.0
+	if gear == -1:
+		var d: float = rear_distance()
+		if d < 4.0:
+			# 0.35 m -> Dauerton, 4 m -> ~1.1 s Pausen.
+			pdc_gap_frames = maxf(0.0, (d - 0.35) / 3.65) * 24000.0
 	for i in frames:
 		_engine_phase += freq / mix
 		if _engine_phase >= 1.0:
@@ -578,6 +588,18 @@ func _engine_sound(throttle_in: float) -> void:
 			var h: float = sin(TAU * _horn_phase * horn_f1) \
 				+ sin(TAU * _horn_phase * horn_f2)
 			s += tanh(h) * 0.30 * clampf(_horn_left / 3000.0, 0.0, 1.0)
+		# Einparkpiepser: kurzer 1400-Hz-Piep, immer kuerzer werdend.
+		if pdc_gap_frames >= 0.0:
+			_pdc_gap -= 1.0
+			if _pdc_left > 0.0 or pdc_gap_frames < 1.0:
+				_pdc_left = maxf(_pdc_left - 1.0, 0.0)
+				_pdc_phase += 1400.0 / mix
+				s += sin(TAU * _pdc_phase) * 0.22
+				if pdc_gap_frames < 1.0:
+					_pdc_left = 99999.0
+			elif _pdc_gap <= 0.0:
+				_pdc_left = 1400.0      ## ~64 ms Piep
+				_pdc_gap = pdc_gap_frames
 		_engine_gen.push_frame(Vector2(s, s))
 
 
