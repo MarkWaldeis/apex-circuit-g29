@@ -75,6 +75,14 @@ static func junctions() -> Dictionary:
 				{"pos": Vector2(-104, -176), "enter": Vector2(0.7, 0.7)},
 			],
 		},
+		"zufahrt": {
+			"kind": "yield",
+			"center": Vector2(0, -60),
+			# Einfahrt auf die Hauptstraße: Vorfahrt gewähren.
+			"arms": [
+				{"pos": Vector2(0, -57), "enter": Vector2(0, -1)},
+			],
+		},
 		"yield_ost": {
 			"kind": "yield",
 			"center": Vector2(100, -180),
@@ -134,6 +142,8 @@ static func signs() -> Array:
 		{"kind": "roundabout", "pos": Vector3(196.0, 0, -88.0), "rot_y": 0.0},
 		{"kind": "roundabout", "pos": Vector3(196.0, 0, -32.0), "rot_y": 180.0},
 		{"kind": "roundabout", "pos": Vector3(216.0, 0, -56.0), "rot_y": 270.0},
+		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
+		{"kind": "yield", "pos": Vector3(-4.4, 0, -57.0), "rot_y": 0.0},
 		# Zebrastreifen Hauptstraße bei x = -40.
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 180.0},
 		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 0.0},
