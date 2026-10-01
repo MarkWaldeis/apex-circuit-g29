@@ -48,6 +48,7 @@ func build(world: Node3D) -> Dictionary:
 	_lot(world, out)
 	_buildings(world)
 	_trees(world)
+	_lamps(world)
 	return out
 
 
@@ -460,6 +461,56 @@ func _fence_span(world: Node3D, body: StaticBody3D, a: Vector2, b: Vector2, mat:
 	col.shape = box
 	col.transform = f.transform
 	body.add_child(col)
+
+
+## Strassenlaternen: Mast + Arm + Leuchtkopf; das Licht selbst geht erst
+## bei Nacht an (Gruppe "night_lamps", world_env.set_night schaltet es).
+func _lamps(world: Node3D) -> void:
+	var pole_m := _mat(Color(0.16, 0.17, 0.19), 0.6)
+	var head_m := StandardMaterial3D.new()
+	head_m.albedo_color = Color(0.95, 0.9, 0.7)
+	head_m.emission_enabled = true
+	head_m.emission = Color(1.0, 0.88, 0.55)
+	head_m.emission_energy_multiplier = 0.8
+	for lp in CityLayout.lamps():
+		var p: Vector2 = lp["pos"]
+		var arm: Vector2 = lp["arm"]
+		var mast := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.05
+		cyl.bottom_radius = 0.08
+		cyl.height = 4.4
+		mast.mesh = cyl
+		mast.material_override = pole_m
+		mast.position = Vector3(p.x, 2.2, p.y)
+		world.add_child(mast)
+		# Ausleger + Leuchtkopf ragt ueber die Fahrbahnkante.
+		var ax := MeshInstance3D.new()
+		var ab := BoxMesh.new()
+		var horiz := absf(arm.x) > 0.5
+		ab.size = Vector3(1.4, 0.06, 0.08) if horiz else Vector3(0.08, 0.06, 1.4)
+		ax.mesh = ab
+		ax.material_override = pole_m
+		ax.position = Vector3(p.x + arm.x * 0.65, 4.35, p.y + arm.y * 0.65)
+		world.add_child(ax)
+		var head := MeshInstance3D.new()
+		var hb := BoxMesh.new()
+		hb.size = Vector3(0.5, 0.10, 0.22) if horiz else Vector3(0.22, 0.10, 0.5)
+		head.mesh = hb
+		head.material_override = head_m
+		head.position = Vector3(p.x + arm.x * 1.3, 4.32, p.y + arm.y * 1.3)
+		world.add_child(head)
+		var spot := SpotLight3D.new()
+		spot.name = "Lamp"
+		spot.spot_range = 15.0
+		spot.spot_angle = 52.0
+		spot.light_energy = 7.0
+		spot.light_color = Color(1.0, 0.85, 0.6)
+		spot.position = head.position
+		spot.basis = Basis.from_euler(Vector3(-PI / 2.0, 0.0, 0.0))  ## gerade nach unten
+		spot.visible = false
+		spot.add_to_group("night_lamps")
+		world.add_child(spot)
 
 
 func _cone(world: Node3D, pos: Vector3) -> Node3D:

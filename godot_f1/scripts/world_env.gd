@@ -90,3 +90,7 @@ static func set_night(parent: Node3D, night: bool) -> void:
 			e.ambient_light_energy = 0.75
 			e.fog_density = 0.0009
 			e.fog_light_color = Color(0.78, 0.80, 0.86)
+	# Strassenlaternen erst bei Nacht an (city_builder._lamps, Gruppe).
+	if parent.is_inside_tree():
+		for lamp in parent.get_tree().get_nodes_in_group("night_lamps"):
+			lamp.visible = night

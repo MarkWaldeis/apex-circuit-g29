@@ -360,7 +360,11 @@ func _check_roundabout(p2: Vector2, spd: float) -> void:
 		# Raus aus dem Kreis: Abstand > äußerer Ringrand.
 		if d > 17.5:
 			_roundabout_in = false
-			_done("roundabout", "Kreisverkehr durchfahren — beim Rausfahren blinken.")
+			if bool(car.get("indicator_right")):
+				_done("roundabout", "Kreisverkehr mit Blinker raus — richtig so!")
+			else:
+				_done("roundabout", "Kreisverkehr durchfahren — beim Rausfahren blinken.")
+				_warn("Beim Verlassen des Kreisverkehrs rechts blinken — sonst denkt der Kreis wartet auf dich.")
 	elif d < float(j["island_r"]) + 2.0 and spd > 2.0:
 		_roundabout_in = true
 

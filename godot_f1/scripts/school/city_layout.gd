@@ -165,6 +165,26 @@ static func zebras() -> Array:
 	return [{"pos": Vector2(-40, -60), "rot": 0.0, "w": 6.8}]
 
 
+## Strassenlaternen: Standorte am Gehwegrand mit Richtung zur Fahrbahn.
+## {pos} auf dem Gehweg, {arm} Richtungsvektor des Leuchtenarms.
+static func lamps() -> Array:
+	var out: Array = []
+	# Hauptstrasse (z=-60): abwechselnd sued-/nordseitig alle ~80 m.
+	var hx := [-140.0, -60.0, 20.0, 100.0, 180.0]
+	for i in hx.size():
+		var side: float = 1.0 if i % 2 == 0 else -1.0
+		out.append({"pos": Vector2(hx[i], -60 + side * 7.5), "arm": Vector2(0, -side)})
+	# Schulstrasse (z=-180): suedseitig, Arm nach Norden.
+	for x in [-120.0, -40.0, 40.0, 120.0]:
+		out.append({"pos": Vector2(x, -187.5), "arm": Vector2(0, 1)})
+	# Weststrasse (x=-100) und Oststrasse (x=100): je zwei.
+	out.append({"pos": Vector2(-107.5, -90.0), "arm": Vector2(1, 0)})
+	out.append({"pos": Vector2(-92.5, -140.0), "arm": Vector2(-1, 0)})
+	out.append({"pos": Vector2(107.5, -140.0), "arm": Vector2(-1, 0)})
+	out.append({"pos": Vector2(92.5, -90.0), "arm": Vector2(1, 0)})
+	return out
+
+
 ## Übungsplatz: Grundstück, Zaun, Elemente.
 static func lot() -> Dictionary:
 	return {

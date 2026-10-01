@@ -22,8 +22,9 @@ func _boot() -> void:
 			Basis.looking_at(Vector3(1, 0, 0), Vector3.UP), Vector3(-80.0, 0.4, -58.2))
 		player._toggle_lights()
 	var cam := Camera3D.new()
-	cam.position = Vector3(-66.0, 8.0, -42.0)
-	cam.look_at_from_position(cam.position, Vector3(-85.0, 0.5, -58.0), Vector3.UP)
+	# Blick die Hauptstrasse entlang: Autolicht + Laternen-Pools.
+	cam.position = Vector3(-16.0, 7.0, -60.0)
+	cam.look_at_from_position(cam.position, Vector3(-90.0, 0.5, -60.0), Vector3.UP)
 	cam.fov = 55.0
 	_world.add_child(cam)
 	cam.make_current()
