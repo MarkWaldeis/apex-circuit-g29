@@ -36,6 +36,7 @@ var surfaces
 var cyclist
 var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrians: Array = []  ## Fussgaenger an den Zebrastreifen
+var rail                     ## rail_crossing.gd-Instanz (kann null sein)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
@@ -775,6 +776,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			if not ped_near:
 				_warn("Nicht auf dem Zebrastreifen halten — 5 m Abstand einhalten.")
 	_check_pedestrian(p2, spd)
+	_check_rail(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -823,6 +825,23 @@ func _check_pedestrian(p2: Vector2, spd: float) -> void:
 			if bool(_ped_waiting.get(pid, false)) and d < 16.0:
 				_ped_waiting[pid] = false
 				_done("ped", "Fussgaenger passieren lassen — vorbildlich.")
+
+
+func _check_rail(p2: Vector2, spd: float) -> void:
+	if rail == null:
+		return
+	var d: Vector2 = p2 - rail.center
+	# Auf den Gleisen darf man nie stehen bleiben — bei geschlossener
+	# Schranke erst recht nicht.
+	if absf(d.y) < 3.6 and absf(d.x) < 4.5:
+		if rail.is_closed():
+			_warn("Bahnübergang geschlossen — Gleise sofort räumen!")
+		elif spd < 0.6:
+			_warn("Nicht auf den Gleisen halten — Bahnübergang frei machen!")
+	# Wer bei geschlossener Schranke auf die Querung zufaehrt, muss
+	# vor dem Andreaskreuz halten.
+	elif rail.is_closed() and absf(d.x) < 6.5 and absf(d.y) < 13.0 and spd > 2.0:
+		_warn("Schranken geschlossen — vor dem Andreaskreuz anhalten!")
 
 
 var _brake_entry: float = -1.0

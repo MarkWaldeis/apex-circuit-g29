@@ -15,6 +15,7 @@ const SchoolSurfaces = preload("res://scripts/school/school_surfaces.gd")
 const SchoolInstructor = preload("res://scripts/school/school_instructor.gd")
 const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
+const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -100,9 +101,15 @@ func _ready() -> void:
 	for tc in traffic_cars:
 		tc.pedestrians = peds
 
+	# Bahnuebergang an der Ring-Ost-Strasse (Schranken + Zug).
+	var rail := RailCrossing.new()
+	rail.center = CityLayout.rail_crossing()["center"]
+	add_child(rail)
+
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrians = peds
+	instructor.rail = rail
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
 	instructor.traffic = traffic_cars

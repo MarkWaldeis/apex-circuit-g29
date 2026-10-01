@@ -15,6 +15,7 @@ const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const Pedestrian = preload("res://scripts/school/pedestrian.gd")
 const Instructor = preload("res://scripts/school/school_instructor.gd")
 const ExamRoute = preload("res://scripts/school/exam_route.gd")
+const RailCrossing = preload("res://scripts/school/rail_crossing.gd")
 
 var failed: int = 0
 
@@ -38,6 +39,7 @@ func _run() -> void:
 	_test_layout()
 	_test_traffic()
 	_test_pedestrian()
+	_test_rail()
 	_test_exam_route()
 	if failed > 0:
 		print("SCHOOL_UNITS FAIL count=", failed)
@@ -222,6 +224,11 @@ func _test_layout() -> void:
 			z_yield += 1
 	_check(zuf["arms"].size() >= 3 and z_yield == 1, "zufahrt_arms_complete",
 		"arms=%d yield=%d" % [zuf["arms"].size(), z_yield])
+	# Bahnuebergang liegt auf einer Fahrbahn (sonst nie erreichbar) und
+	# die Gleise kreuzen keine zweite Straße ungesichert.
+	var rc_center: Vector2 = Layout.rail_crossing()["center"]
+	_check(s.sample(Vector3(rc_center.x, 0, rc_center.y))["surface"] == "asphalt",
+		"rail_crossing_on_road", "pos=%s" % rc_center)
 
 
 func _test_traffic() -> void:
@@ -253,6 +260,27 @@ func _test_traffic() -> void:
 	_check(v == 0.0, "traffic_brakes_for_student", "v=%.1f" % v)
 	p.free()
 	tc.free()
+
+
+func _test_rail() -> void:
+	var rc := RailCrossing.new()
+	root.add_child(rc)
+	_check(not rc.is_closed(), "rail_starts_open")
+	_check(not rc.is_warning(), "rail_no_warning_at_start")
+	# Zug-Ankuendigung: warn-Phase an, Schranken senken sich.
+	rc._t = 0.01
+	rc._physics_process(0.02)
+	_check(rc._phase == "warn" and rc.is_warning(), "rail_warn_phase_starts")
+	for i in range(90):          ## 4,5 s -> Schranken unten
+		rc._physics_process(0.05)
+	_check(rc.is_closed(), "rail_closed_while_train_approaches")
+	for i in range(140):         ## +7 s -> Zug durch
+		rc._physics_process(0.05)
+	_check(rc._phase == "open" or rc._phase == "idle", "rail_opens_after_train")
+	for i in range(80):          ## Schranken ganz oben -> idle
+		rc._physics_process(0.05)
+	_check(rc._phase == "idle" and not rc.is_closed(), "rail_back_to_idle")
+	rc.free()
 
 
 func _test_pedestrian() -> void:

@@ -322,6 +322,12 @@ static func lot() -> Dictionary:
 	}
 
 
+## Bahnübergang auf der Ring-Ost-Straße: Gleise laufen in x-Richtung
+## und kreuzen die Straße bei center.
+static func rail_crossing() -> Dictionary:
+	return {"center": Vector2(240.0, -150.0)}
+
+
 ## Radfahrer-Rundkurs: rechte Fahrbahnseite der Hauptstraße (ostwärts
 ## z=-57,2 — rechter Rand seiner Spur — westwärts z=-62,8), Wenden über
 ## die Fahrbahn an den Enden.
@@ -370,4 +376,5 @@ static func exercise_spots() -> Array:
 		{"name": "Stopp-Kreuzung", "pos": Vector2(78, -60), "dir": Vector2(1, 0)},
 		{"name": "Kreisverkehr", "pos": Vector2(172, -60), "dir": Vector2(1, 0)},
 		{"name": "Einbahnstraße", "pos": Vector2(96, -95), "dir": Vector2(0, -1)},
+		{"name": "Bahnübergang", "pos": Vector2(240, -168), "dir": Vector2(0, 1)},
 	]
