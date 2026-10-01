@@ -39,6 +39,7 @@ var _spawn := Transform3D.IDENTITY
 var _night := false
 var _fog := false
 var _wet := false
+var _extra_traffic: Array = []   ## zusaetzliche KI-Autos (Taste G)
 
 
 func _ready() -> void:
@@ -179,6 +180,29 @@ func _physics_process(delta: float) -> void:
 				" gear=", player.gear, " rpm=", int(player.rpm), " stalled=", player.stalled)
 
 
+## Verkehrsdichte umschalten: zwei zusaetzliche KI-Autos spawnen oder
+## entfernen — so laesst sich die Stadt zwischen "ruhig zum Ueben" und
+## "voll wie Berufsverkehr" umstellen (Taste G).
+func _toggle_traffic() -> void:
+	if _extra_traffic.is_empty():
+		for cfg in [{"route": 0, "start": 3}, {"route": 1, "start": 7}]:
+			var tc := TrafficCar.new()
+			tc.name = "TrafficExtra%d" % _extra_traffic.size()
+			add_child(tc)
+			tc.setup(lights, player, int(cfg["start"]), int(cfg["route"]))
+			_extra_traffic.append(tc)
+			instructor.traffic.append(tc)
+		if instructor:
+			instructor._say("Mehr Verkehr — wie Berufsverkehr: mehr Vorausschau, mehr Abstand.", 0)
+	else:
+		for tc in _extra_traffic:
+			instructor.traffic.erase(tc)
+			tc.queue_free()
+		_extra_traffic.clear()
+		if instructor:
+			instructor._say("Verkehr wieder normal — Platz zum Üben.", 0)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("quit_game"):
 		get_tree().quit()
@@ -192,6 +216,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.physical_keycode == KEY_Z:
 		if instructor:
 			instructor.report()
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_G:
+		_toggle_traffic()
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.physical_keycode == KEY_U:
 		_night = not _night
