@@ -9,6 +9,7 @@ extends RefCounted
 ## "lot", "cones", "parked_cars"}.
 
 const CityLayout = preload("res://scripts/school/city_layout.gd")
+const SpeedCam = preload("res://scripts/school/speed_cam.gd")
 const TrafficSigns = preload("res://scripts/school/traffic_signs.gd")
 const TrafficLight = preload("res://scripts/school/traffic_light.gd")
 
@@ -49,6 +50,7 @@ func build(world: Node3D) -> Dictionary:
 	_buildings(world)
 	_trees(world)
 	_lamps(world)
+	out["cams"] = _speed_cams(world)
 	return out
 
 
@@ -511,6 +513,19 @@ func _lamps(world: Node3D) -> void:
 		spot.visible = false
 		spot.add_to_group("night_lamps")
 		world.add_child(spot)
+
+
+## Blitzer aufstellen (speed_cam.gd baut sein Mesh selbst).
+func _speed_cams(world: Node3D) -> Array:
+	var out: Array = []
+	for spec in CityLayout.speed_cams():
+		var cam := SpeedCam.new()
+		cam.name = "SpeedCam"
+		cam.position = Vector3(spec["pos"].x, 0.0, spec["pos"].y)
+		world.add_child(cam)
+		cam.setup(spec["watch"], int(spec["limit"]))
+		out.append(cam)
+	return out
 
 
 func _cone(world: Node3D, pos: Vector3) -> Node3D:

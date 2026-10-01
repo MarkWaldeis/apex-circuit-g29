@@ -35,6 +35,7 @@ var surfaces
 var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrian      ## Fussgaenger am Zebrastreifen (kann null sein)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
+var cams := []               ## speed_cam.gd-Instanzen aus city_builder
 var _ped_waiting := false
 var _speed_over: float = 0.0
 var _speed_limit: int = -1
@@ -340,6 +341,9 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 					_warn("Sie sind vom Kurs ab — wenden Sie und folgen Sie der Anweisung.")
 				"done":
 					_done("pruefung", "Prüfungsfahrt absolviert — bestanden!")
+	for c in cams:
+		if is_instance_valid(c) and c.check(p2, spd * 3.6):
+			_say("Geblitzt! %d km/h statt %d — das gibt Post." % [int(spd * 3.6), c.limit], 2)
 
 
 ## Taste P: Pruefungsfahrt starten (erneut = abbrechen).

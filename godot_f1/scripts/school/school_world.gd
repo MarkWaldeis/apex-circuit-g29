@@ -80,6 +80,7 @@ func _ready() -> void:
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrian = ped
+	instructor.cams = built.get("cams", [])
 	# Ziel-Marker der Pruefungsfahrt: leuchtende Saeule am naechsten Wegpunkt.
 	_exam_beam = MeshInstance3D.new()
 	var bcyl := CylinderMesh.new()

@@ -185,6 +185,12 @@ static func lamps() -> Array:
 	return out
 
 
+## Blitzer-Standorte: {pos} Kameramast am Fahrbahnrand, {watch} ueberwachte
+## Stelle auf der Fahrbahn, {limit} km/h.
+static func speed_cams() -> Array:
+	return [{"pos": Vector2(55.0, -52.6), "watch": Vector2(55.0, -60.0), "limit": 50}]
+
+
 ## Übungsplatz: Grundstück, Zaun, Elemente.
 static func lot() -> Dictionary:
 	return {
