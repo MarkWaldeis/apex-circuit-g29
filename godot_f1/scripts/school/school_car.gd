@@ -25,7 +25,7 @@ const VOID_Y := -6.0
 
 ## Zusatzbelegung der Lenkrad-Knöpfe (Treiber variieren — `last_button` in
 ## den Einstellungen zeigt, welcher physische Knopf gerade gedrückt wird).
-var button_map := {"ind_left": 4, "ind_right": 5, "hazard": 8, "handbrake": 9}
+var button_map := {"ind_left": 4, "ind_right": 5, "hazard": 8, "handbrake": 9, "lights": 10}
 
 var g29
 var surfaces
@@ -66,6 +66,8 @@ var _auto_clutch_t: float = 0.0           ## Tastatur-Hilfskupplung beim Schalte
 var _stall_note_t: float = 0.0
 var _blink_t: float = 0.0
 var _lamps: Dictionary = {}
+var headlights_on := false
+var _headlights: Array = []
 var _last_impact_v: float = 0.0
 var _prev_yaw: float = 0.0
 var _ind_yaw: float = 0.0            ## seit Blinker-An akkumulierte Drehung
@@ -84,6 +86,19 @@ func setup(wheel_input, surface_model, start: Transform3D) -> void:
 	var mesh: Dictionary = CarMesh.build()
 	add_child(mesh["root"])
 	_lamps = {"brake": mesh["brake_l"], "bl": mesh["blinker_l"], "br": mesh["blinker_r"]}
+	# Abblendlicht: zwei Strahler vorne (Taste L). Von vorn etwas
+	# nach unten gerichtet, wie an einer echten Licht-Einstellplatte.
+	for sx in [-1.0, 1.0]:
+		var spot := SpotLight3D.new()
+		spot.spot_range = 26.0
+		spot.spot_angle = 38.0
+		spot.light_energy = 5.0
+		spot.spot_attenuation = 0.6
+		spot.position = Vector3(0.55 * sx, 0.62, 1.95)
+		spot.basis = Basis.from_euler(Vector3(-0.28, PI, 0.0))
+		spot.visible = false
+		add_child(spot)
+		_headlights.append(spot)
 	_build_wheels(mesh["wheels"])
 	gearbox.setup()
 	ffb = FfbLink.new()
@@ -160,6 +175,8 @@ func _on_wheel_button(index: int) -> void:
 		if hazard:
 			indicator_left = false
 			indicator_right = false
+	elif index == int(button_map["lights"]):
+		_toggle_lights()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -177,11 +194,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_Q: _toggle_indicator("l")
 		KEY_E: _toggle_indicator("r")
 		KEY_T: _teleport_next()
+		KEY_L: _toggle_lights()
 		KEY_H:
 			hazard = not hazard
 			if hazard:
 				indicator_left = false
 				indicator_right = false
+
+
+## Abblendlicht an/aus (Taste L oder Lenkrad-Knopf).
+func _toggle_lights() -> void:
+	headlights_on = not headlights_on
+	for s in _headlights:
+		s.visible = headlights_on
 
 
 ## Taste T: direkt an die naechste Uebungsstation springen - das Auto
