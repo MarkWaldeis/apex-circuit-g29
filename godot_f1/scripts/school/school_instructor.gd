@@ -723,7 +723,17 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 			_brake_entry = -1.0
 			if _brake_v0 > 0.0:
 				var weg := _brake_p0.distance_to(p2)
-				_say("Bremsweg %.1f m aus %.0f km/h — Faustregel: Anhalteweg ≈ (v/10)² + (v/10)×3 Meter." % [weg, _brake_v0 * 3.6], 0)
+				var vergleich := ""
+				if surfaces != null and bool(surfaces.get("wet")):
+					_brake_wet = weg
+					if _brake_dry > 0.0:
+						vergleich = " — trocken waren es %.1f m: Nässe verlängert den Bremsweg!" % _brake_dry
+				else:
+					_brake_dry = weg
+					if _brake_wet > 0.0:
+						vergleich = " — nass waren es %.1f m." % _brake_wet
+				_say("Bremsweg %.1f m aus %.0f km/h%s — Faustregel: Anhalteweg ≈ (v/10)² + (v/10)×3 Meter." % [
+					weg, _brake_v0 * 3.6, vergleich], 0)
 				_brake_v0 = -1.0
 			if _brake_dec > 4.0 and _brake_peak > 0.55:
 				_done("brake", "Gefahrbremsung geschafft — voller Tritt, gerade bleiben, Kupplung treten kurz vor dem Stillstand.")
@@ -960,6 +970,8 @@ var _brake_peak: float = 0.0
 var _brake_prev: float = 0.0
 var _brake_v0: float = -1.0       ## Tempo beim Bremsbeginn (Bremsweg-Messung)
 var _brake_p0 := Vector2.ZERO     ## Ort beim Bremsbeginn
+var _brake_dry := -1.0            ## letzter gemessener Bremsweg trocken
+var _brake_wet := -1.0            ## letzter gemessener Bremsweg nass
 var _stop_still := {}
 var _jturn := {}
 
