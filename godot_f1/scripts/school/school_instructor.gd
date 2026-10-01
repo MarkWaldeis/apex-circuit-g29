@@ -81,6 +81,7 @@ var _hb_t: float = 0.0
 var _idle_rev_t: float = 0.0
 var _rev_t: float = 0.0
 var _coast_t: float = 0.0
+var _blink_left_t: float = 0.0  ## Blinker laeuft ohne Lenkung (Vergessen)
 var _coach_cd: float = 0.0
 var _signs_seen := {}
 var _door_cd: float = 0.0
@@ -373,6 +374,17 @@ func _check_habits(spd: float, delta: float) -> void:
 			_coast_t = -8.0
 	else:
 		_coast_t = minf(_coast_t + delta, 0.0)
+	# Vergessener Blinker: laeuft der Blinker weiter, ohne dass gelenkt
+	# wird, glaubt der Verkehr eine Abbiegeabsicht — ausschalten!
+	var ind_on := bool(car.get("indicator_left")) or bool(car.get("indicator_right"))
+	var steering := absf(car.angular_velocity.y) > 0.4 or spd < 1.5
+	if ind_on and not steering:
+		_blink_left_t += delta
+		if _blink_left_t > 7.0:
+			_say("Der Blinker läuft noch — nach dem Abbiegen gleich ausschalten.", 1)
+			_blink_left_t = -6.0
+	else:
+		_blink_left_t = 0.0
 
 
 # Belegte Parkbuchten: an parkenden Autos vorbeifahren heißt Tür-Zone —
