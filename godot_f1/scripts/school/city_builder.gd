@@ -10,6 +10,7 @@ extends RefCounted
 
 const CityLayout = preload("res://scripts/school/city_layout.gd")
 const SpeedCam = preload("res://scripts/school/speed_cam.gd")
+const Cyclist = preload("res://scripts/school/cyclist.gd")
 const TrafficSigns = preload("res://scripts/school/traffic_signs.gd")
 const TrafficLight = preload("res://scripts/school/traffic_light.gd")
 
@@ -51,6 +52,11 @@ func build(world: Node3D) -> Dictionary:
 	_trees(world)
 	_lamps(world)
 	out["cams"] = _speed_cams(world)
+	var cyclist := Cyclist.new()
+	cyclist.name = "Cyclist"
+	world.add_child(cyclist)
+	cyclist.setup(CityLayout.cyclist())
+	out["cyclist"] = cyclist
 	return out
 
 

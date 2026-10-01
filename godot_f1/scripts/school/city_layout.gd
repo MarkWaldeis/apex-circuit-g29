@@ -240,6 +240,15 @@ static func lot() -> Dictionary:
 	}
 
 
+## Radfahrer-Rundkurs: rechte Fahrbahnseite der Hauptstraße (ostwärts
+## z=-56, westwärts z=-64), Wenden über die Fahrbahn an den Enden.
+static func cyclist() -> Array:
+	return [
+		Vector2(-160, -56.0), Vector2(160, -56.0), Vector2(166, -60.0),
+		Vector2(160, -64.0), Vector2(-160, -64.0), Vector2(-166, -60.0),
+	]
+
+
 ## Fußgängerzonen usw.: wo der Fahrlehrer "Neben der Fahrbahn" meldet.
 ## bounds des Spielfelds (über die Karte hinaus = aus der Welt fallen).
 static func bounds() -> Rect2:

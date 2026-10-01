@@ -32,6 +32,7 @@ const TASKS := [
 
 var car
 var surfaces
+var cyclist
 var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrian      ## Fussgaenger am Zebrastreifen (kann null sein)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
@@ -63,6 +64,7 @@ var _coach_cd: float = 0.0
 var _signs_seen := {}
 var _door_cd: float = 0.0
 var _idle_t: float = 0.0
+var _cyc_cd: float = 0.0
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -133,6 +135,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_offroad(pos, delta)
 	_check_habits(spd, delta)
 	_check_door_zone(p2, spd, delta)
+	_check_cyclist(p2, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
 	_coach_idle(spd, delta)
@@ -266,6 +269,20 @@ func _check_door_zone(p2: Vector2, spd: float, delta: float) -> void:
 			_say("Sicherheitsabstand! An einem parkenden Auto vorbei — eine Tür kann aufgehen.", 1)
 			_door_cd = 9.0
 			return
+
+
+# Radfahrer-Seitenabstand: Überholen erst ab ~1,5 m Seitenabstand.
+func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:
+	_cyc_cd = maxf(_cyc_cd - delta, 0.0)
+	if cyclist == null or not is_instance_valid(cyclist) or _cyc_cd > 0.0:
+		return
+	var d := p2.distance_to(cyclist.pos2())
+	if d < 1.7:
+		_say("Viel zu dicht am Radfahrer — das ist gefährlich.", 2)
+		_cyc_cd = 8.0
+	elif d < 2.6 and spd > 3.0:
+		_say("Seitenabstand zum Radfahrer — mindestens 1,5 m, sonst warten.", 1)
+		_cyc_cd = 8.0
 
 
 func _check_stalls_and_shifts() -> void:

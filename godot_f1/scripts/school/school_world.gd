@@ -81,6 +81,7 @@ func _ready() -> void:
 	instructor.setup(player, surfaces, lights)
 	instructor.pedestrian = ped
 	instructor.cams = built.get("cams", [])
+	instructor.cyclist = built.get("cyclist")
 	# Ziel-Marker der Pruefungsfahrt: leuchtende Saeule am naechsten Wegpunkt.
 	_exam_beam = MeshInstance3D.new()
 	var bcyl := CylinderMesh.new()
