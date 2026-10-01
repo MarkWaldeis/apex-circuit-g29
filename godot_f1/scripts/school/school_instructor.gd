@@ -19,6 +19,7 @@ const TASKS := [
 	{"id": "brake", "name": "Gefahrbremsung"},
 	{"id": "parallel", "name": "Längsparken"},
 	{"id": "perp", "name": "Querparken"},
+	{"id": "slalom", "name": "Slalom um die Pylonen"},
 	{"id": "reverse", "name": "Rückwärtsfahren (10 m)"},
 	{"id": "turn", "name": "Wenden"},
 	{"id": "roundabout", "name": "Kreisverkehr"},
@@ -72,6 +73,9 @@ var _prio_cd: float = 0.0
 var _weave_side: int = 0
 var _weave_hits: Array = []
 var _weave_cd: float = 0.0
+var _slalom_from: int = 0     ## korrekt passierte Pylonen von Westen
+var _slalom_to: int = -1      ## ... und von Osten (-1 = noch nicht init)
+var _slalom_armed := {}       ## Pylone -> darf wieder gezaehlt werden
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -420,7 +424,9 @@ func _check_stalls_and_shifts() -> void:
 	if imp > _impact_seen:
 		_impact_seen = imp
 		var hit := String(car.get("_last_impact_name"))
-		if hit in ["Pedestrian", "Cyclist", "Fussgaenger", "Radfahrer"]:
+		if hit == "Hutchen":
+			_warn("Pylone umgefahren — im Slalom zählt jedes Hütchen.")
+		elif hit in ["Pedestrian", "Cyclist", "Fussgaenger", "Radfahrer"]:
 			_say("Person angefahren! In der Fahrschule: sofort anhalten. Schulblick, Zebrastreifen und Radfahrer-Abstand sind Pflicht — das ist der schwerste Fehler überhaupt.", 2)
 		elif imp > 45.0:
 			_say("Crash mit %.0f km/h — so eine Prüfungsfahrt ist vorbei, zum Glück nur Übung." % imp, 2)
@@ -631,6 +637,31 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		var rect := Rect2(bp.x - 2.3, bp.y - float(bay["len"]) * 0.5, 2.3, float(bay["len"]))
 		if _in_rect(p2, rect) and spd < 0.25:
 			_done("parallel", "Längsparken geschafft — Rückwärts rein, Räder gerade, fertig.")
+	# Slalom: die Pylonen der Reihe nach auf der richtigen Seite passieren
+	# (von links oder rechts — die Richtung ist frei). Falsche Seite = Reset.
+	var cones: Array = lot["slalom"]
+	if _slalom_to < 0:
+		_slalom_to = cones.size()
+	for i in cones.size():
+		var cone: Vector2 = cones[i]
+		var dc := p2.distance_to(cone)
+		if dc > 4.5:
+			_slalom_armed[i] = true
+		elif dc < 3.0 and absf(p2.x - cone.x) < 2.6 and bool(_slalom_armed.get(i, true)):
+			_slalom_armed[i] = false
+			var need := signf(64.0 - cone.y)
+			var have := signf(p2.y - cone.y)
+			if not (have == need and absf(p2.y - cone.y) > 0.6):
+				_slalom_from = 0
+				_slalom_to = cones.size()
+				_warn("Pylone auf der falschen Seite passiert — Slalom heißt abwechselnd rechts, links.")
+			elif i == _slalom_from:
+				_slalom_from = i + 1
+			elif i == _slalom_to - 1:
+				_slalom_to = i
+			if _slalom_from >= _slalom_to:
+				_done("slalom", "Slalom sauber — flüssig ums Hütchen, ohne zu streifen.")
+
 	# Querparken: still in einer freien Querbucht.
 	for bay in lot["perp_bays"]:
 		if bool(bay.get("occupied", false)):

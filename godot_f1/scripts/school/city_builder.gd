@@ -611,6 +611,20 @@ func _speed_cams(world: Node3D) -> Array:
 
 
 func _cone(world: Node3D, pos: Vector3) -> Node3D:
+	# Leichte Physik-Huetchen: wer eine Pylone trifft, sieht es fliegen —
+	# und der Fahrlehrer bekommt den Treffer ueber den Aufprall-Monitor.
+	var body := RigidBody3D.new()
+	body.name = "Hutchen"
+	body.position = pos
+	body.mass = 0.6
+	var col := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 0.16
+	cyl.height = 0.5
+	col.shape = cyl
+	col.position = Vector3(0, 0.25, 0)
+	body.add_child(col)
+	world.add_child(body)
 	var c := MeshInstance3D.new()
 	var cone := CylinderMesh.new()
 	cone.top_radius = 0.02
@@ -619,8 +633,8 @@ func _cone(world: Node3D, pos: Vector3) -> Node3D:
 	cone.radial_segments = 12
 	c.mesh = cone
 	c.material_override = _mat(Color(0.95, 0.30, 0.05), 0.8)
-	c.position = pos + Vector3(0, 0.25, 0)
-	world.add_child(c)
+	c.position = Vector3(0, 0.25, 0)
+	body.add_child(c)
 	var band := MeshInstance3D.new()
 	var bb := CylinderMesh.new()
 	bb.top_radius = 0.09
@@ -629,9 +643,9 @@ func _cone(world: Node3D, pos: Vector3) -> Node3D:
 	bb.radial_segments = 12
 	band.mesh = bb
 	band.material_override = _mat(Color(1, 1, 1), 0.8)
-	band.position = pos + Vector3(0, 0.28, 0)
-	world.add_child(band)
-	return c
+	band.position = Vector3(0, 0.28, 0)
+	body.add_child(band)
+	return body
 
 
 func _parked_car(world: Node3D, pos: Vector3, rot: float, color: Color) -> Node3D:
