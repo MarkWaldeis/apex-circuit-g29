@@ -28,6 +28,7 @@ var _mirror_r: Camera3D
 var _dist_label: Label
 var _backup_panel: PanelContainer
 var _backup_cam: Camera3D
+var _mini_cam: Camera3D
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
@@ -198,6 +199,17 @@ func _build() -> void:
 	root.add_child(_backup_panel)
 	_backup_cam = bk[1]
 
+	# Minimap: Ortho-Kamera von oben, folgt dem Auto, Norden zeigt nach oben.
+	var mm := _mirror_panel(Vector2i(190, 190), 0.0)
+	mm[0].set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	mm[0].position = Vector2(-202, -202)
+	root.add_child(mm[0])
+	_mini_cam = mm[1]
+	_mini_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_mini_cam.size = 110.0
+	_mini_cam.far = 320.0
+	_mini_cam.basis = Basis(Vector3.RIGHT, -PI / 2.0)
+
 	_coach = Label.new()
 	UI.label(_coach, 24, UI.TEXT)
 	_coach.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -345,6 +357,11 @@ func _process(delta: float) -> void:
 		if rev and _backup_cam:
 			_backup_cam.global_transform = car.global_transform * Transform3D(
 				Basis(Vector3.RIGHT, -0.55), Vector3(0.0, 1.35, -2.05))
+
+	# Minimap folgt dem Auto — Rotation bleibt auf Norden fixiert.
+	if _mini_cam:
+		_mini_cam.global_position = Vector3(
+			car.global_position.x, 160.0, car.global_position.z)
 
 	# Einparkhilfe: nur sichtbar, solange der Rueckwaertsgang drin ist.
 	if _dist_label:
