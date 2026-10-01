@@ -77,6 +77,7 @@ var _left_lane_t: float = 0.0
 var _hb_t: float = 0.0
 var _idle_rev_t: float = 0.0
 var _rev_t: float = 0.0
+var _coast_t: float = 0.0
 var _coach_cd: float = 0.0
 var _signs_seen := {}
 var _door_cd: float = 0.0
@@ -354,6 +355,15 @@ func _check_habits(spd: float, delta: float) -> void:
 			_rev_t = -8.0
 	else:
 		_rev_t = minf(_rev_t + delta, 0.0)
+	# Ausrollen im Leerlauf: ohne eingelegten Gang gibt es keine
+	# Motorbremsung und das Fahrzeug wird in Gefaelle immer schneller.
+	if gear == 0 and spd > 6.0 and bool(car.get("motor_on")):
+		_coast_t += delta
+		if _coast_t > 2.5:
+			_say("Im Leerlauf rollen ist unüblich — Gang einlegen, die Motorbremsung hilft.", 1)
+			_coast_t = -8.0
+	else:
+		_coast_t = minf(_coast_t + delta, 0.0)
 
 
 # Belegte Parkbuchten: an parkenden Autos vorbeifahren heißt Tür-Zone —
