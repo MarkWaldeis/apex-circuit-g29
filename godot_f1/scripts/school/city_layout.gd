@@ -96,6 +96,62 @@ static func junctions() -> Dictionary:
 				{"pos": Vector2(100, -186), "enter": Vector2(0, -1)},
 			],
 		},
+		# T-Knoten ohne Licht/Schild: Rechts vor links gilt. Sie werden
+		# als junction gefuehrt, damit Haltelinie und Abbiege-Blinker
+		# ausgewertet werden koennen.
+		"einbahn_ost": {
+			"kind": "rbl",
+			"center": Vector2(100, -120),
+			"arms": [
+				{"pos": Vector2(100, -114), "enter": Vector2(0, 1)},
+				{"pos": Vector2(100, -126), "enter": Vector2(0, -1)},
+			],
+		},
+		"einbahn_west": {
+			"kind": "rbl",
+			"center": Vector2(-100, -120),
+			"arms": [
+				{"pos": Vector2(-100, -114), "enter": Vector2(0, 1)},
+				{"pos": Vector2(-100, -126), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-94, -120), "enter": Vector2(-1, 0)},
+			],
+		},
+		"ring_west_nord": {
+			"kind": "rbl",
+			"center": Vector2(-100, -240),
+			"arms": [
+				{"pos": Vector2(-100, -234), "enter": Vector2(0, -1)},
+				{"pos": Vector2(-106, -240), "enter": Vector2(1, 0)},
+				{"pos": Vector2(-94, -240), "enter": Vector2(-1, 0)},
+			],
+		},
+		"ring_ost_nord": {
+			"kind": "rbl",
+			"center": Vector2(100, -240),
+			"arms": [
+				{"pos": Vector2(100, -234), "enter": Vector2(0, -1)},
+				{"pos": Vector2(94, -240), "enter": Vector2(1, 0)},
+				{"pos": Vector2(106, -240), "enter": Vector2(-1, 0)},
+			],
+		},
+		"ring_west_sued": {
+			"kind": "rbl",
+			"center": Vector2(-100, 140),
+			"arms": [
+				{"pos": Vector2(-100, 134), "enter": Vector2(0, 1)},
+				{"pos": Vector2(-106, 140), "enter": Vector2(1, 0)},
+				{"pos": Vector2(-94, 140), "enter": Vector2(-1, 0)},
+			],
+		},
+		"ring_ost_sued": {
+			"kind": "rbl",
+			"center": Vector2(100, 140),
+			"arms": [
+				{"pos": Vector2(100, 134), "enter": Vector2(0, 1)},
+				{"pos": Vector2(94, 140), "enter": Vector2(1, 0)},
+				{"pos": Vector2(106, 140), "enter": Vector2(-1, 0)},
+			],
+		},
 		"kreis": {
 			"kind": "roundabout",
 			"center": Vector2(200, -60),
