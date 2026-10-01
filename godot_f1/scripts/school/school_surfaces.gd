@@ -17,12 +17,19 @@ const ISLAND := {"name": "Insel", "grip": 0.4, "drag": 0.2, "rumble": 0.6, "surf
 var _roads: Array = []
 var _lot_rect: Dictionary = {}
 var _island := {}
+var _junction_centers: Array = []
 
 
 func setup() -> void:
 	_roads = CityLayout.roads()
 	_lot_rect = CityLayout.lot()["rect"]
-	_island = CityLayout.junctions().get("kreis", {})
+	var junc: Dictionary = CityLayout.junctions()
+	_island = junc.get("kreis", {})
+	_junction_centers.clear()
+	for key in junc.keys():
+		var c = junc[key].get("center", null)
+		if c is Vector2:
+			_junction_centers.append(c)
 
 
 ## Position -> Untergrund. `offset`/`index` füllt das Auto selbst aus seinem
@@ -105,5 +112,38 @@ func wrong_way(pos: Vector3, vel: Vector3) -> String:
 		var dir := (b - a).normalized()
 		var vd := Vector2(vel.x, vel.z).dot(dir)
 		if vd < -1.5:
+			return String(road["name"])
+	return ""
+
+
+## Rechtsfahrgebot: auf zweispurigen Straßen (keine Einbahnstraße) mit >
+## ~1 m links der Mittellinie fahren heißt Gegenverkehr. Rückgabe:
+## Straßenname bei Verstoß, sonst "". Kreuzungsbereiche und Langsames
+## (Einparken, Rangieren) zählen nicht.
+func left_lane(pos: Vector3, vel: Vector3) -> String:
+	var v := Vector2(vel.x, vel.z)
+	if v.length() < 2.0:
+		return ""
+	v = v.normalized()
+	var right := Vector2(v.y, v.x)
+	var p2 := Vector2(pos.x, pos.z)
+	for c in _junction_centers:
+		if p2.distance_to(c) < 14.0:
+			return ""
+	for road in _roads:
+		if int(road.get("oneway", 0)) != 0:
+			continue
+		var a: Vector2 = road["from"]
+		var b: Vector2 = road["to"]
+		var ab := b - a
+		var len2 := ab.length_squared()
+		if len2 < 0.001:
+			continue
+		var t := clampf((p2 - a).dot(ab) / len2, 0.0, 1.0)
+		var c := a + ab * t
+		if p2.distance_to(c) > float(road["width"]) * 0.5 + 1.0:
+			continue
+		var lat := (p2 - c).dot(right)
+		if lat < -1.1:
 			return String(road["name"])
 	return ""

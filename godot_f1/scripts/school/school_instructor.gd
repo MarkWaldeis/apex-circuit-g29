@@ -55,6 +55,7 @@ var _hill_armed: bool = false
 var _grinds_seen: int = 0
 var _stalls_seen: int = 0
 var _offroad_t: float = 0.0
+var _left_lane_t: float = 0.0
 var _coach_cd: float = 0.0
 
 
@@ -121,7 +122,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 
 	_check_speed(spd, p2, delta)
 	_check_junctions(p2, spd)
-	_check_wrong_way(pos)
+	_check_wrong_way(pos, delta)
 	_check_offroad(pos, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
@@ -150,10 +151,19 @@ func _check_speed(spd: float, p2: Vector2, delta: float) -> void:
 		_speed_over = maxf(_speed_over - delta, 0.0)
 
 
-func _check_wrong_way(pos: Vector3) -> void:
+func _check_wrong_way(pos: Vector3, delta: float) -> void:
 	var road: String = surfaces.wrong_way(pos, car.linear_velocity)
 	if road != "":
 		_say("Einbahnstraße! Du fährst gegen die Fahrtrichtung — wende.", 2)
+	# Rechtsfahrgebot: anhaltend links der Mitte = Gegenverkehr.
+	var left: String = surfaces.left_lane(pos, car.linear_velocity)
+	if left != "":
+		_left_lane_t += delta
+		if _left_lane_t > 1.2:
+			_say("Links der Mittellinie! Auf zweispurigen Straßen wird rechts gefahren — Gegenverkehr.", 2)
+			_left_lane_t = -4.0
+	else:
+		_left_lane_t = minf(_left_lane_t + delta * 2.0, 0.0)
 
 
 func _check_offroad(pos: Vector3, delta: float) -> void:
