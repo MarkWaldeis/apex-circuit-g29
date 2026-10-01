@@ -164,7 +164,7 @@ static func junctions() -> Dictionary:
 				{"pos": Vector2(184.5, -60), "enter": Vector2(1, 0)},
 				{"pos": Vector2(215.5, -60), "enter": Vector2(-1, 0)},
 				{"pos": Vector2(200, -76.5), "enter": Vector2(0, 1)},
-				{"pos": Vector2(200, -47.5), "enter": Vector2(0, -1)},
+				{"pos": Vector2(200, -44.3), "enter": Vector2(0, -1)},
 			],
 		},
 	}
@@ -183,8 +183,8 @@ static func signs() -> Array:
 		# Rechts vor links: Schild 102 an allen vier Zufahrten des Knotens
 		# Schulstraße/Weststraße (jeweils rechter Fahrbahnrand, Sichtseite
 		# zum ankommenden Verkehr).
-		{"kind": "rbl", "pos": Vector3(-96.5, 0, -183.8), "rot_y": 180.0},
-		{"kind": "rbl", "pos": Vector3(-103.5, 0, -171.5), "rot_y": 0.0},
+		{"kind": "rbl", "pos": Vector3(-103.5, 0, -183.8), "rot_y": 180.0},
+		{"kind": "rbl", "pos": Vector3(-96.5, 0, -171.5), "rot_y": 0.0},
 		{"kind": "rbl", "pos": Vector3(-94.0, 0, -183.8), "rot_y": 90.0},
 		{"kind": "rbl", "pos": Vector3(-108.0, 0, -176.2), "rot_y": 270.0},
 		# Vorfahrt gewähren Schulstraße/Oststraße.
@@ -200,7 +200,7 @@ static func signs() -> Array:
 		{"kind": "limit", "arg": "30", "pos": Vector3(-134, 0, -176.0), "rot_y": 270.0},
 		{"kind": "limit", "arg": "30", "pos": Vector3(134, 0, -184.0), "rot_y": 90.0},
 		{"kind": "limit", "arg": "30", "pos": Vector3(96.5, 0, -116.5), "rot_y": 90.0},
-		{"kind": "limit_end", "pos": Vector3(-96.5, 0, -127.5), "rot_y": 90.0},
+		{"kind": "limit_end", "pos": Vector3(-96.5, 0, -127.5), "rot_y": 270.0},
 		{"kind": "limit", "arg": "50", "pos": Vector3(-96.5, 0, -70.0), "rot_y": 0.0},
 		{"kind": "limit", "arg": "50", "pos": Vector3(96.5, 0, -50.0), "rot_y": 180.0},
 		{"kind": "limit", "arg": "100", "pos": Vector3(-96.0, 0, -233.0), "rot_y": 0.0},
@@ -219,9 +219,9 @@ static func signs() -> Array:
 		{"kind": "limit", "arg": "30", "pos": Vector3(24.0, 0, 136.6), "rot_y": 90.0},
 		{"kind": "limit_end", "pos": Vector3(-46.0, 0, 136.6), "rot_y": 90.0},
 		# Auffahrt-Hinweis auf der Oststrasse Richtung Ring Nord.
-		{"kind": "board", "arg": "Auffahrt — Gas geben", "pos": Vector3(96.4, 0, -212.0), "rot_y": 90.0},
+		{"kind": "board", "arg": "Auffahrt — Gas geben", "pos": Vector3(103.5, 0, -212.0), "rot_y": 0.0},
 		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
-		{"kind": "yield", "pos": Vector3(-4.4, 0, -57.0), "rot_y": 0.0},
+		{"kind": "yield", "pos": Vector3(4.4, 0, -57.0), "rot_y": 0.0},
 		# Zeichen 306 Vorfahrtstraße: die Hauptstraße hat vor der Zufahrt
 		# Vorfahrt, die Oststraße vor der Schulstraße.
 		{"kind": "priority", "pos": Vector3(-10.0, 0, -56.5), "rot_y": 270.0},
@@ -267,15 +267,15 @@ static func stop_lines() -> Array:
 	out.append({"pos": Vector2(184.5, -60), "rot": 90.0, "w": 2.6})
 	out.append({"pos": Vector2(215.5, -60), "rot": 90.0, "w": 2.6})
 	out.append({"pos": Vector2(200, -76.5), "rot": 0.0, "w": 2.6})
-	out.append({"pos": Vector2(200, -47.5), "rot": 0.0, "w": 2.6})
+	out.append({"pos": Vector2(200, -44.3), "rot": 0.0, "w": 2.6})
 	return out
 
 
 ## Zebrastreifen (Querstreifen über die Fahrbahn).
 static func zebras() -> Array:
 	return [
-		{"pos": Vector2(-40, -60), "rot": 0.0, "w": 6.8},
-		{"pos": Vector2(-100, -150), "rot": 90.0, "w": 6.0},
+		{"pos": Vector2(-40, -60), "rot": 90.0, "w": 6.8},
+		{"pos": Vector2(-100, -150), "rot": 0.0, "w": 6.0},
 	]
 
 
@@ -360,7 +360,7 @@ static func baustelle() -> Dictionary:
 ## Pannen-Übung: ruhiges Teilstueck am westlichen Fahrbahnrand der
 ## Schulstraße — hier simuliert der Schueler eine Panne (Warnblinker an).
 static func pannen_zone() -> Rect2:
-	return Rect2(Vector2(-7.0, -140.0), Vector2(8.5, 30.0))
+	return Rect2(Vector2(-80.0, -123.0), Vector2(60.0, 5.5))
 
 
 ## Situationsgefahr Ball: auf der Kreisverkehr-Nordstraße rollt ein
@@ -419,7 +419,8 @@ static func spawn() -> Transform3D:
 static func reset_spots() -> Array:
 	return [
 		{"pos": Vector2(0, 60), "rot": 180.0},
-		{"pos": Vector2(-40, -60), "rot": 90.0},
+		{"pos": Vector2(-40, -61.8), "rot": 90.0},
+		{"pos": Vector2(172, -61.8), "rot": 270.0},
 	]
 
 
@@ -438,6 +439,6 @@ static func exercise_spots() -> Array:
 		{"name": "Ampelkreuzung", "pos": Vector2(-78, -60), "dir": Vector2(-1, 0)},
 		{"name": "Stopp-Kreuzung", "pos": Vector2(78, -60), "dir": Vector2(1, 0)},
 		{"name": "Kreisverkehr", "pos": Vector2(172, -60), "dir": Vector2(1, 0)},
-		{"name": "Einbahnstraße", "pos": Vector2(96, -95), "dir": Vector2(0, -1)},
+		{"name": "Einbahnstraße", "pos": Vector2(101.8, -95), "dir": Vector2(0, -1)},
 		{"name": "Bahnübergang", "pos": Vector2(240, -168), "dir": Vector2(0, 1)},
 	]

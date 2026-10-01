@@ -52,9 +52,11 @@ func _ready() -> void:
 	surfaces.setup()
 	var built: Dictionary = CityBuilder.new().build(self)
 	_lights_data = built.get("lights", {})
-	# Der Radfahrer bekommt den Ampel-Controller — er haelt bei Rot.
+	# Der Radfahrer bekommt den Ampel-Controller — er haelt bei Rot —
+	# und das Schulauto, damit er nicht auffaehrt.
 	if built.get("cyclist") != null:
 		built["cyclist"].lights = lights
+		built["cyclist"].player = player
 
 	ffb_settings = FfbSettings.new()
 	ffb_settings.load_profile()
@@ -292,7 +294,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.physical_keycode == KEY_G:
 		_toggle_traffic()
 	if event is InputEventKey and event.pressed and not event.echo \
-			and event.physical_keycode == KEY_F:
+			and event.physical_keycode == KEY_X:
 		if instructor and player:
 			instructor.explain_nearest_sign(
 				Vector2(player.global_position.x, player.global_position.z))

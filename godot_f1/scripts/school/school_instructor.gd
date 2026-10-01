@@ -62,9 +62,9 @@ var _speed_limit: int = -1
 var _speeding: bool = false
 var _tasks_done := {}          ## id -> true
 var _arm_track := {}           ## Haltelinie -> letzter Abstand (enter-Richtung)
-var _stop_armed := {}          ## Haltelinie -> letzte Stillstand-Zeit vorher
+var _stop_armed := {}          ## Haltelinie -> Stillstand erfuellt (Latch)
 var _roundabout_in: bool = false
-var _roundabout_arm: int = -1
+
 var _turn_yaw_acc: float = 0.0
 var _turn_start := Vector3.ZERO
 var _turning: bool = false
@@ -137,7 +137,7 @@ func setup(p_car, p_surfaces, p_lights = null) -> void:
 		for arm in j.get("arms", []):
 			var key := _arm_key(j, arm)
 			_arm_track[key] = {"d": 999.0, "arm": arm, "junction": j}
-			_stop_armed[key] = -999.0
+			_stop_armed[key] = false
 
 
 func _arm_key(junction: Dictionary, arm: Dictionary) -> String:
@@ -505,7 +505,8 @@ func _check_priority(p2: Vector2, spd: float, delta: float) -> void:
 			if not is_instance_valid(tc):
 				continue
 			var tp := Vector2(tc.global_position.x, tc.global_position.z)
-			if tp.distance_to(c) > 14.0:
+			# KI auf der Kreisbahn zaehlt bis zur Ringkante (~16 m).
+			if tp.distance_to(c) > 17.0:
 				continue
 			var t_dir := Vector2(tc.global_transform.basis.z.x, tc.global_transform.basis.z.z).normalized()
 			if (c - tp).normalized().dot(t_dir) < 0.4:
@@ -582,7 +583,7 @@ func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:
 			_say("Seitenabstand zum Radfahrer — mindestens 1,5 m, sonst warten.", 1)
 			_cyc_cd = 8.0
 	# Ueberhol-Aufgabe: Radfahrer mit >= 1,8 m Abstand passieren.
-	var fwd: Vector3 = -car.global_transform.basis.z
+	var fwd: Vector3 = car.global_transform.basis.z
 	var rel: Vector3 = cyclist.global_position - car.global_position
 	var ahead: bool = fwd.dot(rel) > 0.0
 	if not _cyc_armed and ahead and d < 25.0 and spd > 3.0:
@@ -655,9 +656,11 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			if not _stop_still.has(key):
 				_stop_still[key] = now_s
 			if now_s - float(_stop_still[key]) > 0.9:
-				_stop_armed[key] = now_s
+				_stop_armed[key] = true    ## Halt erfuellt: Latch bis zur Linie
 		else:
 			_stop_still.erase(key)
+		if d < -12.0:
+			_stop_armed.erase(key)      ## weit zurueckgesetzt -> neu anfahren
 		track["d"] = d
 	# Blinker-Pflicht auswerten: ~1,5 s nach dem Haltelinien-Schnitt die Drehung messen.
 	var now_j := Time.get_ticks_msec() / 1000.0
@@ -705,11 +708,14 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 	# gegen Fehlmeldung nach Teleport/Reset.
 	var k: Dictionary = CityLayout.junctions()["kreis"]
 	var d_k: float = p2.distance_to(k["center"])
-	if _in_circle and d_k > 13.5:
-		if _kreis_d <= 13.5 and not bool(car.get("indicator_right")):
+	# Ringkante liegt bei r=16 — erst jenseits davon ist man wirklich
+	# draussen und der Rechtsblinker kommt zu frueh, wenn man noch im
+	# Kreis faegert.
+	if _in_circle and d_k > 16.5:
+		if _kreis_d <= 16.5 and not bool(car.get("indicator_right")):
 			_warn("Beim Ausfahren aus dem Kreisverkehr rechts blinken!")
 		_in_circle = false
-	if d_k < 11.5:
+	if d_k < 14.0:
 		_in_circle = true
 	_kreis_d = d_k
 
@@ -717,7 +723,11 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 ## Linksabbieger muessen Gegenverkehr durchlassen: faehrt beim Abbiegen
 ## noch ein KI-Auto auf der Gegenspur zur Kreuzung hin, wird gewarnt.
 func _check_left_turn_oncoming(j: Dictionary, arm: Dictionary) -> void:
-	var opp: Vector2 = -Vector2(arm["enter"])   # Gegenrichtung der Einfahrt
+	# Gegenverkehr kommt dem Linksabbieger auf der ZIELGERADE
+	# entgegen: er faehrt in Richtung des Links-Knickes weiter —
+	# so greift die Regel auch an T-Kreuzungen (Zufahrt, yield_ost).
+	var fwd3: Vector3 = car.global_transform.basis.z.normalized()
+	var opp := Vector2(-fwd3.z, fwd3.x)      ## Linksabbieger-Zielachse
 	var opp3 := Vector3(opp.x, 0.0, opp.y)
 	var center: Vector2 = j["center"]
 	for t in traffic:
@@ -914,12 +924,11 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 			else:
 				_done("light", "Ampelkreuzung bei Grün — gut!")
 		"stop":
-			var last_stop: float = float(_stop_armed.get(key, -999.0))
-			var now := Time.get_ticks_msec() / 1000.0
-			if now - last_stop > 2.0:
+			if not bool(_stop_armed.get(key, false)):
 				_say("Stoppschild überfahren! STOP heißt: Fahrzeug zum Stillstand bringen, dann vorsichtig weiterfahren.", 2)
 			else:
 				_done("stop", "Sauber am Stoppschild angehalten — weiter so.")
+			_stop_armed.erase(key)
 		"yield":
 			# Nur auf Wartepflicht-Armen werten: wer auf der freien
 			# Vorfahrtstrasse durchfaehrt, macht alles richtig.
@@ -944,7 +953,6 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 				_done("rvl", "Rechts vor links — langsam reingefahren, Blick nach rechts. Gut!")
 		"roundabout":
 			_roundabout_in = true
-			_roundabout_arm = int(arm.get("lane", _roundabout_arm))
 
 
 func _check_tasks(p2: Vector2, spd: float, delta: float) -> void:
@@ -1181,7 +1189,7 @@ func _check_pedestrian(p2: Vector2, spd: float) -> void:
 			if d < 3.5 and spd > 0.8:
 				_warn("Fussgaenger auf dem Zebrastreifen — anhalten, Vorrang!")
 			if d < 1.4 and spd > 1.0:
-				_warn("Unfall! Person am Zebrastreifen angefahren — immer gucken.")
+				_say("Unfall! Person am Zebrastreifen angefahren — immer gucken.", 2)
 		else:
 			if bool(_ped_waiting.get(pid, false)) and d < 16.0:
 				_ped_waiting[pid] = false
@@ -1199,9 +1207,10 @@ func _check_rail(p2: Vector2, spd: float) -> void:
 			_warn("Bahnübergang geschlossen — Gleise sofort räumen!")
 		elif spd < 0.6:
 			_warn("Nicht auf den Gleisen halten — Bahnübergang frei machen!")
-	# Wer bei geschlossener Schranke auf die Querung zufaehrt, muss
-	# vor dem Andreaskreuz halten.
-	elif rail.is_closed() and absf(d.x) < 6.5 and absf(d.y) < 13.0 and spd > 2.0:
+	# Wer bei geschlossener Schranke die Andreaskreuz-Linie erreicht,
+	# muss halten — die Warnung kommt erst kurz vor den Schranken,
+	# nicht schon beim gehoerigen Abbremsen davor.
+	elif rail.is_closed() and absf(d.x) < 6.5 and absf(d.y) < 6.0 and spd > 2.0:
 		_warn("Schranken geschlossen — vor dem Andreaskreuz anhalten!")
 
 
@@ -1294,7 +1303,7 @@ func _check_rescue(spd: float) -> void:
 		# Referenzrichtung, wenn lane_offset zu langsam ist.
 		var vel: Vector3 = car.linear_velocity
 		if vel.length() < 2.0:
-			vel = -car.global_transform.basis.z * 3.0
+			vel = car.global_transform.basis.z * 3.0
 		var off: float = surfaces.lane_offset(car.global_position, vel)
 		# Abseits der Fahrbahn (Standstreifen/Seitenstreifen) zaehlt
 		# ebenfalls als frei gemacht.
@@ -1413,7 +1422,9 @@ func _check_roundabout(p2: Vector2, spd: float) -> void:
 			else:
 				_done("roundabout", "Kreisverkehr durchfahren — beim Rausfahren blinken.")
 				_warn("Beim Verlassen des Kreisverkehrs rechts blinken — sonst denkt der Kreis wartet auf dich.")
-	elif d < float(j["island_r"]) + 2.0 and spd > 2.0:
+	# Einfahrt in den Kreis gilt als aktiv, sobald man auf der
+	# Kreisbahn steht — die Ringkante liegt bei r=16.
+	elif d < 16.5 and spd > 2.0:
 		_roundabout_in = true
 
 

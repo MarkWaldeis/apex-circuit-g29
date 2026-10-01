@@ -39,6 +39,9 @@ const ROUTE_B := [
 	Vector2(213.0, -26.0),    # 9 Suedstrasse zurueck
 ]
 const CORNERS_B := [2, 5, 7]
+## Blink-Lite ohne Ring-EINFahrt (Index 2): ins Rondell wird per
+## Regel NICHT geblinkt — erst die Ausfahrt (5) blinkt rechts.
+const BLINK_B := [5, 7]
 
 ## Route C: ueber den Kreis zur Kreis-Nordstrasse, dort durch die
 ## Engstelle zwischen den parkenden Autos, wenden und zurueck.
@@ -70,6 +73,9 @@ const ROUTE_C := [
 	Vector2(207.0, -30.0),    # 22 Suedstrasse -> Schleife
 ]
 const CORNERS_C := [2, 8, 12, 15, 21]
+## Blinken nur bei den Kreis-AUSfahrten (8, 21) und der Wende (12) —
+## die Einfahrten (2, 15) sind blinkfrei.
+const BLINK_C := [8, 12, 21]
 
 ## Route D: grosse Ring-Runde im Uhrzeigersinn (Ost -> Nord -> West
 ## -> Sued). Auf dem 100er-Ring zieht der Lkw mit ~40 km/h seine
@@ -118,6 +124,7 @@ var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
 var truck := false           ## Lkw-Mesh + langsames Reisetempo
 var cruise := CRUISE
+var _blink: Array = CORNERS_A
 var _horn_player: AudioStreamPlayer3D
 var _horn_gen                ## AudioStreamGeneratorPlayback
 var _horn_left: float = 0.0  ## restliche Horn-Samples
@@ -131,12 +138,15 @@ func setup(p_lights, p_player, start_i: int = 0, route: int = 0) -> void:
 	if route == 1:
 		_path = ROUTE_B
 		_corners = CORNERS_B
+		_blink = BLINK_B
 	elif route == 2:
 		_path = ROUTE_C
 		_corners = CORNERS_C
+		_blink = BLINK_C
 	elif route == 3:
 		_path = ROUTE_D
 		_corners = CORNERS_D
+		_blink = CORNERS_D
 		truck = true
 		cruise = 11.0           ## Lkw schleicht mit ~40 km/h
 	_i = start_i % _path.size()
@@ -239,7 +249,7 @@ func _physics_process(delta: float) -> void:
 	# Blinker: vor Abbiege-Wegpunkten in die Abbiegerichtung blinken —
 	# der Schueler sieht die Absicht des Gegenverkehrs wie im echten Leben.
 	_blink_t += delta
-	if dist < 22.0 and _i in _corners and _path.size() > 1:
+	if dist < 22.0 and _i in _blink and _path.size() > 1:
 		var dn: Vector2 = (_path[(_i + 1) % _path.size()] - _path[_i]).normalized()
 		var turn: float = dir.x * dn.y - dir.y * dn.x   ## >0 rechts, <0 links
 		_ind_side = 1 if turn > 0.05 else (-1 if turn < -0.05 else 0)
@@ -369,12 +379,15 @@ func _yield_check(pos: Vector2, dir: Vector2, v: float) -> float:
 		if (c - pos).normalized().dot(dir) < 0.6:
 			continue
 		var d_p := p2.distance_to(c)
-		if d_p > 16.0:
+		if d_p > 16.5:
 			continue
 		if not _student_has_priority(j, p2, p_spd, dir):
 			continue
 		# Vorfahrt des Schuelers: langsam ran, dicht dran anhalten.
-		v = 0.0 if d_ai < 9.0 else minf(v, 3.0)
+		# Am Kreisverkehr muss die KI VOR der Ringkante (r=16) stehen —
+		# bei 9 m waere sie schon auf der Kreisbahn.
+		var stop_d := 16.5 if kind == "roundabout" else 9.0
+		v = 0.0 if d_ai < stop_d else minf(v, 3.0)
 	return v
 
 

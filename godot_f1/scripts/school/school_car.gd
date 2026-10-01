@@ -282,6 +282,7 @@ func _teleport_next() -> void:
 	gear = 0
 	stalled = false
 	motor_on = true
+	clutch_heat = 0.0
 	indicator_left = false
 	indicator_right = false
 	hazard = false
@@ -713,6 +714,7 @@ func _reset() -> void:
 	gear = 0
 	stalled = false
 	motor_on = true
+	clutch_heat = 0.0
 	indicator_left = false
 	indicator_right = false
 	hazard = false

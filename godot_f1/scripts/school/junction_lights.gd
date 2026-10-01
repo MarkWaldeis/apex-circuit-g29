@@ -15,7 +15,7 @@ const PHASES := [
 	{"a": "red_amber", "b": "red", "t": 1.0},
 ]
 
-var phase_index: int = 0
+
 var _t: float = 0.0
 var state := {"a": "green", "b": "red"}
 

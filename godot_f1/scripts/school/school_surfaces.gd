@@ -18,6 +18,8 @@ var _roads: Array = []
 var _lot_rect: Dictionary = {}
 var _island := {}
 var _junction_centers: Array = []
+var _baustelle := Rect2()      ## Kegel schieben auf die Gegenspur
+var _engstelle := Rect2()      ## parkende Autos -> Ausweichkorridor
 var _last_limit := -1         ## letztes Strassenlimit (Kreuzungsbereich)
 var wet := false               ## Nässe: Grip lässt überall nach
 var icy := false               ## Glätte: Grip bricht stark ein
@@ -34,6 +36,10 @@ func set_icy(on: bool) -> void:
 func setup() -> void:
 	_roads = CityLayout.roads()
 	_lot_rect = CityLayout.lot()["rect"]
+	_baustelle = CityLayout.baustelle()["zone"]
+	# Engstelle Kreis-Nordstrasse: parkende Autos auf der Ostspur,
+	# die Nordspur muss legal links ausweichen (VZ 208).
+	_engstelle = Rect2(Vector2(192.0, -120.0), Vector2(16.0, 25.0))
 	var junc: Dictionary = CityLayout.junctions()
 	_island = junc.get("kreis", {})
 	_junction_centers.clear()
@@ -171,6 +177,10 @@ func lane_offset(pos: Vector3, vel: Vector3) -> float:
 	for c in _junction_centers:
 		if p2.distance_to(c) < 14.0:
 			return 9999.0
+	# Baustelle und Engstelle: dort ist das Ausweichen auf die
+	# Gegenspur vorgesehen — kein Links-fahren-Verstoss.
+	if _baustelle.has_point(p2) or _engstelle.has_point(p2):
+		return 9999.0
 	for road in _roads:
 		if int(road.get("oneway", 0)) != 0:
 			continue

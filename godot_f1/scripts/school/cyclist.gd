@@ -8,6 +8,7 @@ const SPEED := 5.5          ## Radtempo in m/s
 
 var waypoints: Array = []   ## Vector2-Rundkurs (rechte Fahrbahnseite)
 var lights                  ## junction_lights.gd-Instanz (Ampelachtung)
+var player                  ## Schulauto — vor Fahrzeugen wird gebremst
 var _wp: int = 0
 var _wheel_a: Node3D
 var _wheel_b: Node3D
@@ -61,6 +62,16 @@ func _physics_process(delta: float) -> void:
 			var s := (stopx - global_position.x) * dirx
 			if s > -1.0 and s < 12.0:
 				spd = SPEED * clampf(s / 6.0, 0.0, 1.0) if s > 0.0 else 0.0
+	# Nicht auffahren: hält das Schulauto davor, wartet der Radler
+	# hinter dem Fahrzeug statt aufzufahren.
+	if player != null and is_instance_valid(player):
+		var dir2 := to.normalized()
+		var rel := Vector2(player.global_position.x,
+			player.global_position.z) - here
+		var ahead := rel.dot(dir2)
+		var side := absf(rel.dot(Vector2(-dir2.y, dir2.x)))
+		if ahead > 0.0 and ahead < 9.0 and side < 2.4:
+			spd = 0.0
 	var step := to.normalized() * spd * delta
 	global_position += Vector3(step.x, 0.0, step.y)
 	# Blickrichtung entlang der Fahrt: +Z-Modellachse zeigt vorn.

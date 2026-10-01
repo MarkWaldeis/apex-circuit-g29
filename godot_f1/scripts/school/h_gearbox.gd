@@ -38,8 +38,6 @@ var stalled: bool = false
 ## Diagnosezähler für den Fahrlehrer.
 var stalls: int = 0
 var grinds: int = 0
-var clean_shifts: int = 0
-var last_event: int = 0          ## 1 hoch, -1 runter, 0 nichts
 var _prev_engage: float = 1.0
 var _stall_kick: float = 0.0     ## Rest-Ruck nach dem Abwürgen
 var _crank: float = 0.0          ## Anlasser läuft
@@ -52,7 +50,6 @@ func setup() -> void:
 	stalled = false
 	stalls = 0
 	grinds = 0
-	clean_shifts = 0
 	_prev_engage = 1.0
 
 
@@ -89,8 +86,6 @@ func request_gear(g: int, clutch_pedal: float, speed_ms: float) -> bool:
 		grinds += 1
 		return false
 	gear = g
-	last_event = 1 if g > 0 else (-1 if g == -1 else 0)
-	clean_shifts += 1
 	return true
 
 
@@ -117,7 +112,6 @@ func torque_at(r: float) -> float:
 ##      clutch 0..1 = Pedalstellung (0 = Fuß weg, 1 = durchgetreten),
 ##      auto (Automatik-Assistent)
 func update(delta: float, ctx: Dictionary) -> Dictionary:
-	last_event = 0
 	var speed: float = float(ctx.get("speed", 0.0))
 	var throttle: float = clampf(float(ctx.get("throttle", 0.0)), 0.0, 1.0)
 	var brake: float = clampf(float(ctx.get("brake", 0.0)), 0.0, 1.0)
@@ -222,7 +216,6 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 		"stalled": stalled,
 		"motor_on": motor_on,
 		"judder": judder,
-		"shift_event": last_event,
 	}
 
 
@@ -238,10 +231,7 @@ func _auto_shift(speed: float, throttle: float) -> void:
 		best = gear + 1
 	elif rpm_for(gear, v) < 1250.0 and gear > 1:
 		best = gear - 1
-	elif gear == 1 and v > 26.0:
-		best = 2
 	if throttle > 0.85 and gear > 1 and rpm_for(gear - 1, v) < REDLINE - 300.0:
 		best = gear - 1     # Kickdown
 	if best != gear and best > 0:
 		gear = best
-		last_event = 1
