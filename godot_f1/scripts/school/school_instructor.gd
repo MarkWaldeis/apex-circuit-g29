@@ -82,6 +82,7 @@ var _idle_rev_t: float = 0.0
 var _rev_t: float = 0.0
 var _coast_t: float = 0.0
 var _blink_left_t: float = 0.0  ## Blinker laeuft ohne Lenkung (Vergessen)
+var _neut_rev_t: float = 0.0    ## Gas gegeben ohne eingelegten Gang
 var _coach_cd: float = 0.0
 var _signs_seen := {}
 var _door_cd: float = 0.0
@@ -377,6 +378,15 @@ func _check_habits(spd: float, delta: float) -> void:
 			_coast_t = -8.0
 	else:
 		_coast_t = minf(_coast_t + delta, 0.0)
+	# Gas im Leerlauf: der Motor heult, aber kein Gang ist drin —
+	# Anfängerfehler, auf den sofort hingewiesen wird.
+	if gear == 0 and bool(car.get("motor_on")) and float(car.get("rpm")) > 2200.0:
+		_neut_rev_t += delta
+		if _neut_rev_t > 1.2:
+			_say("Gas ohne Gang — erst die Kupplung treten und den ersten Gang einlegen.", 1)
+			_neut_rev_t = -6.0
+	else:
+		_neut_rev_t = minf(_neut_rev_t + delta, 0.0)
 	# Vergessener Blinker: laeuft der Blinker weiter, ohne dass gelenkt
 	# wird, glaubt der Verkehr eine Abbiegeabsicht — ausschalten!
 	var ind_on := bool(car.get("indicator_left")) or bool(car.get("indicator_right"))
