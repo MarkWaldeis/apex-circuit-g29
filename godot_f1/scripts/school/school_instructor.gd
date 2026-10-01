@@ -47,6 +47,7 @@ const TASKS := [
 	{"id": "warndreieck", "name": "Warndreieck abgesichert (Taste D)"},
 	{"id": "auspark", "name": "Rückwärts aus der Parkbucht ausgefahren"},
 	{"id": "rueck", "name": "Rückwärts im Pylonen-Korridor"},
+	{"id": "fernlicht", "name": "Fernlicht richtig benutzt (Taste F)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -1395,6 +1396,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_auspark(p2, spd, delta)
 	_check_nacht(spd, delta)
 	_check_nebel(spd, delta)
+	_check_fernlicht(p2, spd, delta)
 	_check_baustelle(p2, spd)
 	_check_spiel(p2, spd)
 	_check_schleif(spd, delta)
@@ -1586,6 +1588,52 @@ func _check_nacht(spd: float, delta: float) -> void:
 	elif spd > 3.0 and _night_cd <= 0.0:
 		_warn("Bei Dunkelheit Abblendlicht an — Taste L.")
 		_night_cd = 8.0
+
+
+## Fernlicht-Regel (nur bei Nacht, nicht auf dem Platz): wer Fernlicht
+## bei Gegenverkehr laesst, blendet — wer es auf freier, dunkler
+## Strecke ein paar Sekunden nutzt, hat die Regel verstanden.
+var _fb_dist := 0.0
+var _fb_cd := 0.0
+var _fb_hinted := false
+func _check_fernlicht(p2: Vector2, spd: float, delta: float) -> void:
+	_fb_cd = maxf(_fb_cd - delta, 0.0)
+	if not night:
+		_fb_dist = 0.0
+		return
+	var lr: Dictionary = CityLayout.lot()["rect"]
+	if p2.x > float(lr["x0"]) and p2.x < float(lr["x1"]) \
+			and p2.y > float(lr["z0"]) and p2.y < float(lr["z1"]):
+		return
+	var v2 := Vector2(car.linear_velocity.x, car.linear_velocity.z)
+	var facing := v2.length() > 1.0
+	var near := false
+	for tc in traffic:
+		if not is_instance_valid(tc):
+			continue
+		var rel := Vector2(tc.global_position.x,
+			tc.global_position.z) - p2
+		var d := rel.length()
+		if d > 80.0:
+			continue
+		if facing and rel.normalized().dot(v2.normalized()) > 0.3:
+			near = true
+		elif not facing:
+			near = true
+	if bool(car.get("high_beam")):
+		if near and _fb_cd <= 0.0:
+			_warn("Fernlicht blendet den Gegenverkehr — abblenden (Taste F)!")
+			_fb_cd = 8.0
+			_fb_dist = 0.0
+			return
+		if not near:
+			_fb_dist += spd * delta
+			if _fb_dist > 60.0:
+				_done("fernlicht", "Fernlicht auf dunkler, freier Strecke — und rechtzeitig abblenden. Gut!")
+	elif not _fb_hinted and bool(car.get("headlights_on")) \
+			and spd > 8.0 and not near:
+		_fb_hinted = true
+		_say("Dunkel und frei vorne — hier darf das Fernlicht helfen (Taste F, bei Gegenverkehr abblenden!).", 0)
 
 
 func _check_einfadeln(p2: Vector2, spd: float) -> void:

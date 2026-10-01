@@ -248,6 +248,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_E: _toggle_indicator("r")
 		KEY_T: _teleport_next()
 		KEY_L: _toggle_lights()
+		KEY_F: _toggle_high_beam()
 		KEY_H:
 			hazard = not hazard
 			if hazard:
@@ -260,6 +261,27 @@ func _toggle_lights() -> void:
 	headlights_on = not headlights_on
 	for s in _headlights:
 		s.visible = headlights_on
+	if not headlights_on and high_beam:
+		_set_high_beam(false)
+
+
+## Fernlicht (Taste F): weit und steiler gestellt — blendet den
+## Gegenverkehr, deshalb nur auf dunkler, freier Strecke erlaubt.
+var high_beam := false
+func _toggle_high_beam() -> void:
+	if not headlights_on:
+		return
+	_set_high_beam(not high_beam)
+
+
+func _set_high_beam(on: bool) -> void:
+	high_beam = on
+	for s in _headlights:
+		s.spot_range = 60.0 if on else 26.0
+		s.spot_angle = 20.0 if on else 28.0
+		s.light_energy = 16.0 if on else 9.0
+		s.basis = Basis.from_euler(
+			Vector3(-0.16 if on else -0.38, PI, 0.0))
 
 
 ## Taste T: direkt an die naechste Uebungsstation springen - das Auto
