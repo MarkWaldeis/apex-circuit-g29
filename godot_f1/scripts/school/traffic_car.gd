@@ -58,6 +58,10 @@ var _stop_left: float = 0.0      ## verbleibende Haltezeit am Stoppschild
 var _stop_done: bool = false     ## Stoppschild diese Runde schon bedient
 var pedestrians: Array = []    ## Fussgaenger, vor denen man anhaelt
 var _brake_lamps: Array = []   ## Rueckleuchten-Meshs (gemeinsames Material)
+var _ind_lamps := {"l": [], "r": []}  ## Blinker-Lampen links/rechts
+var _ind_side := 0             ## -1 links, +1 rechts, 0 aus
+var _ind_hold := 0.0           ## Nachlaufzeit des Blinkers
+var _blink_t := 0.0
 var _path: Array = ROUTE_A
 var _corners: Array = CORNERS_A
 
@@ -96,6 +100,24 @@ func _physics_process(delta: float) -> void:
 	if dist < 16.0 and _i in _corners:
 		v = CORNER_V
 	v = _apply_rules(pos, dir, v)
+
+	# Blinker: vor Abbiege-Wegpunkten in die Abbiegerichtung blinken —
+	# der Schueler sieht die Absicht des Gegenverkehrs wie im echten Leben.
+	_blink_t += delta
+	if dist < 22.0 and _i in _corners and _path.size() > 1:
+		var dn: Vector2 = (_path[(_i + 1) % _path.size()] - _path[_i]).normalized()
+		var turn: float = dir.x * dn.y - dir.y * dn.x   ## >0 rechts, <0 links
+		_ind_side = 1 if turn > 0.05 else (-1 if turn < -0.05 else 0)
+		_ind_hold = 2.6
+	elif _ind_hold > 0.0:
+		_ind_hold -= delta
+	else:
+		_ind_side = 0
+	var blink_on: bool = fmod(_blink_t, 0.8) < 0.42
+	for l in _ind_lamps["l"]:
+		l.visible = blink_on and _ind_side < 0
+	for l in _ind_lamps["r"]:
+		l.visible = blink_on and _ind_side > 0
 
 	var accel := ACCEL if v > speed_ms else ACCEL * 2.2
 	speed_ms = move_toward(speed_ms, v, accel * delta)
@@ -289,3 +311,22 @@ func _build_mesh() -> void:
 		lamp.position = Vector3(lx, 0.68, -2.12)
 		add_child(lamp)
 		_brake_lamps.append(lamp)
+
+	# Blinker: gelbe Eckleuchten vorn/hinten je Seite. Fahrtrichtung +z,
+	# Fahrer-Links = +x, Fahrer-Rechts = -x.
+	var amber := StandardMaterial3D.new()
+	amber.albedo_color = Color(0.95, 0.58, 0.06)
+	amber.emission_enabled = true
+	amber.emission = Color(1.0, 0.55, 0.05)
+	amber.emission_energy_multiplier = 2.2
+	for sxp in [[0.84, "l"], [-0.84, "r"]]:
+		for lz in [2.12, -2.12]:
+			var il := MeshInstance3D.new()
+			var im := BoxMesh.new()
+			im.size = Vector3(0.30, 0.13, 0.06)
+			il.mesh = im
+			il.material_override = amber
+			il.position = Vector3(sxp[0], 0.70, lz)
+			il.visible = false
+			add_child(il)
+			_ind_lamps[sxp[1]].append(il)
