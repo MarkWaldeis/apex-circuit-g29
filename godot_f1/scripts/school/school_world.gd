@@ -68,11 +68,13 @@ func _ready() -> void:
 
 	# KI-Gegenverkehr: zwei Stadtautos auf der Blockrunde, halbe Runde
 	# versetzt — die Welt fuehlt sich belebt an, der Fahrlehrer passt auf.
+	var traffic_cars := []
 	for s in [1, 5]:
 		var tc := TrafficCar.new()
 		tc.name = "TrafficCar%d" % s
 		add_child(tc)
 		tc.setup(lights, player, s)
+		traffic_cars.append(tc)
 
 	var ped := Pedestrian.new()
 	ped.name = "Pedestrian"
@@ -83,6 +85,7 @@ func _ready() -> void:
 	instructor.pedestrian = ped
 	instructor.cams = built.get("cams", [])
 	instructor.cyclist = built.get("cyclist")
+	instructor.traffic = traffic_cars
 	# Ziel-Marker der Pruefungsfahrt: leuchtende Saeule am naechsten Wegpunkt.
 	_exam_beam = MeshInstance3D.new()
 	var bcyl := CylinderMesh.new()

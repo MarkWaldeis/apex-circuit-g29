@@ -37,6 +37,7 @@ var lights          ## junction_lights.gd Instanz (kann null sein)
 var pedestrian      ## Fussgaenger am Zebrastreifen (kann null sein)
 var exam = ExamRoute.new()   ## Pruefungsfahrt-Route (Taste P startet)
 var cams := []               ## speed_cam.gd-Instanzen aus city_builder
+var traffic := []            ## traffic_car.gd-Instanzen (Vorfahrt-Checks)
 var _ped_waiting := false
 var _speed_over: float = 0.0
 var _speed_limit: int = -1
@@ -67,6 +68,7 @@ var _door_cd: float = 0.0
 var _idle_t: float = 0.0
 var _cyc_cd: float = 0.0
 var _was_still: bool = true
+var _prio_cd: float = 0.0
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -138,6 +140,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_habits(spd, delta)
 	_check_door_zone(p2, spd, delta)
 	_check_cyclist(p2, spd, delta)
+	_check_priority(p2, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
 	_coach_idle(spd, delta)
@@ -282,6 +285,62 @@ func _check_door_zone(p2: Vector2, spd: float, delta: float) -> void:
 
 
 # Radfahrer-Seitenabstand: Überholen erst ab ~1,5 m Seitenabstand.
+# Vorfahrt missachtet: der Schueler faehrt in eine Kreuzung ein, waehrend
+# ein KI-Auto naeher kommt, das er haette durchlassen muessen.
+func _check_priority(p2: Vector2, spd: float, delta: float) -> void:
+	_prio_cd = maxf(_prio_cd - delta, 0.0)
+	if _prio_cd > 0.0 or traffic.is_empty() or spd < 2.0:
+		return
+	var s_dir := Vector2(car.global_transform.basis.z.x, car.global_transform.basis.z.z).normalized()
+	for j in CityLayout.junctions().values():
+		var kind := String(j["kind"])
+		if kind != "rbl" and kind != "yield":
+			continue
+		var c: Vector2 = j["center"]
+		if p2.distance_to(c) > 9.0:
+			continue
+		var to_c := (c - p2).normalized()
+		if to_c.dot(s_dir) < 0.3:
+			continue   # durchquert die Kreuzung nicht (mehr)
+		var s_arm := _nearest_arm(j, p2)
+		for tc in traffic:
+			if not is_instance_valid(tc):
+				continue
+			var tp := Vector2(tc.global_position.x, tc.global_position.z)
+			if tp.distance_to(c) > 14.0:
+				continue
+			var t_dir := Vector2(tc.global_transform.basis.z.x, tc.global_transform.basis.z.z).normalized()
+			if (c - tp).normalized().dot(t_dir) < 0.4:
+				continue   # KI faehrt von der Kreuzung weg
+			var t_arm := _nearest_arm(j, tp)
+			if t_arm == s_arm:
+				continue   # gleiche Einfahrt: Auffahren, kein Vorfahrt-Fall
+			var bad := false
+			if kind == "yield":
+				# Schueler sitzt auf dem Yield-Arm (wartepflichtig).
+				var e: Vector2 = s_arm["enter"]
+				bad = s_dir.dot(e.normalized()) > 0.5
+			else:
+				# rbl: KI kommt dem Schueler von rechts.
+				var right := Vector2(s_dir.y, s_dir.x)
+				bad = t_dir.dot(-right) > 0.45
+			if bad:
+				_say("Vorfahrt missachtet — der Gegenverkehr hatte Vorfahrt. In der Pruefung waere das vorbei.", 2)
+				_prio_cd = 20.0
+				return
+
+
+func _nearest_arm(j: Dictionary, p: Vector2) -> Dictionary:
+	var best: Dictionary = {}
+	var best_d := 999.0
+	for arm in j.get("arms", []):
+		var d: float = (arm["pos"] as Vector2).distance_to(p)
+		if d < best_d:
+			best_d = d
+			best = arm
+	return best
+
+
 func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:
 	_cyc_cd = maxf(_cyc_cd - delta, 0.0)
 	if cyclist == null or not is_instance_valid(cyclist) or _cyc_cd > 0.0:
