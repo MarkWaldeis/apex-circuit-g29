@@ -271,7 +271,7 @@ static func exercise_spots() -> Array:
 		{"name": "Querparken", "pos": Vector2(-22, 96), "dir": Vector2(0, 1)},
 		{"name": "Slalom", "pos": Vector2(-62, 64), "dir": Vector2(1, 0)},
 		{"name": "Bremsbahn", "pos": Vector2(-62, 46), "dir": Vector2(1, 0)},
-		{"name": "Berganfahren", "pos": Vector2(-66, 50), "dir": Vector2(0, 1)},
+		{"name": "Berganfahren", "pos": Vector2(-66, 80), "dir": Vector2(0, -1)},
 		{"name": "Wendekreis", "pos": Vector2(30, 104), "dir": Vector2(0, -1)},
 		{"name": "Ampelkreuzung", "pos": Vector2(-78, -60), "dir": Vector2(-1, 0)},
 		{"name": "Stopp-Kreuzung", "pos": Vector2(78, -60), "dir": Vector2(1, 0)},

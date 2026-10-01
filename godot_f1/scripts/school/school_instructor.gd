@@ -62,6 +62,7 @@ var _rev_t: float = 0.0
 var _coach_cd: float = 0.0
 var _signs_seen := {}
 var _door_cd: float = 0.0
+var _idle_t: float = 0.0
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -134,8 +135,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_door_zone(p2, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
-	if _coach_cd <= 0.0 and _coach_t_upcoming():
-		pass
+	_coach_idle(spd, delta)
 
 
 func linear_speed() -> float:
@@ -545,5 +545,19 @@ func _in_rect(p: Vector2, r: Rect2) -> bool:
 		and p.y >= r.position.y and p.y <= r.position.y + r.size.y
 
 
-func _coach_t_upcoming() -> bool:
-	return false
+# Steht der Schüler länger im Still, deutet der Fahrlehrer die nächste
+# offene Übung an (Teleport-Taste T bringt direkt zur Station).
+func _coach_idle(spd: float, delta: float) -> void:
+	if spd < 0.4:
+		_idle_t += delta
+	else:
+		_idle_t = 0.0
+	if _idle_t > 25.0:
+		_idle_t = -45.0
+		if _coach_cd > 0.0:
+			return
+		for t in TASKS:
+			if not _tasks_done.get(t["id"], false):
+				_say("Tipp: %s wartet noch — mit Taste T springst du direkt zur Station." % String(t["name"]), 0)
+				_coach_cd = 6.0
+				return
