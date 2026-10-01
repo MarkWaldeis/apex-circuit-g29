@@ -2,8 +2,12 @@ extends AnimatableBody3D
 ## KI-Verkehr: ein Stadtauto auf fester Blockrunde durch die Fahrschul-
 ## Stadt (Schulstraße -> Weststraße -> Hauptstraße -> Oststraße, links
 ## herum um den Block, auf der rechten Fahrspur). Haelt an der Ampel,
-## macht am Stoppschild eine Vollbremsung und bremst vor dem Schuelerauto.
-## Kinematischer Koerper: der Schueler kann dagegen fahren und merkt es.
+## macht am Stoppschild eine Vollbremsung, laesst dem Schueler die
+## Vorfahrt (rechts vor links / Vorfahrt gewaehren) und bremst vor dem
+## Schuelerauto. Kinematischer Koerper: der Schueler kann dagegen
+## fahren und merkt es.
+
+const CityLayout = preload("res://scripts/school/city_layout.gd")
 
 ## Wegpunkte (x, z) — Spur ~1.8 m rechts der Fahrbahnmitte.
 const PATH := [
@@ -99,7 +103,74 @@ func _apply_rules(pos: Vector2, dir: Vector2, v: float) -> float:
 		var side := absf(rel.dot(Vector2(-dir.y, dir.x)))
 		if ahead > 0.0 and ahead < 10.0 and side < 3.2:
 			v = minf(v, 0.0)
+	v = _yield_check(pos, dir, v)
 	return v
+
+
+# Vorfahrt: kommt das Auto auf eine Kreuzung zu, auf der der Schueler
+# wartet oder gerade quert, entscheidet die Regel wer faehrt — sonst
+# lernt niemand, dass Gegenverkehr auch mal warten muss.
+func _yield_check(pos: Vector2, dir: Vector2, v: float) -> float:
+	if player == null:
+		return v
+	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	var p_spd := Vector2(player.linear_velocity.x, player.linear_velocity.z).length()
+	for j in CityLayout.junctions().values():
+		var kind := String(j["kind"])
+		if kind != "rbl" and kind != "yield":
+			continue
+		var c: Vector2 = j["center"]
+		var d_ai := pos.distance_to(c)
+		if d_ai > 24.0 or d_ai < 1.5:
+			continue
+		if (c - pos).normalized().dot(dir) < 0.6:
+			continue
+		var d_p := p2.distance_to(c)
+		if d_p > 16.0:
+			continue
+		if not _student_has_priority(j, p2, p_spd, dir):
+			continue
+		# Vorfahrt des Schuelers: langsam ran, dicht dran anhalten.
+		v = 0.0 if d_ai < 9.0 else minf(v, 3.0)
+	return v
+
+
+func _student_has_priority(j: Dictionary, p2: Vector2, p_spd: float, dir: Vector2) -> bool:
+	var c: Vector2 = j["center"]
+	# Steht der Schueler still und weit draussen, faehrt die KI einfach —
+	# sonst wartet sie ewig auf zoegerliche Anfaenger.
+	if p_spd < 1.0 and p2.distance_to(c) > 9.0:
+		return false
+	# Arm des Schuelers und eigener Arm bestimmen.
+	var p_arm: Dictionary = {}
+	var ai_arm: Dictionary = {}
+	var p_best := 999.0
+	var ai_best := 999.0
+	var me := Vector2(global_position.x, global_position.z)
+	for arm in j.get("arms", []):
+		var ap: Vector2 = arm["pos"]
+		var dp := ap.distance_to(p2)
+		if dp < p_best:
+			p_best = dp
+			p_arm = arm
+		var da := ap.distance_to(me)
+		if da < ai_best:
+			ai_best = da
+			ai_arm = arm
+	if p_arm.is_empty():
+		return false
+	if p_arm == ai_arm:
+		return false   # gleiche Einfahrt — dafuer bremst schon die Kolonne
+	if String(j["kind"]) == "yield":
+		# Yield-Arme sind die Wartepflichtigen. Stehen wir gar nicht auf
+		# einem, fahren wir auf der Vorfahrtstrasse — der Schueler wartet.
+		var e: Vector2 = ai_arm["enter"]
+		var on_yield_arm: bool = ai_best < 7.0 and dir.normalized().dot(e.normalized()) > 0.6
+		return on_yield_arm
+	# rbl: der Schueler faehrt uns von rechts rein.
+	var right := Vector2(dir.y, dir.x)
+	var e: Vector2 = p_arm["enter"]
+	return e.normalized().dot(-right) > 0.45
 
 
 func _build_mesh() -> void:
