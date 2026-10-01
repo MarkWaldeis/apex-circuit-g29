@@ -796,14 +796,22 @@ func _build_tankstelle() -> void:
 
 
 ## Wer in der Tankstellen-Zone steht, tankt auf (~30 %/s).
+var _tank_hint_cd: float = 0.0
 func _tank_tick(delta: float) -> void:
+	_tank_hint_cd = maxf(_tank_hint_cd - delta, 0.0)
 	if player == null:
 		return
 	var z: Rect2 = CityLayout.tankstelle()["zone"]
 	var p2 := Vector2(player.global_position.x, player.global_position.z)
+	# Tanken nur bei abgestelltem Motor — wie an der echten Zapfsaeule.
 	if z.has_point(p2) and player.linear_velocity.length() < 0.5 \
 			and player.fuel < 100.0:
-		player.fuel = minf(player.fuel + delta * 30.0, 100.0)
+		if bool(player.motor_on):
+			if instructor != null and _tank_hint_cd <= 0.0:
+				instructor._say("Erst Motor aus — an der Zapfsäule wird mit abgestelltem Motor getankt.", 1)
+				_tank_hint_cd = 15.0
+		else:
+			player.fuel = minf(player.fuel + delta * 30.0, 100.0)
 		if player.fuel >= 100.0 and instructor != null:
 			instructor._done("tanken", "Vollgetankt — Tankstelle angefahren, richtig gestanden, weiter geht's!")
 
