@@ -31,6 +31,7 @@ const TASKS := [
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
 	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
 	{"id": "vorfahrt", "name": "Vorfahrt gewährt"},
+	{"id": "rvl", "name": "Rechts vor links beachtet"},
 	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
 	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
 	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
@@ -647,6 +648,8 @@ func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: flo
 		"rbl":
 			if spd > 8.0:
 				_warn("Rechts vor links: langsam reinfahren und rechts schauen.")
+			else:
+				_done("rvl", "Rechts vor links — langsam reingefahren, Blick nach rechts. Gut!")
 		"roundabout":
 			_roundabout_in = true
 			_roundabout_arm = int(arm.get("lane", _roundabout_arm))
