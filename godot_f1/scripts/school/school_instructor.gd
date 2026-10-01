@@ -1470,6 +1470,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_weather_speed(spd, delta)
 	_check_fuel()
 	_check_right_lane(p2, spd, delta)
+	_check_blindspot(spd, delta)
 	_check_rescue(spd)
 	if exam.active:
 		for ev in exam.update(p2):
@@ -1989,6 +1990,44 @@ func _check_right_lane(p2: Vector2, spd: float, delta: float) -> void:
 			_rl_t = 0.0
 	else:
 		_rl_t = 0.0
+
+
+## Toter Winkel: blinkt der Schueler zu einer Seite, auf der gerade
+## ein Fahrzeug oder Radfahrer daneben faehrt (2-6 m vor/zurueck,
+## 1,6-4,5 m seitlich), wird der Schulterblick angemahnt — im echten
+## Verkehr uebersieht man die genau dort.
+var _bs_cd := 0.0
+func _check_blindspot(spd: float, delta: float) -> void:
+	_bs_cd = maxf(_bs_cd - delta, 0.0)
+	if _bs_cd > 0.0 or spd < 4.0:
+		return
+	var l := bool(car.get("indicator_left"))
+	var r := bool(car.get("indicator_right"))
+	if not (l or r):
+		return
+	var fwd := Vector2(car.global_transform.basis.z.x,
+		car.global_transform.basis.z.z).normalized()
+	var right := Vector2(-fwd.y, fwd.x)
+	var side := -1.0 if l else 1.0   # gesuchte Fahrtrichtung-Seite
+	for v in traffic:
+		if not is_instance_valid(v):
+			continue
+		var rel := Vector2(v.global_position.x, v.global_position.z) - \
+			Vector2(car.global_position.x, car.global_position.z)
+		var ahead := rel.dot(fwd)
+		var lateral := rel.dot(right) * side
+		if ahead > -4.0 and ahead < 5.0 and lateral > 1.6 and lateral < 4.6:
+			_say("Toter Winkel belegt! Auf der %s hängt ein Fahrzeug — Schulterblick, bevor du rausziehst." % ("linken Seite" if l else "rechten Seite"), 1)
+			_bs_cd = 15.0
+			return
+	if cyclist != null and is_instance_valid(cyclist):
+		var rel2 := Vector2(cyclist.global_position.x, cyclist.global_position.z) - \
+			Vector2(car.global_position.x, car.global_position.z)
+		var ahead2 := rel2.dot(fwd)
+		var lat2 := rel2.dot(right) * side
+		if ahead2 > -4.0 and ahead2 < 5.0 and lat2 > 1.4 and lat2 < 4.2:
+			_say("Radfahrer im toten Winkel — Schulterblick vor dem Abbiegen oder Ausscheren!", 1)
+			_bs_cd = 15.0
 
 
 func _check_rescue(spd: float) -> void:
