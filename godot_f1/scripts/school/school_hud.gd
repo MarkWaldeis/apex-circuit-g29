@@ -28,6 +28,7 @@ var _mirror_r: Camera3D
 var _dist_label: Label
 var _backup_panel: PanelContainer
 var _backup_cam: Camera3D
+var _help: PanelContainer
 var _mini_cam: Camera3D
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
@@ -241,6 +242,41 @@ func _build() -> void:
 	UI.label(_tasks, 17, UI.TEXT)
 	_tasks.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tv.add_child(_tasks)
+
+	# --- Hilfe-Overlay (F1): alle Tasten im Überblick --------------------------
+	_help = PanelContainer.new()
+	_help.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 10))
+	_help.set_anchors_preset(Control.PRESET_CENTER)
+	_help.position = Vector2(-230, -210)
+	_help.custom_minimum_size = Vector2(460, 0)
+	_help.visible = false
+	root.add_child(_help)
+	var hv := VBoxContainer.new()
+	hv.add_theme_constant_override("separation", 6)
+	_help.add_child(hv)
+	var htitle := Label.new()
+	htitle.text = "Tasten (F1 schließt)"
+	UI.title(htitle, 22)
+	hv.add_child(htitle)
+	var htext := Label.new()
+	htext.text = (
+		"WASD / Pfeile – Fahren\n"
+		+ "1–6 Gänge · 0 Leerlauf · V Rückwärts\n"
+		+ "Q / E – Blinker links / rechts\n"
+		+ "H – Warnblinker · Leertaste – Handbremse\n"
+		+ "L – Abblendlicht · U – Nacht · N – Nässe\n"
+		+ "T – zur nächsten Übung springen\n"
+		+ "P – Prüfungsfahrt starten / beenden\n"
+		+ "C – Kamera · R – zurücksetzen\n"
+		+ "Esc – Menü · F1 – diese Hilfe"
+	)
+	UI.label(htext, 16, UI.TEXT)
+	hv.add_child(htext)
+
+
+func toggle_help() -> void:
+	if _help:
+		_help.visible = not _help.visible
 
 
 func _mirror_panel(px: Vector2i, fov: float) -> Array:

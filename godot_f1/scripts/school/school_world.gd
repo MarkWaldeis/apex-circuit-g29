@@ -162,6 +162,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.physical_keycode == KEY_P:
 		if instructor:
 			instructor.toggle_exam()
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.physical_keycode == KEY_F1:
+		if hud and hud.has_method("toggle_help"):
+			hud.toggle_help()
 
 
 func _update_exam_beam() -> void:
