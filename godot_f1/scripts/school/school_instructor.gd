@@ -35,6 +35,7 @@ const TASKS := [
 	{"id": "nacht", "name": "Nachtfahrt mit Abblendlicht"},
 	{"id": "nebel", "name": "Nebelfahrt mit Abblendlicht"},
 	{"id": "baustelle", "name": "Baustelle: Tempo 30"},
+	{"id": "einfaden", "name": "Einfädeln auf die 100er-Straße"},
 	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
@@ -101,6 +102,8 @@ var _warn_cnt := 0            ## abgegebene Hinweise/Verwarnungen
 var _ba_in := false           ## Schueler aktuell in der Baustellenzone
 var _ba_clean := true         ## Durchfahrt ohne Tempoverstoss
 var _slip_t := 0.0            ## Zeit am Schleifpunkt in Kriechfahrt
+var _auf_armed := false       ## Schueler ist auf der Auffahrt Oststrasse
+var _auf_slow := false        ## Auffahrt wurde zu langsam angefahren
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -858,6 +861,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_nebel(spd, delta)
 	_check_baustelle(p2, spd)
 	_check_schleif(spd, delta)
+	_check_einfadeln(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -969,6 +973,29 @@ func _check_nacht(spd: float, delta: float) -> void:
 	elif spd > 3.0 and _night_cd <= 0.0:
 		_warn("Bei Dunkelheit Abblendlicht an — Taste L.")
 		_night_cd = 8.0
+
+
+func _check_einfadeln(p2: Vector2, spd: float) -> void:
+	# Auffahrt Oststrasse (x=100) -> Ring Nord (z=-240): im fliessenden
+	# Verkehr braucht man Anlauf — unter ~58 km/h einfaedein bremsen
+	# den Verkehr aus.
+	var auf_ost := p2.x > 93.0 and p2.x < 107.0 and p2.y < -205.0 and p2.y > -238.0
+	if auf_ost:
+		if spd > 13.0:
+			_auf_armed = true
+		elif p2.y > -222.0:
+			_auf_slow = true
+	elif _auf_armed and p2.y < -236.5 and absf(p2.x - 100.0) > 8.0:
+		_auf_armed = false
+		if spd > 16.0:
+			_done("einfaden", "Einfädeln — auf der Auffahrt beschleunigt und flüssig eingeordnet!")
+			_auf_slow = false
+		elif _auf_slow or spd > 8.0:
+			_warn("Beim Einfädeln Gas geben — auf dem Streifen kommt man auf Tempo.")
+			_auf_slow = false
+	elif p2.y > -200.0:
+		_auf_armed = false
+		_auf_slow = false
 
 
 func _check_schleif(spd: float, delta: float) -> void:

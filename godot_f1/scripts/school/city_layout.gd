@@ -218,6 +218,8 @@ static func signs() -> Array:
 		{"kind": "baustelle", "pos": Vector3(32.0, 0, 136.6), "rot_y": 90.0},
 		{"kind": "limit", "arg": "30", "pos": Vector3(24.0, 0, 136.6), "rot_y": 90.0},
 		{"kind": "limit_end", "pos": Vector3(-46.0, 0, 136.6), "rot_y": 90.0},
+		# Auffahrt-Hinweis auf der Oststrasse Richtung Ring Nord.
+		{"kind": "board", "arg": "Auffahrt — Gas geben", "pos": Vector3(96.4, 0, -212.0), "rot_y": 90.0},
 		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
 		{"kind": "yield", "pos": Vector3(-4.4, 0, -57.0), "rot_y": 0.0},
 		# Zeichen 306 Vorfahrtstraße: die Hauptstraße hat vor der Zufahrt
