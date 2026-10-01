@@ -23,6 +23,8 @@ var _ind_l: Label
 var _ind_r: Label
 var _stall_warn: Label
 var _mirror_cam: Camera3D
+var _mirror_l: Camera3D
+var _mirror_r: Camera3D
 var _blink_t: float = 0.0
 var _coach_t: float = 0.0
 var _coach_text: String = ""
@@ -156,25 +158,23 @@ func _build() -> void:
 	UI.label(_status, 20, UI.GOOD)
 	limitrow.add_child(_status)
 
-	# Innenspiegel: kleiner Viewport mit eigener Kamera, die hinter das Auto
-	# schaut — unverzichtbar für Einparken und Rückwärtsfahren.
-	var mirror := PanelContainer.new()
-	mirror.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 6))
-	mirror.custom_minimum_size = Vector2(368, 148)
-	top.add_child(mirror)
-	var sub_wrap := SubViewportContainer.new()
-	sub_wrap.stretch = true
-	sub_wrap.custom_minimum_size = Vector2(360, 140)
-	mirror.add_child(sub_wrap)
-	var vp := SubViewport.new()
-	vp.size = Vector2i(360, 140)
-	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	sub_wrap.add_child(vp)
-	_mirror_cam = Camera3D.new()
-	_mirror_cam.fov = 64.0
-	_mirror_cam.far = 400.0
-	vp.add_child(_mirror_cam)
-	_mirror_cam.current = true
+	# Innenspiegel oben mittig, Außenspiegel links/rechts am Bildschirmrand —
+	# kleine Viewports mit eigenen Kameras, die hinter das Auto schauen.
+	var mirror := _mirror_panel(Vector2i(360, 140), 64.0)
+	top.add_child(mirror[0])
+	_mirror_cam = mirror[1]
+
+	var ml := _mirror_panel(Vector2i(240, 140), 58.0)
+	ml[0].set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	ml[0].position = Vector2(12, 60)
+	root.add_child(ml[0])
+	_mirror_l = ml[1]
+
+	var mr := _mirror_panel(Vector2i(240, 140), 58.0)
+	mr[0].set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	mr[0].position = Vector2(-260, 60)
+	root.add_child(mr[0])
+	_mirror_r = mr[1]
 
 	_coach = Label.new()
 	UI.label(_coach, 24, UI.TEXT)
@@ -207,6 +207,27 @@ func _build() -> void:
 	UI.label(_tasks, 17, UI.TEXT)
 	_tasks.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tv.add_child(_tasks)
+
+
+func _mirror_panel(px: Vector2i, fov: float) -> Array:
+	# [PanelContainer, Camera3D] — gerahmter Mini-Viewport mit Weltkamera.
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UI.box(UI.BG_DEEP, UI.LINE, 1, 6))
+	panel.custom_minimum_size = Vector2(px.x + 8, px.y + 8)
+	var sub_wrap := SubViewportContainer.new()
+	sub_wrap.stretch = true
+	sub_wrap.custom_minimum_size = Vector2(px)
+	panel.add_child(sub_wrap)
+	var vp := SubViewport.new()
+	vp.size = px
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	sub_wrap.add_child(vp)
+	var cam := Camera3D.new()
+	cam.fov = fov
+	cam.far = 400.0
+	vp.add_child(cam)
+	cam.current = true
+	return [panel, cam]
 
 
 func _on_coached(text: String, level: int) -> void:
@@ -265,9 +286,18 @@ func _process(delta: float) -> void:
 	if instructor and instructor.has_method("task_board"):
 		_tasks.text = instructor.task_board()
 
-	# Innenspiegel folgt dem Auto: gleiche Basis, leicht nach unten geneigt —
-	# die Kamera blickt entlang -Z von der Heckkante aus hinter das Auto,
-	# sodass die Karosserie nur den unteren Bildrand füllt.
+	# Spiegel folgen dem Auto. Innenspiegel: von der Heckkante leicht geneigt
+	# entlang -Z (das Auto fährt entlang +Z). Außenspiegel: seitlich an den
+	# Türen, nach hinten-außen gerichtet — das Auto fährt mit vorne entlang
+	# +Z, also liegt die linke Türseite bei +X.
 	if _mirror_cam:
 		_mirror_cam.global_transform = car.global_transform * Transform3D(
 			Basis(Vector3.RIGHT, -0.07), Vector3(0.0, 1.75, -1.10))
+	if _mirror_l:
+		_mirror_l.global_transform = car.global_transform * Transform3D(
+			Basis.looking_at(Vector3(0.62, -0.10, -0.78).normalized(), Vector3.UP),
+			Vector3(1.05, 1.30, -0.40))
+	if _mirror_r:
+		_mirror_r.global_transform = car.global_transform * Transform3D(
+			Basis.looking_at(Vector3(-0.62, -0.10, -0.78).normalized(), Vector3.UP),
+			Vector3(-1.05, 1.30, -0.40))

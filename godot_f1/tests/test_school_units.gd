@@ -35,6 +35,7 @@ func _run() -> void:
 		quit(1)
 	else:
 		print("SCHOOL_UNITS PASS")
+		quit(0)
 
 
 func _test_gearbox() -> void:
