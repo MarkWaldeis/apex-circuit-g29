@@ -89,6 +89,7 @@ var _horn_phase: float = 0.0
 var _pdc_gap: float = 0.0      ## Samples bis zum naechsten Parkpiep
 var _pdc_left: float = 0.0     ## Samples im Piep-Burst
 var _pdc_phase: float = 0.0
+var _skid: float = 0.0         ## Schlupfpegel fuer Reifenquietschen
 
 
 func setup(wheel_input, surface_model, start: Transform3D) -> void:
@@ -487,6 +488,7 @@ func _physics_process(delta: float) -> void:
 	# Slip-Schätzung fürs Lenkradgefühl (untersteuern ~ Sättigung Querlast).
 	var understeer: float = clampf((absf(_lateral_g) - 0.55) / 0.35, 0.0, 1.0)
 	var oversteer: float = clampf((absf(angular_velocity.y) * maxf(spd, 0.0) - absf(_lateral_g) * 9.81 * 0.6) / 8.0, 0.0, 1.0)
+	_skid = maxf(understeer, oversteer) if spd > 3.0 else 0.0
 	var slip_front: float = clampf(steer_cmd * absf(_lateral_g) * 0.09, -1.0, 1.0)
 
 	# Aufprall: harter Geschwindigkeitsabfall ohne Bremsen = Wand/Hindernis.
@@ -588,6 +590,9 @@ func _engine_sound(throttle_in: float) -> void:
 			var h: float = sin(TAU * _horn_phase * horn_f1) \
 				+ sin(TAU * _horn_phase * horn_f2)
 			s += tanh(h) * 0.30 * clampf(_horn_left / 3000.0, 0.0, 1.0)
+		# Reifenquietschen: Rauschen, Pegel folgt dem Schlupf.
+		if _skid > 0.05:
+			s += (randf() * 2.0 - 1.0) * _skid * 0.13
 		# Einparkpiepser: kurzer 1400-Hz-Piep, immer kuerzer werdend.
 		if pdc_gap_frames >= 0.0:
 			_pdc_gap -= 1.0
