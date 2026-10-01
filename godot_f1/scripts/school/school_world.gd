@@ -13,6 +13,7 @@ const JunctionLights = preload("res://scripts/school/junction_lights.gd")
 const SchoolCar = preload("res://scripts/school/school_car.gd")
 const SchoolSurfaces = preload("res://scripts/school/school_surfaces.gd")
 const SchoolInstructor = preload("res://scripts/school/school_instructor.gd")
+const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 const SchoolHUD = preload("res://scripts/school/school_hud.gd")
 const ChaseCamera = preload("res://scripts/chase_camera.gd")
 const G29Input = preload("res://scripts/g29_input.gd")
@@ -60,6 +61,14 @@ func _ready() -> void:
 	cam.name = "ChaseCam"
 	add_child(cam)
 	cam.target = player
+
+	# KI-Gegenverkehr: zwei Stadtautos auf der Blockrunde, halbe Runde
+	# versetzt — die Welt fuehlt sich belebt an, der Fahrlehrer passt auf.
+	for s in [1, 5]:
+		var tc := TrafficCar.new()
+		tc.name = "TrafficCar%d" % s
+		add_child(tc)
+		tc.setup(lights, player, s)
 
 	instructor = SchoolInstructor.new()
 	instructor.setup(player, surfaces, lights)

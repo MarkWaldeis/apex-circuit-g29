@@ -12,6 +12,7 @@ var max_fwd: float = 0.0
 var max_kmh: float = 0.0
 var saw_gear2: bool = false
 var lowest_y: float = INF
+var traffic_start := Vector3.ZERO
 var samples: int = 0
 var failed: int = 0
 var _done: bool = false
@@ -51,6 +52,9 @@ func _on_phys() -> void:
 		if player:
 			start_pos = player.global_position
 			got_pos = true
+			var tc = world.get_node_or_null("TrafficCar1")
+			if tc:
+				traffic_start = tc.global_position
 			# Automatik für den Testlauf — kein Fahrer, der die Kupplung tritt.
 			player.assists["auto_gearbox"] = true
 			player.set_meta("script_throttle", 0.6)
@@ -88,6 +92,10 @@ func _finish() -> void:
 		_check(saw_gear2, "automatic_gearbox_shifts", "gear never >=2")
 		_check(int(player.stall_events) == 0 or true, "stall_counter_readable")
 	_check(lowest_y > -4.0, "nothing_falls_out_of_world", "lowest y=%.2f" % lowest_y)
+	var tc = world.get_node_or_null("TrafficCar1")
+	if tc and traffic_start != Vector3.ZERO:
+		_check(tc.global_position.distance_to(traffic_start) > 5.0,
+			"traffic_car_drives", "moved %.1f m" % tc.global_position.distance_to(traffic_start))
 	if player:
 		# Einparkhilfe: am Stopp-Punkt (Zaun vorne) ist hinten frei,
 		# mit dem Heck zum Zaun gedreht muss er in 4 m auftauchen.

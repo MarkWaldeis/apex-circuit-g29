@@ -4,11 +4,13 @@ extends SceneTree
 ##   * junction_lights: deutscher Lichtzyklus (rot → rot+gelb → grün …)
 ##   * school_surfaces: Untergrund, Tempolimits, Einbahnstraße
 ##   * city_layout: konsistente Daten (Haltelinien liegen auf Straßen)
+##   * traffic_car: KI-Regeln (Ampel, Stoppschild, Auffahrschutz)
 
 const HGearbox = preload("res://scripts/school/h_gearbox.gd")
 const JunctionLights = preload("res://scripts/school/junction_lights.gd")
 const Surfaces = preload("res://scripts/school/school_surfaces.gd")
 const Layout = preload("res://scripts/school/city_layout.gd")
+const TrafficCar = preload("res://scripts/school/traffic_car.gd")
 
 var failed: int = 0
 
@@ -30,6 +32,7 @@ func _run() -> void:
 	_test_lights()
 	_test_surfaces()
 	_test_layout()
+	_test_traffic()
 	if failed > 0:
 		print("SCHOOL_UNITS FAIL count=", failed)
 		quit(1)
@@ -140,3 +143,29 @@ func _test_layout() -> void:
 		var node := TrafficSigns.make_sign(String(sg["kind"]), sg.get("arg", ""))
 		_check(node != null, "sign_builds", String(sg["kind"]))
 		node.free()
+
+
+func _test_traffic() -> void:
+	var tc := TrafficCar.new()
+	var jl := JunctionLights.new()
+	tc.lights = jl
+	# Ampel rot -> das KI-Auto muss auf der Ostspur anhalten.
+	jl.state["a"] = "red"
+	var v: float = tc._apply_rules(Vector2(-97.0, -58.2), Vector2(1, 0), 8.0)
+	_check(v == 0.0, "traffic_stops_at_red", "v=%.1f" % v)
+	# Ampel gruen -> freie Fahrt.
+	jl.state["a"] = "green"
+	v = tc._apply_rules(Vector2(-97.0, -58.2), Vector2(1, 0), 8.0)
+	_check(v > 0.0, "traffic_goes_on_green", "v=%.1f" % v)
+	# Stoppschild: voller Halt einmal pro Annäherung.
+	v = tc._apply_rules(Vector2(90.5, -58.2), Vector2(1, 0), 8.0)
+	_check(v == 0.0 and tc._stop_left > 0.0, "traffic_holds_at_stop_sign", "v=%.1f" % v)
+	# Schuelerauto dicht voraus -> Vollbremsung (Auffahrschutz).
+	var p := Node3D.new()
+	root.add_child(p)
+	p.global_position = Vector3(-90.0, 0.0, -58.2)
+	tc.player = p
+	v = tc._apply_rules(Vector2(-97.0, -58.2), Vector2(1, 0), 8.0)
+	_check(v == 0.0, "traffic_brakes_for_student", "v=%.1f" % v)
+	p.free()
+	tc.free()
