@@ -69,6 +69,9 @@ var _idle_t: float = 0.0
 var _cyc_cd: float = 0.0
 var _was_still: bool = true
 var _prio_cd: float = 0.0
+var _weave_side: int = 0
+var _weave_hits: Array = []
+var _weave_cd: float = 0.0
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -141,6 +144,7 @@ func update(delta: float, _car = null, _s = null, _l = null) -> void:
 	_check_door_zone(p2, spd, delta)
 	_check_cyclist(p2, spd, delta)
 	_check_priority(p2, spd, delta)
+	_check_weave(pos, spd, delta)
 	_check_stalls_and_shifts()
 	_check_tasks(p2, spd, delta)
 	_coach_idle(spd, delta)
@@ -352,6 +356,28 @@ func _nearest_arm(j: Dictionary, p: Vector2) -> Dictionary:
 			best_d = d
 			best = arm
 	return best
+
+
+# Schlangenlinien: wer staendig ueber die Mittellinie pendelt, haelt
+# die Spur nicht. Vier echte Spurwechsel in ~18 s = Coaching noetig.
+func _check_weave(pos: Vector3, spd: float, delta: float) -> void:
+	_weave_cd = maxf(_weave_cd - delta, 0.0)
+	if _weave_cd > 0.0 or spd < 8.0:
+		return
+	var lat: float = surfaces.lane_offset(pos, car.linear_velocity)
+	if lat > 9000.0 or absf(lat) < 1.2:
+		return
+	var side := 1 if lat > 0.0 else -1
+	if _weave_side != 0 and side != _weave_side:
+		_weave_hits.append(Time.get_ticks_msec() / 1000.0)
+	_weave_side = side
+	var now := Time.get_ticks_msec() / 1000.0
+	while not _weave_hits.is_empty() and now - float(_weave_hits[0]) > 18.0:
+		_weave_hits.pop_front()
+	if _weave_hits.size() >= 4:
+		_say("Schlangenlinien — ruhig in der Spur bleiben, Lenkrad loslassen hilft.", 1)
+		_weave_cd = 30.0
+		_weave_hits.clear()
 
 
 func _check_cyclist(p2: Vector2, spd: float, delta: float) -> void:

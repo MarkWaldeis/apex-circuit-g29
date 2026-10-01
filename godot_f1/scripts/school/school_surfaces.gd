@@ -130,20 +130,19 @@ func wrong_way(pos: Vector3, vel: Vector3) -> String:
 	return ""
 
 
-## Rechtsfahrgebot: auf zweispurigen Straßen (keine Einbahnstraße) mit >
-## ~1 m links der Mittellinie fahren heißt Gegenverkehr. Rückgabe:
-## Straßenname bei Verstoß, sonst "". Kreuzungsbereiche und Langsames
-## (Einparken, Rangieren) zählen nicht.
-func left_lane(pos: Vector3, vel: Vector3) -> String:
+## Vorzeichenbehafteter Seitenversatz zur Fahrbahnmitte: positiv auf
+## der rechten Fahrspur (in Fahrtrichtung), negativ auf der linken.
+## 9999.0 wenn nicht auswertbar (Kreuzung, Einbahnstraße, zu langsam).
+func lane_offset(pos: Vector3, vel: Vector3) -> float:
 	var v := Vector2(vel.x, vel.z)
 	if v.length() < 2.0:
-		return ""
+		return 9999.0
 	v = v.normalized()
 	var right := Vector2(v.y, v.x)
 	var p2 := Vector2(pos.x, pos.z)
 	for c in _junction_centers:
 		if p2.distance_to(c) < 14.0:
-			return ""
+			return 9999.0
 	for road in _roads:
 		if int(road.get("oneway", 0)) != 0:
 			continue
@@ -157,7 +156,30 @@ func left_lane(pos: Vector3, vel: Vector3) -> String:
 		var c := a + ab * t
 		if p2.distance_to(c) > float(road["width"]) * 0.5 + 1.0:
 			continue
-		var lat := (p2 - c).dot(right)
+		return (p2 - c).dot(right)
+	return 9999.0
+
+
+## Rechtsfahrgebot: auf zweispurigen Straßen (keine Einbahnstraße) mit >
+## ~1 m links der Mittellinie fahren heißt Gegenverkehr. Rückgabe:
+## Straßenname bei Verstoß, sonst "". Kreuzungsbereiche und Langsames
+## (Einparken, Rangieren) zählen nicht.
+func left_lane(pos: Vector3, vel: Vector3) -> String:
+	var lat := lane_offset(pos, vel)
+	if lat > 9000.0:
+		return ""
+	var p2 := Vector2(pos.x, pos.z)
+	for road in _roads:
+		var a: Vector2 = road["from"]
+		var b: Vector2 = road["to"]
+		var ab := b - a
+		var len2 := ab.length_squared()
+		if len2 < 0.001:
+			continue
+		var t := clampf((p2 - a).dot(ab) / len2, 0.0, 1.0)
+		var c := a + ab * t
+		if p2.distance_to(c) > float(road["width"]) * 0.5 + 1.0:
+			continue
 		if lat < -1.1:
 			return String(road["name"])
 	return ""
