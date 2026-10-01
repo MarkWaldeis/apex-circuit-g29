@@ -683,17 +683,27 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 		_brake_entry = -1.0
 		_brake_dec = 0.0
 		_brake_peak = 0.0
+		_brake_v0 = -1.0
 	elif _brake_entry < 0.0 and spd * 3.6 > 25.0:
 		_brake_entry = spd
 		_brake_dec = 0.0
 		_brake_peak = 0.0
 		_brake_prev = spd
+		_brake_v0 = -1.0
 	elif _brake_entry > 0.0:
 		_brake_dec = maxf(_brake_dec, (_brake_prev - spd) / maxf(delta, 0.001))
 		_brake_peak = maxf(_brake_peak, float(car.get("brake_strength")))
 		_brake_prev = spd
+		# Bremsweg merken: Punkt + Tempo beim ersten kräftigen Pedaltritt.
+		if _brake_v0 < 0.0 and _brake_peak > 0.5:
+			_brake_v0 = spd
+			_brake_p0 = p2
 		if spd < 0.2:
 			_brake_entry = -1.0
+			if _brake_v0 > 0.0:
+				var weg := _brake_p0.distance_to(p2)
+				_say("Bremsweg %.1f m aus %.0f km/h — Faustregel: Anhalteweg ≈ (v/10)² + (v/10)×3 Meter." % [weg, _brake_v0 * 3.6], 0)
+				_brake_v0 = -1.0
 			if _brake_dec > 4.0 and _brake_peak > 0.55:
 				_done("brake", "Gefahrbremsung geschafft — voller Tritt, gerade bleiben, Kupplung treten kurz vor dem Stillstand.")
 			else:
@@ -896,6 +906,8 @@ var _brake_at: float = 0.0
 var _brake_dec: float = 0.0
 var _brake_peak: float = 0.0
 var _brake_prev: float = 0.0
+var _brake_v0: float = -1.0       ## Tempo beim Bremsbeginn (Bremsweg-Messung)
+var _brake_p0 := Vector2.ZERO     ## Ort beim Bremsbeginn
 var _stop_still := {}
 var _jturn := {}
 
