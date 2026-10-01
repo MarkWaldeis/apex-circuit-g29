@@ -333,6 +333,12 @@ static func rail_crossing() -> Dictionary:
 	return {"center": Vector2(240.0, -150.0)}
 
 
+## Pannen-Übung: ruhiges Teilstueck am westlichen Fahrbahnrand der
+## Schulstraße — hier simuliert der Schueler eine Panne (Warnblinker an).
+static func pannen_zone() -> Rect2:
+	return Rect2(Vector2(-7.0, -140.0), Vector2(8.5, 30.0))
+
+
 ## Situationsgefahr Ball: auf der Kreisverkehr-Nordstraße rollt ein
 ## Ball zwischen zwei parkenden Autos auf die Fahrbahn (Klassiker:
 ## ein Kind koennte folgen). `cars` sind die abgestellten Fahrzeuge.

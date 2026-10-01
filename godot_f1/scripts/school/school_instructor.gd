@@ -29,6 +29,7 @@ const TASKS := [
 	{"id": "zebra", "name": "Zebrastreifen langsam"},
 	{"id": "ped", "name": "Fussgaenger passieren lassen"},
 	{"id": "ball", "name": "Ball: rechtzeitig bremsen"},
+	{"id": "panne", "name": "Pannenstellung mit Warnblinker"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -83,6 +84,7 @@ var _slalom_armed := {}       ## Pylone -> darf wieder gezaehlt werden
 var _in_circle := false       ## Schueler aktuell auf der Kreisverkehr-Insel
 var _kreis_d: float = 1e9     ## letzter Abstand zum Kreismittelpunkt
 var _haz_t := 0.0             ## Zeit Warnblinker im fliessenden Verkehr
+var _panne_t := 0.0           ## Stillstand-Zeit in der Pannenzone
 
 
 func setup(p_car, p_surfaces, p_lights = null) -> void:
@@ -781,6 +783,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_rail(p2, spd)
 	_check_ball(p2, spd)
 	_check_engstelle(p2, spd)
+	_check_panne(p2, spd, delta)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -862,6 +865,21 @@ func _check_ball(p2: Vector2, spd: float) -> void:
 		_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
 	elif spd < 2.0:
 		_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
+
+
+func _check_panne(p2: Vector2, spd: float, delta: float) -> void:
+	# Pannen-Uebung auf der Schulstrasse: anhalten am Rand und den
+	# Warnblinker an — so wie es der Fahrlehrer vormacht.
+	var z := CityLayout.pannen_zone()
+	if z.has_point(p2) and spd < 0.4:
+		_panne_t += delta
+		if bool(car.get("hazard")):
+			if _panne_t > 4.0:
+				_done("panne", "Pannenstellung — Warnblinker an, sicher am Rand. Gut!")
+		elif _panne_t > 2.5:
+			_warn("Bei einer Panne den Warnblinker einschalten!")
+	else:
+		_panne_t = 0.0
 
 
 func _check_engstelle(p2: Vector2, spd: float) -> void:
