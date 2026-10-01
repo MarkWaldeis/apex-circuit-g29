@@ -103,8 +103,8 @@ static func junctions() -> Dictionary:
 			"arms": [
 				{"pos": Vector2(184.5, -60), "enter": Vector2(1, 0)},
 				{"pos": Vector2(215.5, -60), "enter": Vector2(-1, 0)},
-				{"pos": Vector2(200, -88.5), "enter": Vector2(0, 1)},
-				{"pos": Vector2(200, -31.5), "enter": Vector2(0, -1)},
+				{"pos": Vector2(200, -76.5), "enter": Vector2(0, 1)},
+				{"pos": Vector2(200, -47.5), "enter": Vector2(0, -1)},
 			],
 		},
 	}
@@ -118,14 +118,14 @@ static func signs() -> Array:
 		# Ampelkreuzung Hauptstraße × Weststraße — Ampeln baut junction_lights,
 		# hier nur die Schilder der Nebenarme (keine, Vorfahrt über Ampel).
 		# Stopschild-Kreuzung Oststraße × Hauptstraße (StoVo: Schild vor der Linie).
-		{"kind": "stop", "pos": Vector3(93.0, 0, -56.6), "rot_y": 180.0},
-		{"kind": "stop", "pos": Vector3(107.0, 0, -63.4), "rot_y": 0.0},
+		{"kind": "stop", "pos": Vector3(93.0, 0, -56.6), "rot_y": 270.0},
+		{"kind": "stop", "pos": Vector3(107.0, 0, -63.4), "rot_y": 90.0},
 		# Rechts vor links: Schild 102 am Knoten Schulstraße/Weststraße.
-		{"kind": "rbl", "pos": Vector3(-95.6, 0, -173.0), "rot_y": 225.0},
-		{"kind": "rbl", "pos": Vector3(-104.4, 0, -187.0), "rot_y": 45.0},
+		{"kind": "rbl", "pos": Vector3(-96.5, 0, -172.0), "rot_y": 0.0},
+		{"kind": "rbl", "pos": Vector3(-94.0, 0, -183.8), "rot_y": 90.0},
 		# Vorfahrt gewähren Schulstraße/Oststraße.
-		{"kind": "yield", "pos": Vector3(95.6, 0, -173.0), "rot_y": 225.0},
-		{"kind": "yield", "pos": Vector3(104.4, 0, -187.0), "rot_y": 45.0},
+		{"kind": "yield", "pos": Vector3(94.0, 0, -176.2), "rot_y": 270.0},
+		{"kind": "yield", "pos": Vector3(106.0, 0, -183.8), "rot_y": 90.0},
 		# Einbahnstraße: blaues Pfeilschild am Anfang, Durchfahrt verboten am Ende.
 		{"kind": "one_way", "pos": Vector3(96.0, 0, -116.0), "rot_y": 90.0},
 		{"kind": "one_way", "pos": Vector3(96.0, 0, -124.0), "rot_y": 90.0},
@@ -133,28 +133,28 @@ static func signs() -> Array:
 		{"kind": "no_entry", "pos": Vector3(-96.0, 0, -124.0), "rot_y": -90.0},
 		# Tempolimits: 30 auf der Schulstraße, 50 auf den Nebenstraßen,
 		# 100 auf dem Ring (und Ende-Schilder beim Wiedereinfahren).
-		{"kind": "limit", "arg": "30", "pos": Vector3(-134, 0, -176.0), "rot_y": 90.0},
-		{"kind": "limit", "arg": "30", "pos": Vector3(134, 0, -184.0), "rot_y": -90.0},
+		{"kind": "limit", "arg": "30", "pos": Vector3(-134, 0, -176.0), "rot_y": 270.0},
+		{"kind": "limit", "arg": "30", "pos": Vector3(134, 0, -184.0), "rot_y": 90.0},
 		{"kind": "limit", "arg": "30", "pos": Vector3(96.5, 0, -116.5), "rot_y": 90.0},
-		{"kind": "limit_end", "pos": Vector3(-96.5, 0, -127.5), "rot_y": -90.0},
-		{"kind": "limit", "arg": "50", "pos": Vector3(-96.5, 0, -70.0), "rot_y": -90.0},
-		{"kind": "limit", "arg": "50", "pos": Vector3(103.5, 0, -50.0), "rot_y": 90.0},
-		{"kind": "limit", "arg": "100", "pos": Vector3(-104.5, 0, -234.0), "rot_y": 135.0},
-		{"kind": "limit", "arg": "100", "pos": Vector3(-104.5, 0, 132.0), "rot_y": 45.0},
+		{"kind": "limit_end", "pos": Vector3(-96.5, 0, -127.5), "rot_y": 90.0},
+		{"kind": "limit", "arg": "50", "pos": Vector3(-96.5, 0, -70.0), "rot_y": 0.0},
+		{"kind": "limit", "arg": "50", "pos": Vector3(96.5, 0, -50.0), "rot_y": 180.0},
+		{"kind": "limit", "arg": "100", "pos": Vector3(-96.0, 0, -233.0), "rot_y": 0.0},
+		{"kind": "limit", "arg": "100", "pos": Vector3(-104.5, 0, 132.0), "rot_y": 180.0},
 		{"kind": "limit_end", "pos": Vector3(-196.5, 0, -56.0), "rot_y": 90.0},
 		# Kreisverkehr-Schilder vor den drei Einfahrten.
-		{"kind": "roundabout", "pos": Vector3(184.0, 0, -56.0), "rot_y": 90.0},
-		{"kind": "roundabout", "pos": Vector3(196.0, 0, -88.0), "rot_y": 0.0},
-		{"kind": "roundabout", "pos": Vector3(196.0, 0, -32.0), "rot_y": 180.0},
-		{"kind": "roundabout", "pos": Vector3(216.0, 0, -56.0), "rot_y": 270.0},
+		{"kind": "roundabout", "pos": Vector3(184.0, 0, -56.0), "rot_y": 270.0},
+		{"kind": "roundabout", "pos": Vector3(196.0, 0, -88.0), "rot_y": 180.0},
+		{"kind": "roundabout", "pos": Vector3(203.5, 0, -32.0), "rot_y": 0.0},
+		{"kind": "roundabout", "pos": Vector3(216.0, 0, -63.5), "rot_y": 90.0},
 		# Vorfahrt achten bei der Einfahrt vom Übungsplatz auf die Hauptstraße.
 		{"kind": "yield", "pos": Vector3(-4.4, 0, -57.0), "rot_y": 0.0},
 		# Zebrastreifen Hauptstraße bei x = -40.
-		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 180.0},
-		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 0.0},
+		{"kind": "zebra", "pos": Vector3(-40.0, 0, -52.5), "rot_y": 270.0},
+		{"kind": "zebra", "pos": Vector3(-40.0, 0, -67.5), "rot_y": 90.0},
 		# Parkplatz-Schild am Übungsplatz-Eingang.
-		{"kind": "parking", "pos": Vector3(4.0, 0, 36.0), "rot_y": 0.0},
-		{"kind": "board", "arg": "Fahrschul-Übungsplatz", "pos": Vector3(-4.0, 0, 36.0), "rot_y": 0.0},
+		{"kind": "parking", "pos": Vector3(4.0, 0, 36.0), "rot_y": 180.0},
+		{"kind": "board", "arg": "Fahrschul-Übungsplatz", "pos": Vector3(-4.0, 0, 36.0), "rot_y": 180.0},
 		# Hinweisschilder auf dem Platz.
 		{"kind": "board", "arg": "Slalom", "pos": Vector3(-46, 0, 58), "rot_y": 180.0},
 		{"kind": "board", "arg": "Bremsen", "pos": Vector3(-46, 0, 50), "rot_y": 180.0},
@@ -173,10 +173,12 @@ static func stop_lines() -> Array:
 	# Stop-Kreuzung.
 	out.append({"pos": Vector2(92.4, -60), "rot": 0.0, "w": 3.2})
 	out.append({"pos": Vector2(107.6, -60), "rot": 0.0, "w": 3.2})
-	# Kreisverkehr: Haifischzähne-Ersatz als schmale Linie.
+	# Kreisverkehr: Haifischzähne-Ersatz als schmale Linie (an den
+	# Einfahrtsarmen, knapp vor der Ringkante).
 	out.append({"pos": Vector2(184.5, -60), "rot": 0.0, "w": 2.6})
-	out.append({"pos": Vector2(200, -88.5), "rot": 90.0, "w": 2.6})
-	out.append({"pos": Vector2(200, -31.5), "rot": 90.0, "w": 2.6})
+	out.append({"pos": Vector2(215.5, -60), "rot": 0.0, "w": 2.6})
+	out.append({"pos": Vector2(200, -76.5), "rot": 90.0, "w": 2.6})
+	out.append({"pos": Vector2(200, -47.5), "rot": 90.0, "w": 2.6})
 	return out
 
 

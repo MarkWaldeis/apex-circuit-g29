@@ -83,7 +83,9 @@ func request_gear(g: int, clutch_pedal: float, speed_ms: float) -> bool:
 		return false
 	if g == -1 and absf(speed_ms) > 1.5:
 		return false
-	if clutch_pedal < SHIFT_MIN_CLUTCH:
+	# Rausnehmen nach Leerlauf geht ohne Kupplung (Schieben), nur
+	# das Einlegen eines Gangs braucht getretene Kupplung.
+	if g != 0 and clutch_pedal < SHIFT_MIN_CLUTCH:
 		grinds += 1
 		return false
 	gear = g

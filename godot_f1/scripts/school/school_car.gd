@@ -25,7 +25,12 @@ const VOID_Y := -6.0
 
 ## Zusatzbelegung der Lenkrad-Knöpfe (Treiber variieren — `last_button` in
 ## den Einstellungen zeigt, welcher physische Knopf gerade gedrückt wird).
-var button_map := {"ind_left": 4, "ind_right": 5, "hazard": 8, "handbrake": 9, "lights": 10}
+var button_map := {"ind_left": 4, "ind_right": 5, "teleport": 6, "exam": 7,
+	"hazard": 8, "handbrake": 9, "lights": 10, "reset": 11}
+
+## Rueckverweis auf die Welt (fuer Pruefungs-Taste am Lenkrad); wird
+## von school_world beim Aufbau gesetzt, bleibt in Tests null.
+var world
 
 var g29
 var surfaces
@@ -187,6 +192,13 @@ func _on_wheel_button(index: int) -> void:
 		_toggle_indicator("l")
 	elif index == int(button_map["ind_right"]):
 		_toggle_indicator("r")
+	elif index == int(button_map["teleport"]):
+		_teleport_next()
+	elif index == int(button_map["reset"]):
+		_reset()
+	elif index == int(button_map["exam"]):
+		if world != null and world.get("instructor") != null:
+			world.instructor.toggle_exam()
 	elif index == int(button_map["hazard"]):
 		hazard = not hazard
 		if hazard:
@@ -390,6 +402,15 @@ func _physics_process(delta: float) -> void:
 	gear = int(gb["gear"])
 	rpm = float(gb["rpm"])
 	engine_force = float(gb["engine_force"]) * grip
+	# Traktionskontrolle: durchdrehende Antriebsraeder -> Gas weg.
+	if bool(assists.get("traction_control", true)) and engine_force > 0.0:
+		var worst_skid := 1.0
+		for item in _wheels:
+			var tw: VehicleWheel3D = item["wheel"]
+			if tw.use_as_traction:
+				worst_skid = minf(worst_skid, tw.get_skidinfo())
+		if worst_skid < 0.75:
+			engine_force *= 0.5 * clampf(worst_skid / 0.75, 0.0, 1.0)
 	var now_stalled: bool = bool(gb["stalled"])
 	if now_stalled and not stalled:
 		stall_events += 1

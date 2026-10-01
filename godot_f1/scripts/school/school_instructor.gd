@@ -117,7 +117,14 @@ func _done(id: String, praise: String) -> void:
 	_say(praise, 0)
 
 
+var _exam_errs := 0          ## Warnungen waehrend einer Pruefungsfahrt
+var _gyaw0 := -999.0         ## generelle Blinkerpflicht: Gier-Referenz
+var _gyaw_ok := false        ## Blinker war waehrend der Drehung an
+
+
 func _say(text: String, level: int) -> void:
+	if exam.active and level >= 1:
+		_exam_errs += 1
 	coached.emit(text, level)
 
 
@@ -463,6 +470,25 @@ func _check_junctions(p2: Vector2, spd: float) -> void:
 			elif dyaw < -0.45 and not bool(tr.get("r", false)):
 				_warn("Abbiegen ohne Blinker — vor dem Abbiegen rechts blinken.")
 			_jturn.erase(key)
+	# Generelle Blinkerpflicht ohne Haltelinie (Zufahrt, Ring-Anschluss,
+	# Einmuendung): deutliche Gierdrehung im fliessenden Verkehr ohne
+	# Blinker -> Hinweis. Langsame Platzrunden (Wenden, Parken) bleiben frei.
+	var yaw_now: float = car.global_transform.basis.get_euler().y
+	if bool(car.get("indicator_left")) or bool(car.get("indicator_right")) \
+			or bool(car.get("hazard")):
+		_gyaw_ok = true
+	if _gyaw0 < -900.0:
+		_gyaw0 = yaw_now
+	var dgy := wrapf(yaw_now - _gyaw0, -PI, PI)
+	if absf(dgy) < 0.05:
+		_gyaw0 = yaw_now
+		_gyaw_ok = false
+	elif absf(dgy) > 0.45:
+		if spd > 4.0 and not _gyaw_ok \
+				and String(surfaces.sample(car.global_position).get("surface", "asphalt")) != "grass":
+			_warn("Abbiegen ohne Blinker — rechtzeitig blinken.")
+		_gyaw0 = yaw_now
+		_gyaw_ok = false
 
 
 func _on_stop_line_crossed(j: Dictionary, arm: Dictionary, key: String, spd: float) -> void:
@@ -615,7 +641,8 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 				"offtrack":
 					_warn("Sie sind vom Kurs ab — wenden Sie und folgen Sie der Anweisung.")
 				"done":
-					_done("pruefung", "Prüfungsfahrt absolviert — bestanden!")
+					var verdict := "bestanden" if _exam_errs <= 2 else "nicht bestanden"
+					_done("pruefung", "Prüfungsfahrt beendet — %d Beanstandung(en): %s!" % [_exam_errs, verdict])
 	for c in cams:
 		if is_instance_valid(c) and c.check(p2, spd * 3.6):
 			_say("Geblitzt! %d km/h statt %d — das gibt Post." % [int(spd * 3.6), c.limit], 2)
@@ -628,6 +655,7 @@ func toggle_exam() -> void:
 		_say("Prüfungsfahrt abgebrochen.", 0)
 	else:
 		exam.begin()
+		_exam_errs = 0
 		_say("Prüfungsfahrt! " + String(exam.wps[0]["text"]), 0)
 
 

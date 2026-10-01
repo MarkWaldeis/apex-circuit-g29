@@ -59,6 +59,7 @@ func _ready() -> void:
 	player.ffb_settings = ffb_settings
 	add_child(player)
 	player.setup(g29, surfaces, _spawn)
+	player.world = self
 	player.global_transform = _spawn
 
 	cam = ChaseCamera.new()
