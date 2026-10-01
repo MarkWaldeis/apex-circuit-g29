@@ -780,6 +780,7 @@ func _check_lot_tasks(p2: Vector2, spd: float, forward: float, delta: float) -> 
 	_check_pedestrian(p2, spd)
 	_check_rail(p2, spd)
 	_check_ball(p2, spd)
+	_check_engstelle(p2, spd)
 	if exam.active:
 		for ev in exam.update(p2):
 			match String(ev["ev"]):
@@ -861,6 +862,15 @@ func _check_ball(p2: Vector2, spd: float) -> void:
 		_warn("Ball auf der Fahrbahn — Kinder könnten folgen, bremsen!")
 	elif spd < 2.0:
 		_done("ball", "Ball gesehen und angehalten — vorbildlich vorausschauend.")
+
+
+func _check_engstelle(p2: Vector2, spd: float) -> void:
+	# Zone um die parkenden Autos: hier gilt Rechtsfahrgebot + Maßtempo.
+	var cs: Array = CityLayout.street_ball()["cars"]
+	var z0: float = minf(cs[0].y, cs[1].y) - 1.0
+	var z1: float = maxf(cs[0].y, cs[1].y) + 1.0
+	if absf(p2.x - 200.0) < 4.5 and p2.y > z0 and p2.y < z1 and spd * 3.6 > 25.0:
+		_warn("Engstelle — langsam durchfahren und Gegenverkehr beachten!")
 
 
 var _brake_entry: float = -1.0

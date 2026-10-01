@@ -229,6 +229,11 @@ static func signs() -> Array:
 		{"kind": "board", "arg": "Slalom", "pos": Vector3(-46, 0, 58), "rot_y": 180.0},
 		{"kind": "board", "arg": "Bremsen", "pos": Vector3(-46, 0, 50), "rot_y": 180.0},
 		{"kind": "board", "arg": "Berganfahren", "pos": Vector3(-78, 0, 82), "rot_y": 135.0},
+		# Engstelle auf der Kreisverkehr-Nordstraße: wer die parkenden
+		# Autos auf seiner Seite hat (Nordfahrtrichtung), wartet auf den
+		# Gegenverkehr (208); die freie Seite darf zuerst (308).
+		{"kind": "engst_wait", "pos": Vector3(203.6, 0, -100.0), "rot_y": 0.0},
+		{"kind": "engst_prio", "pos": Vector3(196.4, 0, -119.0), "rot_y": 180.0},
 	]
 
 

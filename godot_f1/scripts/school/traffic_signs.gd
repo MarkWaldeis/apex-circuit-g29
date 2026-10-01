@@ -84,6 +84,20 @@ static func _tri(radius: float, mat: Material, flip_down: bool) -> MeshInstance3
 	return mi
 
 
+static func _arrow(down: bool, thick: bool, mat: Material) -> Node3D:
+	## Hoch-/Runterpfeil aus Schaft + Spitze fuer die Engstellen-Schilder.
+	var a := Node3D.new()
+	var shaft := _bar(Vector3(0.095 if thick else 0.042, 0.20, 0.02), mat)
+	shaft.position.y = -0.05
+	a.add_child(shaft)
+	var head := _tri(0.078 if thick else 0.055, mat, false)
+	head.position.y = 0.10
+	a.add_child(head)
+	if down:
+		a.rotation_degrees.z = 180.0
+	return a
+
+
 ## Baut das komplette Schild. `kind`/`arg` siehe Aufrufer in city_builder.
 static func make_sign(kind: String, arg := "") -> Node3D:
 	var root := Node3D.new()
@@ -209,6 +223,32 @@ static func make_sign(kind: String, arg := "") -> Node3D:
 				var dot := _disc(0.045, 12, black, 0.015)
 				dot.position = Vector3(-0.10 + i * 0.10, -0.055, 0.04)
 				face.add_child(dot)
+		"engst_wait":
+			## Zeichen 208: Dem Gegenverkehr Vorrang gewaehren — eigenes
+			## (dickes, schwarzes) Hoch muss auf den duennen roten
+			## Gegenpfeil warten.
+			var rim := _bar(Vector3(0.60, 0.60, 0.015), black)
+			rim.position.z = -0.012
+			face.add_child(rim)
+			var back := _bar(Vector3(0.56, 0.56, 0.02), white)
+			face.add_child(back)
+			var up := _arrow(false, true, black)
+			up.position = Vector3(-0.10, 0.0, 0.03)
+			face.add_child(up)
+			var dn := _arrow(true, false, red)
+			dn.position = Vector3(0.12, 0.0, 0.03)
+			face.add_child(dn)
+		"engst_prio":
+			## Zeichen 308: Vorrang vor dem Gegenverkehr — dicker weisser
+			## Hochpfeil darf zuerst durch die Engstelle.
+			var back := _bar(Vector3(0.56, 0.56, 0.02), blue)
+			face.add_child(back)
+			var up := _arrow(false, true, white)
+			up.position = Vector3(-0.10, 0.0, 0.03)
+			face.add_child(up)
+			var dn := _arrow(true, false, red)
+			dn.position = Vector3(0.12, 0.0, 0.03)
+			face.add_child(dn)
 		"parking":
 			var back := _bar(Vector3(0.55, 0.55, 0.03), blue)
 			face.add_child(back)
