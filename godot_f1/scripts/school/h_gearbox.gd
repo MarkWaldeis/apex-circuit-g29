@@ -35,6 +35,9 @@ var gear: int = 0
 var rpm: float = IDLE_RPM
 var motor_on: bool = true
 var stalled: bool = false
+## Zündschloss: aus -> der Motor bleibt aus, bis er per Zündung gestartet
+## wird (abstellen ist kein Abwürgen — der Stalls-Zähler bleibt unberührt).
+var ignition: bool = true
 ## Diagnosezähler für den Fahrlehrer.
 var stalls: int = 0
 var grinds: int = 0
@@ -51,6 +54,8 @@ func setup() -> void:
 	stalls = 0
 	grinds = 0
 	_prev_engage = 1.0
+	ignition = true
+	_crank = 0.0
 
 
 func reset() -> void:
@@ -89,14 +94,30 @@ func request_gear(g: int, clutch_pedal: float, speed_ms: float) -> bool:
 	return true
 
 
-## Anlasser: bei abgewürgtem Motor mit voll getretener Kupplung starten.
+## Anlasser: bei stehendem Motor mit voll getretener Kupplung starten —
+## nach dem Abwürgen genauso wie nach dem Abstellen an der Zündung.
 func start_motor(clutch_pedal: float) -> void:
-	if not stalled:
+	if motor_on or not ignition:
 		return
 	if clutch_pedal < 0.75:
 		return
 	if _crank <= 0.0:
 		_crank = 0.45
+
+
+## Zündung aus: der Motor geht aus — kein Abwürgen, der Zähler bleibt stehen.
+func ignition_off() -> void:
+	ignition = false
+	motor_on = false
+	stalled = false
+	rpm = 0.0
+	_crank = 0.0
+
+
+## Zündung an: der Anlasser dreht — durchstarten haengt an der Kupplung.
+func ignition_on(clutch_pedal: float) -> void:
+	ignition = true
+	start_motor(clutch_pedal)
 
 
 func torque_at(r: float) -> float:
@@ -121,7 +142,7 @@ func update(delta: float, ctx: Dictionary) -> Dictionary:
 	# ---- Anlasser ----------------------------------------------------------
 	if _crank > 0.0:
 		_crank -= delta
-		if _crank <= 0.0 and stalled:
+		if _crank <= 0.0 and not motor_on:
 			stalled = false
 			motor_on = true
 			rpm = IDLE_RPM

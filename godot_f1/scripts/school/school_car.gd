@@ -25,8 +25,8 @@ const VOID_Y := -6.0
 
 ## Zusatzbelegung der Lenkrad-Knöpfe (Treiber variieren — `last_button` in
 ## den Einstellungen zeigt, welcher physische Knopf gerade gedrückt wird).
-var button_map := {"ind_left": 4, "ind_right": 5, "teleport": 6, "exam": 7,
-	"hazard": 8, "handbrake": 9, "lights": 10, "reset": 11}
+var button_map := {"ignition": 3, "ind_left": 4, "ind_right": 5, "teleport": 6,
+	"exam": 7, "hazard": 8, "handbrake": 9, "lights": 10, "reset": 11}
 
 ## Rueckverweis auf die Welt (fuer Pruefungs-Taste am Lenkrad); wird
 ## von school_world beim Aufbau gesetzt, bleibt in Tests null.
@@ -214,7 +214,9 @@ func _on_wheel_gear(g: int) -> void:
 
 
 func _on_wheel_button(index: int) -> void:
-	if index == int(button_map["ind_left"]):
+	if index == int(button_map["ignition"]):
+		_toggle_ignition()
+	elif index == int(button_map["ind_left"]):
 		_toggle_indicator("l")
 	elif index == int(button_map["ind_right"]):
 		_toggle_indicator("r")
@@ -256,6 +258,35 @@ func _unhandled_input(event: InputEvent) -> void:
 			if hazard:
 				indicator_left = false
 				indicator_right = false
+		KEY_K: _toggle_ignition()
+
+
+## Zündung (Taste K oder Lenkrad-Knopf): Motor im Stand ab- und anstellen.
+## Gehoert zum Autofahren wie der Schleifpunkt — und das Tanken an der
+## Oststrasse geht nur bei abgestelltem Motor. Abstellen waehrend der
+## Fahrt wird verweigert (Servo/Bremse haengen am laufenden Motor).
+func _toggle_ignition() -> void:
+	if gearbox.motor_on:
+		if linear_velocity.length() > 0.8:
+			_coach("Nicht während der Fahrt abstellen — erst anhalten.")
+			return
+		gearbox.ignition_off()
+		_coach("Motor aus — mit K läuft er wieder.", 0)
+	else:
+		var wheel: bool = g29 != null and bool(g29.connected)
+		if wheel and _clutch_pedal() < 0.75:
+			_coach("Zum Starten die Kupplung ganz durchtreten.")
+			return
+		if not wheel and gearbox.gear != 0 \
+				and not bool(assists.get("auto_gearbox", false)):
+			_coach("Zum Starten erst in den Leerlauf (Taste 0) — am Lenkrad die Kupplung treten.")
+			return
+		gearbox.ignition_on(_clutch_pedal() if wheel else 1.0)
+
+
+func _coach(t: String, level: int = 1) -> void:
+	if world != null and world.get("instructor") != null:
+		world.instructor._say(t, level)
 
 
 ## Abblendlicht an/aus (Taste L oder Lenkrad-Knopf).
@@ -478,7 +509,9 @@ func _physics_process(delta: float) -> void:
 	motor_on = bool(gb["motor_on"])
 	# Kraftstoff: Grundverbrauch + Last-Anteil; leer -> kein Schub,
 	# Motor wirkt aus (Tanke an der Oststrasse fuellt wieder auf).
-	fuel = maxf(fuel - (0.02 + throttle_in * 1.4) * delta * 0.05, 0.0)
+	# Abgestellter Motor (Zündung) verbrennt nichts.
+	if motor_on:
+		fuel = maxf(fuel - (0.02 + throttle_in * 1.4) * delta * 0.05, 0.0)
 	if fuel <= 0.0:
 		engine_force = 0.0
 		motor_on = false

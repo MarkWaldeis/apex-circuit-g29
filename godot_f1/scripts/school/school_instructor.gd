@@ -54,6 +54,7 @@ const TASKS := [
 	{"id": "abstand", "name": "Sicherheitsabstand gehalten (halber Tacho)"},
 	{"id": "witterung", "name": "Geschwindigkeit an Nässe/Glätte angepasst"},
 	{"id": "tanken", "name": "Tankstelle angefahren und aufgetankt"},
+	{"id": "zuend", "name": "Motor im Stand abgestellt (Zündung, Taste K)"},
 	{"id": "pruefung", "name": "Prüfungsfahrt (Taste P)"},
 ]
 
@@ -2009,7 +2010,14 @@ func _check_weather_speed(spd: float, delta: float) -> void:
 var _fuel_lvl := 0   ## 0 = ok, 1 = knapp gemeldet, 2 = leer gemeldet
 var _midle_t := 0.0
 var _midle_cd := 0.0
+var _motor_was := true
 func _check_fuel(spd: float, delta: float) -> void:
+	# Zündung gelernt: wer den Motor im Stand abstellt, spart Standgas —
+	# die Standgas-Ermahnung weiter unten wird so zur belohnten Handlung.
+	var mo_now: bool = bool(car.get("motor_on"))
+	if _motor_was and not mo_now and spd < 0.3 and not bool(car.get("stalled")):
+		_done("zuend", "Motor im Stand abgestellt — Standgas gespart, genau richtig.")
+	_motor_was = mo_now
 	# Standgas-Coaching: laenger als ~75 s mit laufendem Motor stehen
 	# frisst nur Sprit — in der Pruefung gibt es dafuer Minuspunkte.
 	if spd < 0.3 and bool(car.get("motor_on")):

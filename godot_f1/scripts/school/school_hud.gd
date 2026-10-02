@@ -330,7 +330,8 @@ func _build() -> void:
 		+ "1–6 Gänge · 0/N Leerlauf · V Rückwärts\n"
 		+ "Q / E – Blinker links / rechts\n"
 		+ "H – Warnblinker · D – Warndreieck · B – Hupe · Leertaste – Handbremse\n"
-		+ "L – Abblendlicht · F – Fernlicht · U – Nacht · I – Nebel · M – Nässe · O – Glatteis\n"
+		+ "K – Zündung · L – Abblendlicht · F – Fernlicht\n"
+		+ "U – Nacht · I – Nebel · M – Nässe · O – Glatteis\n"
 		+ "Z – Zwischenbilanz · X – Schild erklären · G – mehr Verkehr\n"
 		+ "T – zur nächsten Übung springen\n"
 		+ "P – Prüfungsfahrt starten / beenden\n"
@@ -420,6 +421,8 @@ func _process(delta: float) -> void:
 	var status_text := ""
 	if car.get("stalled"):
 		status_text = "Motor aus"
+	elif not bool(car.get("motor_on")):
+		status_text = "Tank leer" if float(car.get("fuel")) <= 0.0 else "Motor aus — Zündung (K)"
 	elif car.get("handbrake_on"):
 		status_text = "Handbremse"
 	# Nach einem Uebungs-Teleport (T) kurz die Station einblenden.

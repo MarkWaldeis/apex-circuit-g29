@@ -91,6 +91,33 @@ func _test_gearbox() -> void:
 		v += float(gb.update(0.05, {"speed": v, "throttle": 0.9, "auto": true})["engine_force"]) * 0.05 / 1280.0
 		auto_gear = gb.gear
 	_check(auto_gear >= 2, "auto_box_shifts_up", "gear=%d v=%.1f" % [auto_gear, v])
+	# Zündung: Motor abstellen ist kein Abwürgen — der Stalls-Zaehler
+	# bleibt stehen, Gas gibt weder Drehzahl noch Kraft.
+	gb.reset()
+	gb.ignition_off()
+	r = gb.update(0.02, {"speed": 0.0, "throttle": 0.6, "clutch": 0.0})
+	_check(not bool(r["motor_on"]), "ignition_off_kills_motor")
+	_check(absf(r["engine_force"]) < 1.0, "ignition_off_no_force")
+	_check(gb.stalls == 0, "ignition_off_is_no_stall", "stalls=%d" % gb.stalls)
+	# Startversuch ohne Kupplung dreht den Anlasser nicht durch.
+	gb.ignition_on(0.2)
+	for i in range(40):
+		r = gb.update(0.02, {"speed": 0.0, "clutch": 0.2})
+	_check(not bool(r["motor_on"]), "ignition_start_needs_clutch")
+	# Mit durchgetretener Kupplung springt er an und haelt Leerlauf.
+	gb.ignition_on(1.0)
+	for i in range(40):
+		r = gb.update(0.02, {"speed": 0.0, "clutch": 1.0})
+	_check(bool(r["motor_on"]), "ignition_starts_with_clutch")
+	_check(r["rpm"] > 700.0, "engine_idles_after_restart", "rpm=%d" % int(r["rpm"]))
+	# Aus-Kommentar zurueck: Zündung aus mitten im Anlassen bleibt aus.
+	gb.ignition_off()
+	gb.ignition_on(1.0)
+	r = gb.update(0.02, {"speed": 0.0, "clutch": 1.0})
+	gb.ignition_off()
+	for i in range(40):
+		r = gb.update(0.02, {"speed": 0.0, "clutch": 1.0})
+	_check(not bool(r["motor_on"]), "ignition_off_during_crank_stays_off")
 
 
 func _test_lights() -> void:
