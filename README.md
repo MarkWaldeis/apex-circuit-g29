@@ -4,6 +4,12 @@ Eigenes Formel-1-Spiel für **Logitech G29** (Lenkrad + Pedale), gebaut mit **Bl
 
 GitHub: https://github.com/MarkWaldeis/apex-circuit-g29
 
+## Im Browser spielen
+
+**Fahrschul-Webdemo:** https://markwaldeis.github.io/apex-circuit-g29/
+
+Läuft direkt im Browser — Tastatur: `W` = Gas, `S` = Bremse, `A`/`D` = Lenken, `K` = Zündung, `1`–`6` = Gänge, `0` = Leerlauf, `Esc` = Menü. Kein Force Feedback; das G29 wird höchstens als generisches Gamepad erkannt. Der Web-Build liegt auf dem Branch `gh-pages` und startet direkt in der Fahrschule; das volle Spiel mit beiden Welten bleibt der Windows-Desktop-Export.
+
 ## Was das Spiel kann
 
 * **Startmenü** mit *Fahren*, *Einstellungen* und *Beenden*; `Esc` öffnet jederzeit das Pausenmenü und führt immer wieder zurück ins Rennen.
