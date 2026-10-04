@@ -2156,14 +2156,20 @@ func _check_free_junction(p2: Vector2, spd: float, delta: float) -> void:
 		in_junction = true
 		# Wer an einer Arm-Haltelinie wartet, steht legal — Ampel-Rot,
 		# Stoppschild oder Vorfahrt gewaehren sind kein Verstoss.
+		# Alle Arme pruefen: der Arm-Punkt sitzt auf der Strassenmitte,
+		# der Schueler haelt spurversetzt dahinter (deshalb 3.5/4.5 m).
 		for arm in j["arms"]:
-			if p2.distance_to(Vector2(arm["pos"])) < 2.5:
+			var d_arm: float = p2.distance_to(Vector2(arm["pos"]))
+			if d_arm < 3.5:
 				at_stop_line = true
-			if String(j["kind"]) == "light" and lights != null \
+			# Bei der Ampel zaehlt die Phase des Arms, an dem der
+			# Schueler wirklich wartet — irgendeine Achse ist ja immer
+			# rot, ein "irgendein Arm ist rot" taete den Check nie feuern.
+			if d_arm < 4.5 and String(j["kind"]) == "light" and lights != null \
 					and String(arm.get("arm", "")) != "" \
 					and String(lights.phase_of(String(arm["arm"]))) != "green":
 				waiting_red = true
-			break
+		break
 	if not in_junction or at_stop_line or waiting_red:
 		_fj_t = 0.0
 		return

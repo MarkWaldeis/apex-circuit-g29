@@ -39,6 +39,7 @@ func _run() -> void:
 	_test_layout()
 	_test_traffic()
 	_test_pedestrian()
+	_test_free_junction()
 	_test_rail()
 	_test_exam_route()
 	if failed > 0:
@@ -341,6 +342,46 @@ func _test_pedestrian() -> void:
 	inst._check_pedestrian(Vector2(-41.0, -60.0), 3.0)
 	_check(coached_msgs.size() > 0, "ped_close_pass_coaches")
 	ped.free()
+
+
+func _test_free_junction() -> void:
+	# §11-Check: nur wer IN der Kreuzung steht (nicht an einer Haltelinie)
+	# und dabei keinem Rot wartet, wird ermahnt. Frueher pruefte der Code
+	# nur arms[0] — Warten an allen anderen Armen fehlverwarnte, und ein
+	# Blockieren mitten drin blieb straflos, solange arms[0] rot hatte.
+	var inst := Instructor.new()
+	var jl := JunctionLights.new()
+	inst.lights = jl
+	var fc := Node3D.new()
+	root.add_child(fc)
+	inst.car = fc
+	var msgs: Array = []
+	inst.coached.connect(func(t, _l): msgs.append(t))
+	# Schueler wartet am Suedarm der Ampelkreuzung (Achse b) bei Rot,
+	# waehrend die Hauptstrasse (a) gruen hat — legal, keine Ansage.
+	jl.state["a"] = "green"
+	jl.state["b"] = "red"
+	for i in range(240):   ## ~4,8 s Standzeit
+		inst._check_free_junction(Vector2(-100.0, -67.4), 0.0, 0.02)
+	_check(msgs.is_empty(), "fj_wait_at_own_red_no_warn", "msgs=%d" % msgs.size())
+	# Ebenso legal: Warten am Ostarm des Stoppschilds (nicht arms[0]).
+	msgs.clear()
+	inst._fj_t = 0.0
+	for i in range(240):
+		inst._check_free_junction(Vector2(107.6, -60.0), 0.0, 0.02)
+	_check(msgs.is_empty(), "fj_wait_at_stop_arm_no_warn", "msgs=%d" % msgs.size())
+	# Wer dagegen mitten in der Ampelkreuzung steht, waehrend der
+	# Querverkehr (b) gruen hat, bekommt die §11-Ansage — auch wenn der
+	# erste Listeneintrag (Achse a) gerade rot hat.
+	jl.state["a"] = "red"
+	jl.state["b"] = "green"
+	msgs.clear()
+	inst._fj_t = 0.0
+	inst._fj_cd = 0.0
+	for i in range(240):
+		inst._check_free_junction(Vector2(-100.0, -60.0), 0.0, 0.02)
+	_check(msgs.size() > 0, "fj_blocking_junction_warns", "msgs=%d" % msgs.size())
+	fc.free()
 
 
 func _test_exam_route() -> void:
