@@ -344,6 +344,13 @@ func _test_pedestrian() -> void:
 	ped.free()
 
 
+class FakeCar extends Node3D:
+	# Minimales Schulauto-Double: _check_free_junction liest
+	# car.get("indicator_left") — ein nackter Node3D liefert null, und
+	# bool(null) hat in GDScript keinen Konstruktor (Script-Error).
+	var indicator_left := false
+
+
 func _test_free_junction() -> void:
 	# §11-Check: nur wer IN der Kreuzung steht (nicht an einer Haltelinie)
 	# und dabei keinem Rot wartet, wird ermahnt. Frueher pruefte der Code
@@ -352,7 +359,7 @@ func _test_free_junction() -> void:
 	var inst := Instructor.new()
 	var jl := JunctionLights.new()
 	inst.lights = jl
-	var fc := Node3D.new()
+	var fc := FakeCar.new()
 	root.add_child(fc)
 	inst.car = fc
 	var msgs: Array = []
