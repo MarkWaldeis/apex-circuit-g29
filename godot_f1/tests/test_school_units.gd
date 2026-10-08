@@ -118,6 +118,23 @@ func _test_gearbox() -> void:
 	for i in range(40):
 		r = gb.update(0.02, {"speed": 0.0, "clutch": 1.0})
 	_check(not bool(r["motor_on"]), "ignition_off_during_crank_stays_off")
+	# Spritmangel (flame_out): der Motor ist wirklich aus — keine
+	# Phantom-Drehzahl aus dem Gas, keine Kraft, kein Stalls-Zaehler.
+	# Die Zündung bleibt an: nach dem Tanken startet der Anlasser wieder.
+	gb.reset()
+	gb.request_gear(1, 1.0, 0.0)
+	r = gb.update(0.02, {"speed": 2.0, "throttle": 0.6, "clutch": 0.0})
+	_check(bool(r["motor_on"]), "engine_runs_before_fuel_out")
+	gb.flame_out()
+	r = gb.update(0.02, {"speed": 2.0, "throttle": 0.6, "clutch": 0.0})
+	_check(not bool(r["motor_on"]), "flame_out_kills_motor")
+	_check(r["rpm"] < 1.0, "flame_out_no_phantom_rpm", "rpm=%.0f" % r["rpm"])
+	_check(absf(r["engine_force"]) < 1.0, "flame_out_no_force")
+	_check(gb.stalls == 0, "flame_out_is_no_stall", "stalls=%d" % gb.stalls)
+	gb.start_motor(1.0)
+	for i in range(40):
+		r = gb.update(0.02, {"speed": 0.0, "clutch": 1.0})
+	_check(bool(r["motor_on"]), "engine_restarts_after_refuel")
 
 
 func _test_lights() -> void:

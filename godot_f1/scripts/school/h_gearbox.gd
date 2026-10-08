@@ -120,6 +120,15 @@ func ignition_on(clutch_pedal: float) -> void:
 	start_motor(clutch_pedal)
 
 
+## Spritmangel: der Motor stirbt — weder Abwürgen (kein Ruck, der
+## Stalls-Zähler bleibt stehen) noch Zündung aus: nach dem Tanken
+## startet der Anlasser ganz normal mit getretener Kupplung.
+func flame_out() -> void:
+	motor_on = false
+	rpm = 0.0
+	_crank = 0.0
+
+
 func torque_at(r: float) -> float:
 	var n: float = clampf((r - IDLE_RPM) / maxf(TORQUE_PEAK_RPM - IDLE_RPM, 1.0), 0.0, 1.0)
 	var rise: float = 1.0 - pow(1.0 - clampf(n, 0.0, 1.0), 2.0)

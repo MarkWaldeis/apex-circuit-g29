@@ -273,6 +273,9 @@ func _toggle_ignition() -> void:
 		gearbox.ignition_off()
 		_coach("Motor aus — mit K läuft er wieder.", 0)
 	else:
+		if fuel <= 0.0:
+			_coach("Tank leer — erst an der Tankstelle auffüllen.")
+			return
 		var wheel: bool = g29 != null and bool(g29.connected)
 		if wheel and _clutch_pedal() < 0.75:
 			_coach("Zum Starten die Kupplung ganz durchtreten.")
@@ -514,6 +517,11 @@ func _physics_process(delta: float) -> void:
 		fuel = maxf(fuel - (0.02 + throttle_in * 1.4) * delta * 0.05, 0.0)
 	if fuel <= 0.0:
 		engine_force = 0.0
+		# Spritmangel stellt den Motor wirklich ab, nicht nur die Kraft:
+		# bliebe gearbox.motor_on an, rechnete das Getriebe Drehzahl aus
+		# dem Gas weiter (Tacho zeigt Phantom-Touren) und der Motor
+		# spraenge nach dem Tanken ohne Anlasser von selbst wieder an.
+		gearbox.flame_out()
 		motor_on = false
 	if stalled:
 		# Tastatur hat kein Kupplungspedal: Anlasser dreht von allein.
